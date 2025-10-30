@@ -153,7 +153,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 6.14
+  Version: 6.15
   Created: October 2025
   Updated: October 2025
   
@@ -1749,11 +1749,15 @@ function Invoke-KerberosHardeningAssessment {
         }
         catch {
             Write-Host "    >> ERROR: Failed to get Domain GPO inheritance: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "    >> INFO: Attempting alternative GPO discovery method for cross-domain scenario..." -ForegroundColor Yellow
             if ($DebugMode) {
                 Write-Host "    >> DEBUG: Exception details: $($_.Exception.GetType().Name)" -ForegroundColor Gray
                 Write-Host "    >> DEBUG: Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Gray
             }
             $domainGPOs = $null
+            
+            # Cross-domain fallback: Try direct GPO enumeration
+            Write-Host "    >> INFO: Using direct GPO enumeration for domain: $Domain" -ForegroundColor Cyan
         }
         
         $domainKerberosGPO = $null
@@ -1837,12 +1841,12 @@ function Invoke-KerberosHardeningAssessment {
         
         # Only check DC OU separately if no Domain GPO was found
         if (-not $domainKerberosGPO) {
-            if ($DebugMode) {
-                Write-Host "    >> DEBUG: No Domain-level Kerberos GPO found via inheritance, trying alternative approach" -ForegroundColor Yellow
-            }
+            Write-Host "    >> INFO: No Domain-level Kerberos GPO found via inheritance" -ForegroundColor Yellow
+            Write-Host "    >> INFO: Attempting comprehensive GPO discovery for domain: $Domain" -ForegroundColor Cyan
             
             # Alternative approach: Get all GPOs in domain and check their links
             try {
+                Write-Host "    >> INFO: Enumerating all GPOs in domain $Domain..." -ForegroundColor Cyan
                 $allGPOs = Get-GPO -All -Domain $Domain @serverParams -ErrorAction Stop
                 if ($DebugMode) {
                     Write-Host "    >> DEBUG: Found $($allGPOs.Count) total GPOs in domain $Domain" -ForegroundColor Gray
@@ -1851,11 +1855,18 @@ function Invoke-KerberosHardeningAssessment {
                     }
                 }
                 
+                Write-Host "    >> INFO: Scanning GPOs for Kerberos encryption settings..." -ForegroundColor Cyan
+                $foundKerberosGPOs = 0
+                
                 foreach ($gpo in $allGPOs) {
                     try {
+                        Write-Host "    >> INFO: Checking GPO: $($gpo.DisplayName)" -ForegroundColor Cyan
                         $gpoReport = Get-GPOReport -Guid $gpo.Id -ReportType Xml -Domain $Domain @serverParams -ErrorAction Stop
                         
                         if ($gpoReport -and $gpoReport -match "Configure encryption types allowed for Kerberos") {
+                            $foundKerberosGPOs++
+                            Write-Host "    >> ✅ FOUND Kerberos GPO: $($gpo.DisplayName)" -ForegroundColor Green
+                            
                             if ($DebugMode) {
                                 Write-Host "    >> DEBUG: GPO $($gpo.DisplayName) contains Kerberos configuration, checking links..." -ForegroundColor Green
                             }
@@ -1867,6 +1878,8 @@ function Invoke-KerberosHardeningAssessment {
                                 
                                 $linkedToDomain = $false
                                 $linkedToDC = $false
+                                
+                                Write-Host "    >> INFO: Analyzing GPO links for: $($gpo.DisplayName)" -ForegroundColor Cyan
                                 
                                 foreach ($linkNode in $linkNodes) {
                                     $somPath = $linkNode.SOMPath
@@ -1946,6 +1959,58 @@ function Invoke-KerberosHardeningAssessment {
             }
             catch {
                 Write-Host "    >> ERROR: Failed to enumerate all GPOs in domain: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "    >> INFO: This may indicate authentication or permission issues with domain: $Domain" -ForegroundColor Yellow
+            }
+            
+            # Summary of GPO discovery
+            if ($foundKerberosGPOs -eq 0) {
+                Write-Host "`n    >> ⚠️  NO KERBEROS ENCRYPTION GPOS FOUND in domain: $Domain" -ForegroundColor Red
+                Write-Host "    >> This could indicate:" -ForegroundColor Yellow
+                Write-Host "       • No Kerberos encryption policies are configured" -ForegroundColor Yellow
+                Write-Host "       • GPOs exist but are not linked to domain/OUs" -ForegroundColor Yellow
+                Write-Host "       • Cross-domain authentication/permission issues" -ForegroundColor Yellow
+                Write-Host "       • GPO settings are in Default Domain Policy (not scanned)" -ForegroundColor Yellow
+                
+                # Try to check Default Domain Policy as last resort
+                Write-Host "`n    >> INFO: Checking Default Domain Policy as fallback..." -ForegroundColor Cyan
+                try {
+                    $defaultDomainPolicy = Get-GPO -Name "Default Domain Policy" -Domain $Domain @serverParams -ErrorAction SilentlyContinue
+                    if ($defaultDomainPolicy) {
+                        $defaultReport = Get-GPOReport -Guid $defaultDomainPolicy.Id -ReportType Xml -Domain $Domain @serverParams -ErrorAction SilentlyContinue
+                        if ($defaultReport -and $defaultReport -match "Configure encryption types allowed for Kerberos") {
+                            Write-Host "    >> ✅ FOUND Kerberos settings in Default Domain Policy!" -ForegroundColor Green
+                            
+                            $encValue = Get-GPOEncryptionValue -GPOReport $defaultReport -DebugMode:$DebugMode
+                            
+                            # Default Domain Policy applies to entire domain
+                            $gpoAnalysis.DomainControllers.Configured = $true
+                            $gpoAnalysis.DomainControllers.Value = $encValue
+                            $gpoAnalysis.DomainControllers.GPOName = "Default Domain Policy"
+                            $gpoAnalysis.DomainControllers.Source = "Domain"
+                            
+                            $gpoAnalysis.MemberComputers.Configured = $true
+                            $gpoAnalysis.MemberComputers.Value = $encValue
+                            $gpoAnalysis.MemberComputers.GPOName = "Default Domain Policy"
+                            $gpoAnalysis.MemberComputers.Scope = "Domain"
+                            
+                            $gpoAnalysis.SharedDomainGPO = "Default Domain Policy"
+                            
+                            Write-Host "    >> ✅ Default Domain Policy covers entire domain with encryption value: $encValue" -ForegroundColor Green
+                        }
+                        else {
+                            Write-Host "    >> ⚠️  Default Domain Policy found but no Kerberos encryption settings detected" -ForegroundColor Yellow
+                        }
+                    }
+                    else {
+                        Write-Host "    >> ⚠️  Could not access Default Domain Policy in domain: $Domain" -ForegroundColor Yellow
+                    }
+                }
+                catch {
+                    Write-Host "    >> ⚠️  Error checking Default Domain Policy: $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            }
+            else {
+                Write-Host "`n    >> ✅ Found $foundKerberosGPOs Kerberos encryption GPO(s) in domain: $Domain" -ForegroundColor Green
             }
             
             # If still no Domain GPO found, check DC OU specifically
