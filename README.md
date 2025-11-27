@@ -470,7 +470,7 @@ Same as original RC4_AD_SCAN project.
 ## Credits
 
 - Original RC4_AD_SCAN v1.0 concept and implementation
-- Customer feedback and real-world testing
+- Customer feedback and real-world testing (Thanks to Simon Arnreiter)
 - Microsoft Kerberos security documentation team
 - Active Directory security community
 
