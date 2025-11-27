@@ -1,7 +1,7 @@
 # ⚠️ LEGACY VERSION - v1.0 (RC4_AD_SCAN_v1_LEGACY.ps1)
 
 > **🚨 IMPORTANT: This is archived legacy documentation for v1.0**  
-> **🚀 Please use v2.0 instead: [README.md](README.md) and RC4_DES_Assessment.ps1**
+> **🚀 Please use v2.0 instead: [README.md](../README.md) and RC4_DES_Assessment.ps1**
 
 ## Why You Should Migrate to v2.0
 
@@ -24,7 +24,7 @@ Customer feedback revealed critical issues with v1.0:
 .\Compare-Assessments.ps1 -BaselineFile old.json -CurrentFile new.json
 ```
 
-**See [README.md](README.md) for v2.0 documentation**
+**See [README.md](../README.md) for v2.0 documentation**
 
 ---
 

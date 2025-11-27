@@ -1,5 +1,7 @@
 # DES/RC4 Kerberos Encryption Assessment v2.0
 
+> **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
+
 ## Overview
 
 A completely redesigned tool for assessing DES and RC4 encryption usage in Active Directory environments, addressing critical limitations discovered in v1.0 and incorporating post-November 2022 Microsoft Kerberos security updates.
@@ -263,7 +265,7 @@ index=windows EventCode=4768 OR EventCode=4769
 ### Running Both Versions
 
 v1.0 and v2.0 can coexist:
-- v1.0: `RC4_AD_SCAN.ps1` (comprehensive, slow)
+- v1.0: `archive/RC4_AD_SCAN_v1_LEGACY.ps1` (comprehensive, slow)
 - v2.0: `RC4_DES_Assessment.ps1` (fast, accurate)
 
 ### Key Differences
