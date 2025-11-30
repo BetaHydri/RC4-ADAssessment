@@ -114,12 +114,6 @@ Includes 48 hours of event log analysis for actual DES/RC4 usage.
 ```
 Full assessment with JSON/CSV export and manual validation guidance.
 
-### Testing Without Active Directory
-```powershell
-.\Test-RC4Script.ps1
-```
-Test display formatting, emojis, encryption decoding, and helper functions without requiring AD access. Perfect for validating the script works before running in production.
-
 ### Comparing Assessments Over Time
 ```powershell
 .\Compare-Assessments.ps1 -BaselineFile old.json -CurrentFile new.json -ShowDetails
