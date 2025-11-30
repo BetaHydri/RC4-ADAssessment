@@ -64,8 +64,7 @@ Real-world deployment revealed several critical issues:
 ### Core Scripts
 
 1. **RC4_DES_Assessment.ps1** - Main assessment tool
-2. **Test-RC4Script.ps1** - Test functionality without AD access
-3. **Compare-Assessments.ps1** - Compare assessment results over time
+2. **Compare-Assessments.ps1** - Compare assessment results over time
 
 ### Fast Assessment (Default - Quick Scan)
 - Domain Controller encryption configuration

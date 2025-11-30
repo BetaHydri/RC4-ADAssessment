@@ -1,36 +1,5 @@
 # RC4_DES_Assessment.ps1 - Quick Start Guide
 
-## 🎯 Testing Without Active Directory
-
-**You can test the script RIGHT NOW without AD access!**
-
-### Run the Test Script
-```powershell
-.\Test-RC4Script.ps1
-```
-
-This validates:
-- ✓ Display formatting and colors work correctly
-- ✓ Emoji and Unicode symbols render properly (PowerShell 5.1 compatible)
-- ✓ Encryption type decoding logic (hex → encryption names)
-- ✓ Event log ticket type detection
-- ✓ Mock assessment report display
-- ✓ All helper functions
-
-### What the Test Covers
-
-1. **Status Symbols** - ✓ (OK), ⚠ (WARNING), ✗ (CRITICAL), ℹ (INFO)
-2. **Emojis** - 📊 📋 📚 💡 (all PowerShell 5.1 compatible)
-3. **Encryption Decoding**:
-   - `0x0` → Not Set (AES default post-Nov 2022)
-   - `0x1` → DES (CRITICAL)
-   - `0x4` → RC4 (WARNING)
-   - `0x18` → AES 128+256 (GOOD)
-4. **Event Log Analysis** - Ticket type detection (0x1, 0x3, 0x17, 0x11, 0x12)
-5. **Report Formatting** - Headers, sections, color coding
-
----
-
 ## 🔐 Using with Active Directory
 
 ### Prerequisites
@@ -100,31 +69,25 @@ This validates:
 
 ## 🚀 Migration Path
 
-### Phase 1: Current State Assessment (No AD Required)
-```powershell
-.\Test-RC4Script.ps1
-```
-Verify script functionality and output format.
-
-### Phase 2: Initial AD Scan
+### Phase 1: Initial AD Scan
 ```powershell
 .\RC4_DES_Assessment.ps1 -QuickScan
 ```
 Get baseline configuration (DCs, GPOs, Trusts).
 
-### Phase 3: Usage Analysis
+### Phase 2: Usage Analysis
 ```powershell
 .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168
 ```
 Analyze 7 days of event logs to detect actual DES/RC4 usage.
 
-### Phase 4: Monitoring Setup
+### Phase 3: Monitoring Setup
 ```powershell
 .\RC4_DES_Assessment.ps1 -IncludeGuidance
 ```
 Get Splunk queries and continuous monitoring setup.
 
-### Phase 5: Remediation
+### Phase 4: Remediation
 Follow recommendations from the assessment report.
 
 ---
@@ -164,8 +127,8 @@ Resolve-DnsName your-domain.com
 
 ## 📚 Additional Resources
 
-- **README_v2.md** - Comprehensive documentation
-- **Test-RC4Script.ps1** - Standalone testing (no AD required)
+- **README.md** - Comprehensive documentation
+- **archive/README_v1_LEGACY.md** - Legacy v1.0 documentation (archived)
 - **Microsoft KB5021131** - Post-Nov 2022 Kerberos changes
 - **Windows Server 2025** - RC4 completely disabled by default
 
@@ -183,13 +146,6 @@ Resolve-DnsName your-domain.com
 
 ## ✅ Validation Checklist
 
-Before deploying to production:
-- [ ] Test script runs without errors: `.\Test-RC4Script.ps1`
-- [ ] PowerShell 5.1 syntax validated
-- [ ] Emoji/Unicode symbols display correctly
-- [ ] All helper functions working
-- [ ] Mock assessment displays properly
-
 When you have AD access:
 - [ ] Quick scan completes successfully
 - [ ] DCs detected and assessed
@@ -197,7 +153,3 @@ When you have AD access:
 - [ ] Trusts enumerated correctly
 - [ ] Event log analysis works (if using -AnalyzeEventLogs)
 - [ ] Export creates JSON/CSV files (if using -ExportResults)
-
----
-
-**Current Status**: ✅ Script tested and ready - waiting for AD access to perform live assessment
