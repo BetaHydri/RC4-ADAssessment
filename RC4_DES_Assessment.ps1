@@ -207,8 +207,12 @@ function Get-DomainControllerEncryption {
     }
     
     try {
-        # Get domain info
-        $domainInfo = Get-ADDomain @ServerParams
+        # Get domain info - ensure we query the correct domain
+        if ($ServerParams.ContainsKey('Server')) {
+            $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
+        } else {
+            $domainInfo = Get-ADDomain
+        }
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
         
         Write-Finding -Status "INFO" -Message "Analyzing domain: $($domainInfo.DNSRoot)"
@@ -365,7 +369,12 @@ function Get-TrustEncryptionAssessment {
     }
     
     try {
-        $domainInfo = Get-ADDomain @ServerParams
+        # Get domain info - ensure we query the correct domain
+        if ($ServerParams.ContainsKey('Server')) {
+            $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
+        } else {
+            $domainInfo = Get-ADDomain
+        }
         $trusts = Get-ADTrust -Filter * @ServerParams -Properties msDS-SupportedEncryptionTypes, TrustDirection, TrustType
         
         if (-not $trusts) {
@@ -479,8 +488,12 @@ function Get-EventLogEncryptionAnalysis {
         Write-Finding -Status "INFO" -Message "Analyzing last $Hours hours of Kerberos ticket events"
         Write-Host "  Time range: $($startTime.ToString('yyyy-MM-dd HH:mm')) to $(Get-Date -Format 'yyyy-MM-dd HH:mm')" -ForegroundColor Gray
         
-        # Get domain controllers
-        $domainInfo = Get-ADDomain @ServerParams
+        # Get domain controllers - ensure we query the correct domain
+        if ($ServerParams.ContainsKey('Server')) {
+            $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
+        } else {
+            $domainInfo = Get-ADDomain
+        }
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
         $dcs = Get-ADComputer -SearchBase $dcOU -Filter * @ServerParams | Select-Object -First 3  # Sample first 3 DCs
         
