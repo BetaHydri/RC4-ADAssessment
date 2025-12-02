@@ -139,11 +139,11 @@ function Write-Finding {
     )
     
     $statusSymbol = switch ($Status) {
-        "OK"       { "$([char]0x2713)"; $color = "Green" }  # ✓ Check mark
-        "WARNING"  { "$([char]0x26A0) "; $color = "Yellow" }  # ⚠ Warning sign
+        "OK" { "$([char]0x2713)"; $color = "Green" }  # ✓ Check mark
+        "WARNING" { "$([char]0x26A0) "; $color = "Yellow" }  # ⚠ Warning sign
         "CRITICAL" { "$([char]0x2717)"; $color = "Red" }  # ✗ Cross mark
-        "INFO"     { "$([char]0x2139) "; $color = "Cyan" }  # ℹ Info
-        default    { "$([char]0x2022)"; $color = "White" }  # • Bullet
+        "INFO" { "$([char]0x2139) "; $color = "Cyan" }  # ℹ Info
+        default { "$([char]0x2022)"; $color = "White" }  # • Bullet
     }
     
     Write-Host "$statusSymbol $Message" -ForegroundColor $color
@@ -160,10 +160,10 @@ function Get-EncryptionTypeString {
     }
     
     $types = @()
-    if ($Value -band 0x1)  { $types += "DES-CBC-CRC" }
-    if ($Value -band 0x2)  { $types += "DES-CBC-MD5" }
-    if ($Value -band 0x4)  { $types += "RC4-HMAC" }
-    if ($Value -band 0x8)  { $types += "AES128-HMAC" }
+    if ($Value -band 0x1) { $types += "DES-CBC-CRC" }
+    if ($Value -band 0x2) { $types += "DES-CBC-MD5" }
+    if ($Value -band 0x4) { $types += "RC4-HMAC" }
+    if ($Value -band 0x8) { $types += "AES128-HMAC" }
     if ($Value -band 0x10) { $types += "AES256-HMAC" }
     
     return ($types -join ", ")
@@ -174,8 +174,8 @@ function Get-TicketEncryptionType {
     
     # Event log encryption type values
     switch ($EncryptionType) {
-        0x1  { return "DES-CBC-CRC" }
-        0x3  { return "DES-CBC-MD5" }
+        0x1 { return "DES-CBC-CRC" }
+        0x3 { return "DES-CBC-MD5" }
         0x11 { return "AES128-HMAC-SHA1" }
         0x12 { return "AES256-HMAC-SHA1" }
         0x17 { return "RC4-HMAC" }
@@ -196,13 +196,13 @@ function Get-DomainControllerEncryption {
     Write-Section "Domain Controller Encryption Configuration"
     
     $assessment = @{
-        TotalDCs = 0
-        AESConfigured = 0
-        RC4Configured = 0
-        DESConfigured = 0
-        NotConfigured = 0
-        Details = @()
-        GPOConfigured = $false
+        TotalDCs           = 0
+        AESConfigured      = 0
+        RC4Configured      = 0
+        DESConfigured      = 0
+        NotConfigured      = 0
+        Details            = @()
+        GPOConfigured      = $false
         GPOEncryptionTypes = $null
     }
     
@@ -210,7 +210,8 @@ function Get-DomainControllerEncryption {
         # Get domain info - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
             $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
-        } else {
+        }
+        else {
             $domainInfo = Get-ADDomain
         }
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
@@ -229,35 +230,40 @@ function Get-DomainControllerEncryption {
             $encTypes = Get-EncryptionTypeString -Value $encValue
             
             $dcInfo = @{
-                Name = $dc.Name
+                Name            = $dc.Name
                 EncryptionValue = $encValue
                 EncryptionTypes = $encTypes
-                OS = $dc.OperatingSystem
-                Status = "Unknown"
+                OS              = $dc.OperatingSystem
+                Status          = "Unknown"
             }
             
             if (-not $encValue -or $encValue -eq 0) {
                 $assessment.NotConfigured++
                 $dcInfo.Status = "Not Configured (Inherits from GPO)"
             }
-            elseif ($encValue -band 0x18) {  # AES128 or AES256
+            elseif ($encValue -band 0x18) {
+                # AES128 or AES256
                 $assessment.AESConfigured++
                 $dcInfo.Status = "AES Configured"
                 
-                if ($encValue -band 0x4) {  # Also has RC4
+                if ($encValue -band 0x4) {
+                    # Also has RC4
                     $assessment.RC4Configured++
                     $dcInfo.Status += " + RC4"
                 }
-                if ($encValue -band 0x3) {  # Also has DES
+                if ($encValue -band 0x3) {
+                    # Also has DES
                     $assessment.DESConfigured++
                     $dcInfo.Status += " + DES"
                 }
             }
-            elseif ($encValue -band 0x4) {  # RC4 only
+            elseif ($encValue -band 0x4) {
+                # RC4 only
                 $assessment.RC4Configured++
                 $dcInfo.Status = "RC4 Only"
             }
-            elseif ($encValue -band 0x3) {  # DES only
+            elseif ($encValue -band 0x3) {
+                # DES only
                 $assessment.DESConfigured++
                 $dcInfo.Status = "DES Only"
             }
@@ -362,17 +368,18 @@ function Get-TrustEncryptionAssessment {
     $assessment = @{
         TotalTrusts = 0
         ExplicitAES = 0
-        DefaultAES = 0  # Post-Nov 2022: Empty/0 = AES default
-        RC4Risk = 0
-        DESRisk = 0
-        Details = @()
+        DefaultAES  = 0  # Post-Nov 2022: Empty/0 = AES default
+        RC4Risk     = 0
+        DESRisk     = 0
+        Details     = @()
     }
     
     try {
         # Get domain info - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
             $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
-        } else {
+        }
+        else {
             $domainInfo = Get-ADDomain
         }
         $trusts = Get-ADTrust -Filter * @ServerParams -Properties msDS-SupportedEncryptionTypes, TrustDirection, TrustType
@@ -390,12 +397,12 @@ function Get-TrustEncryptionAssessment {
             $encTypes = Get-EncryptionTypeString -Value $encValue
             
             $trustInfo = @{
-                Name = $trust.Name
-                Direction = $trust.TrustDirection
-                Type = $trust.TrustType
-                EncryptionValue = $encValue
-                EncryptionTypes = $encTypes
-                Status = "Unknown"
+                Name                 = $trust.Name
+                Direction            = $trust.TrustDirection
+                Type                 = $trust.TrustType
+                EncryptionValue      = $encValue
+                EncryptionTypes      = $encTypes
+                Status               = "Unknown"
                 PostNov2022Compliant = $false
             }
             
@@ -406,12 +413,14 @@ function Get-TrustEncryptionAssessment {
                 $trustInfo.PostNov2022Compliant = $true
                 Write-Finding -Status "OK" -Message "Trust '$($trust.Name)': Uses AES by default (msDS-SupportedEncryptionTypes not set)"
             }
-            elseif ($encValue -band 0x18) {  # Explicit AES
+            elseif ($encValue -band 0x18) {
+                # Explicit AES
                 $assessment.ExplicitAES++
                 $trustInfo.Status = "AES (Explicitly Configured)"
                 $trustInfo.PostNov2022Compliant = $true
                 
-                if ($encValue -band 0x4) {  # Also has RC4
+                if ($encValue -band 0x4) {
+                    # Also has RC4
                     $assessment.RC4Risk++
                     $trustInfo.Status += " + RC4 Enabled"
                     Write-Finding -Status "WARNING" -Message "Trust '$($trust.Name)': AES configured but RC4 also enabled" `
@@ -421,19 +430,22 @@ function Get-TrustEncryptionAssessment {
                     Write-Finding -Status "OK" -Message "Trust '$($trust.Name)': AES explicitly configured"
                 }
                 
-                if ($encValue -band 0x3) {  # Also has DES
+                if ($encValue -band 0x3) {
+                    # Also has DES
                     $assessment.DESRisk++
                     $trustInfo.Status += " + DES Enabled"
                     Write-Finding -Status "CRITICAL" -Message "Trust '$($trust.Name)': DES encryption enabled" `
                         -Detail "Encryption: $encTypes"
                 }
             }
-            elseif ($encValue -band 0x4) {  # RC4 only
+            elseif ($encValue -band 0x4) {
+                # RC4 only
                 $assessment.RC4Risk++
                 $trustInfo.Status = "RC4 Only"
                 Write-Finding -Status "WARNING" -Message "Trust '$($trust.Name)': RC4 only - consider removing explicit setting to use AES default"
             }
-            elseif ($encValue -band 0x3) {  # DES only
+            elseif ($encValue -band 0x3) {
+                # DES only
                 $assessment.DESRisk++
                 $trustInfo.Status = "DES Only"
                 Write-Finding -Status "CRITICAL" -Message "Trust '$($trust.Name)': DES only - immediate remediation required"
@@ -472,14 +484,14 @@ function Get-EventLogEncryptionAnalysis {
     
     $assessment = @{
         EventsAnalyzed = 0
-        DESTickets = 0
-        RC4Tickets = 0
-        AESTickets = 0
+        DESTickets     = 0
+        RC4Tickets     = 0
+        AESTickets     = 0
         UnknownTickets = 0
-        TimeRange = $Hours
-        DESAccounts = @()
-        RC4Accounts = @()
-        Details = @()
+        TimeRange      = $Hours
+        DESAccounts    = @()
+        RC4Accounts    = @()
+        Details        = @()
     }
     
     try {
@@ -491,7 +503,8 @@ function Get-EventLogEncryptionAnalysis {
         # Get domain controllers - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
             $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
-        } else {
+        }
+        else {
             $domainInfo = Get-ADDomain
         }
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
@@ -762,14 +775,14 @@ elseif ($PSBoundParameters.ContainsKey('Server')) {
 
 # Initialize results object
 $results = @{
-    AssessmentDate = $script:AssessmentTimestamp
-    Version = $script:Version
-    Domain = if ($Domain) { $Domain } else { (Get-ADDomain).DNSRoot }
+    AssessmentDate    = $script:AssessmentTimestamp
+    Version           = $script:Version
+    Domain            = if ($Domain) { $Domain } else { (Get-ADDomain).DNSRoot }
     DomainControllers = $null
-    Trusts = $null
-    EventLogs = $null
-    OverallStatus = "Unknown"
-    Recommendations = @()
+    Trusts            = $null
+    EventLogs         = $null
+    OverallStatus     = "Unknown"
+    Recommendations   = @()
 }
 
 try {
@@ -877,9 +890,9 @@ try {
         # Add DC details
         foreach ($dc in $results.DomainControllers.Details) {
             $csvData += [PSCustomObject]@{
-                Type = "Domain Controller"
-                Name = $dc.Name
-                Status = $dc.Status
+                Type            = "Domain Controller"
+                Name            = $dc.Name
+                Status          = $dc.Status
                 EncryptionTypes = $dc.EncryptionTypes
                 EncryptionValue = $dc.EncryptionValue
             }
@@ -888,9 +901,9 @@ try {
         # Add trust details
         foreach ($trust in $results.Trusts.Details) {
             $csvData += [PSCustomObject]@{
-                Type = "Trust"
-                Name = $trust.Name
-                Status = $trust.Status
+                Type            = "Trust"
+                Name            = $trust.Name
+                Status          = $trust.Status
                 EncryptionTypes = $trust.EncryptionTypes
                 EncryptionValue = $trust.EncryptionValue
             }
