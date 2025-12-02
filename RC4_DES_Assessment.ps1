@@ -521,6 +521,12 @@ function Get-EventLogEncryptionAnalysis {
             Write-Host "  • Querying $($dc.Name)..." -ForegroundColor Cyan
             
             try {
+                # Test connectivity first
+                if (-not (Test-Connection -ComputerName $dc.Name -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
+                    Write-Finding -Status "WARNING" -Message "Cannot reach $($dc.Name) - skipping event log query"
+                    continue
+                }
+                
                 # Event ID 4768 = TGT Request, 4769 = Service Ticket Request
                 # TicketEncryptionType field shows actual encryption used
                 $filterXml = @"
@@ -533,7 +539,30 @@ function Get-EventLogEncryptionAnalysis {
 </QueryList>
 "@
                 
-                $events = Get-WinEvent -ComputerName $dc.Name -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
+                # Try Get-WinEvent first (requires WinRM/RPC)
+                $events = $null
+                try {
+                    $events = Get-WinEvent -ComputerName $dc.Name -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
+                }
+                catch [System.Runtime.InteropServices.COMException], [System.UnauthorizedAccessException] {
+                    # RPC/WinRM failed, try alternative approach
+                    Write-Host "    WinRM/RPC unavailable, trying alternative method..." -ForegroundColor DarkYellow
+                    
+                    # Alternative: Use Invoke-Command if WinRM is enabled
+                    try {
+                        $events = Invoke-Command -ComputerName $dc.Name -ScriptBlock {
+                            param($FilterXml, $MaxEvents)
+                            Get-WinEvent -FilterXml $FilterXml -MaxEvents $MaxEvents -ErrorAction Stop
+                        } -ArgumentList $filterXml, 1000 -ErrorAction Stop
+                    }
+                    catch {
+                        throw $_
+                    }
+                }
+                
+                if (-not $events) {
+                    continue
+                }
                 
                 if ($events) {
                     $assessment.EventsAnalyzed += $events.Count
@@ -577,7 +606,16 @@ function Get-EventLogEncryptionAnalysis {
                 }
             }
             catch {
-                Write-Finding -Status "WARNING" -Message "Could not query event log on $($dc.Name): $($_.Exception.Message)"
+                $errorMsg = $_.Exception.Message
+                if ($errorMsg -match "RPC server|network path") {
+                    Write-Finding -Status "WARNING" -Message "RPC/Network error on $($dc.Name)" -Detail "Ensure firewall allows RPC (port 135) and dynamic RPC ports, or enable WinRM (port 5985/5986)"
+                }
+                elseif ($errorMsg -match "Access is denied|unauthorized") {
+                    Write-Finding -Status "WARNING" -Message "Access denied on $($dc.Name)" -Detail "Ensure you have Event Log Readers permissions or are Domain Admin"
+                }
+                else {
+                    Write-Finding -Status "WARNING" -Message "Could not query event log on $($dc.Name): $errorMsg"
+                }
             }
         }
         
