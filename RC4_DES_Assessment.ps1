@@ -516,6 +516,8 @@ function Get-EventLogEncryptionAnalysis {
         }
         
         Write-Finding -Status "INFO" -Message "Querying event logs from $($dcs.Count) Domain Controller(s)..."
+        Write-Host "  Note: Using WinRM (PowerShell Remoting) for event log queries" -ForegroundColor Gray
+        Write-Host "  If this fails, ensure WinRM is enabled on DCs: Enable-PSRemoting -Force" -ForegroundColor Gray
         
         foreach ($dc in $dcs) {
             Write-Host "  • Querying $($dc.Name)..." -ForegroundColor Cyan
@@ -607,8 +609,11 @@ function Get-EventLogEncryptionAnalysis {
             }
             catch {
                 $errorMsg = $_.Exception.Message
-                if ($errorMsg -match "RPC server|network path") {
-                    Write-Finding -Status "WARNING" -Message "RPC/Network error on $($dc.Name)" -Detail "Ensure firewall allows RPC (port 135) and dynamic RPC ports, or enable WinRM (port 5985/5986)"
+                if ($errorMsg -match "WinRM|WSMan|PowerShell Remoting") {
+                    Write-Finding -Status "WARNING" -Message "WinRM not available on $($dc.Name)" -Detail "Enable with: Invoke-Command -ComputerName $($dc.Name) -ScriptBlock { Enable-PSRemoting -Force }"
+                }
+                elseif ($errorMsg -match "RPC server|network path") {
+                    Write-Finding -Status "WARNING" -Message "RPC/Network error on $($dc.Name)" -Detail "Both WinRM (5985) and RPC (135) failed. Check firewall rules or run locally on DC"
                 }
                 elseif ($errorMsg -match "Access is denied|unauthorized") {
                     Write-Finding -Status "WARNING" -Message "Access denied on $($dc.Name)" -Detail "Ensure you have Event Log Readers permissions or are Domain Admin"
@@ -616,6 +621,12 @@ function Get-EventLogEncryptionAnalysis {
                 else {
                     Write-Finding -Status "WARNING" -Message "Could not query event log on $($dc.Name): $errorMsg"
                 }
+                
+                Write-Host "`n    Troubleshooting:" -ForegroundColor Yellow
+                Write-Host "    1. Enable WinRM on DC: Enable-PSRemoting -Force" -ForegroundColor Gray
+                Write-Host "    2. Or allow RPC in firewall: Port 135 + 49152-65535" -ForegroundColor Gray
+                Write-Host "    3. Or run this script directly on the DC" -ForegroundColor Gray
+                Write-Host "    4. Check permissions: Add your account to 'Event Log Readers' group`n" -ForegroundColor Gray
             }
         }
         
