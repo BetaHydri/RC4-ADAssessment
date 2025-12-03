@@ -192,10 +192,10 @@ function Show-ForestSummary {
         foreach ($domainGroup in $dcsByDomain) {
             Write-Host "`n  Domain: $($domainGroup.Name)" -ForegroundColor Cyan
             
-            $domainGroup.Group | Format-Table -Property @{Label='Domain Controller';Expression={$_.'Domain Controller'}}, 
+            $domainGroup.Group | Format-Table -Property @{Label = 'Domain Controller'; Expression = { $_.'Domain Controller' } }, 
             Status, 
-            @{Label='Encryption Types';Expression={$_.'Encryption Types'}}, 
-            @{Label='Operating System';Expression={$_.'Operating System'}} -AutoSize | Out-String -Stream | ForEach-Object {
+            @{Label = 'Encryption Types'; Expression = { $_.'Encryption Types' } }, 
+            @{Label = 'Operating System'; Expression = { $_.'Operating System' } } -AutoSize | Out-String -Stream | ForEach-Object {
                 if ($_ -match "CRITICAL") {
                     Write-Host "    $_" -ForegroundColor Red
                 }
@@ -244,7 +244,7 @@ function Show-ForestSummary {
         foreach ($domainGroup in $eventsByDomain) {
             Write-Host "`n  Domain: $($domainGroup.Name)" -ForegroundColor Cyan
             
-            $domainGroup.Group | Format-Table -Property @{Label='Domain Controller';Expression={$_.'Domain Controller'}}, 
+            $domainGroup.Group | Format-Table -Property @{Label = 'Domain Controller'; Expression = { $_.'Domain Controller' } }, 
             Status, 
             Events, 
             RC4, 
@@ -294,9 +294,9 @@ function Show-ForestSummary {
         foreach ($domainGroup in $trustsByDomain) {
             Write-Host "`n  Domain: $($domainGroup.Name)" -ForegroundColor Cyan
             
-            $domainGroup.Group | Format-Table -Property @{Label='Trust Name';Expression={$_.'Trust Name'}}, 
+            $domainGroup.Group | Format-Table -Property @{Label = 'Trust Name'; Expression = { $_.'Trust Name' } }, 
             Direction, 
-            @{Label='Encryption Types';Expression={$_.'Encryption Types'}}, 
+            @{Label = 'Encryption Types'; Expression = { $_.'Encryption Types' } }, 
             Risk -AutoSize | Out-String -Stream | ForEach-Object {
                 if ($_ -match "CRITICAL") {
                     Write-Host "    $_" -ForegroundColor Red

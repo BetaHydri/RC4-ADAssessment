@@ -838,7 +838,8 @@ function Show-AssessmentSummary {
                 if ($Results.DomainControllers.GPOEncryptionTypes -match "DES") { "CRITICAL" }
                 elseif ($Results.DomainControllers.GPOEncryptionTypes -match "RC4") { "WARNING" }
                 else { "OK" }
-            } else { "Not Configured" }
+            }
+            else { "Not Configured" }
             
             $dcTable += [PSCustomObject]@{
                 'Domain Controller' = $dc.Name
