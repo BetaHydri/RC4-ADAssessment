@@ -115,7 +115,8 @@ $originalOutputEncoding = [Console]::OutputEncoding
 try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     $Host.UI.RawUI.OutputEncoding = [System.Text.Encoding]::UTF8
-} catch {
+}
+catch {
     # Silently continue if console encoding cannot be set (e.g., in ISE)
 }
 
