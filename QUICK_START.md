@@ -439,7 +439,7 @@ Resolve-DnsName your-domain.com
 3. **Enable parallel processing** - Use `-Parallel` with PowerShell 7+ for faster forest assessments
 4. **Monitor for 30 days** - Capture monthly/quarterly activities before Server 2025 upgrade
 5. **Check event logs regularly** - Weekly alerts for RC4/DES usage
-6. **Export results** - Keep historical data for compliance/auditing
+6. **Export results** - Keep historical data for compliance/auditing (saved to `.\Exports` folder)
 7. **Include guidance** - Get actionable steps for remediation and monitoring
 8. **Use -Server for child domains** - Specify a known DC when auto-discovery fails
 9. **Review per-DC results** - Script now shows which specific DCs succeeded or failed
@@ -454,4 +454,4 @@ When you have AD access:
 - [ ] GPO encryption settings retrieved
 - [ ] Trusts enumerated correctly
 - [ ] Event log analysis works (if using -AnalyzeEventLogs)
-- [ ] Export creates JSON/CSV files (if using -ExportResults)
+- [ ] Export creates JSON/CSV files in `.\Exports` folder (if using -ExportResults)

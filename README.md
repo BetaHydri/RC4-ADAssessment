@@ -412,13 +412,16 @@ Overall Security Assessment
 PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
 ```
 
+**Note:** Results are exported to the `.\Exports` folder (automatically created if it doesn't exist).
+
 ```
 [... assessment output ...]
 
 Exporting Results
 ────────────────────────────────────────────────────────────────
-✅ JSON export: .\DES_RC4_Assessment_contoso_com_20251203_143015.json
-✅ CSV export: .\DES_RC4_Assessment_contoso_com_20251203_143015.csv
+ℹ️  Created export folder: C:\Scripts\RC4_AD_Check\Exports
+✅ JSON export: C:\Scripts\RC4_AD_Check\Exports\DES_RC4_Assessment_contoso_com_20251203_143015.json
+✅ CSV export: C:\Scripts\RC4_AD_Check\Exports\DES_RC4_Assessment_contoso_com_20251203_143015.csv
 ```
 
 **JSON Export Sample:**
