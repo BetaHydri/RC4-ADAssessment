@@ -16,6 +16,7 @@ A completely redesigned tool for assessing DES and RC4 encryption usage in Activ
 🎯 **Deserialized Event Handling** - Properly processes events from remote DCs via PowerShell Remoting  
 🎯 **Specific DC Error Reporting** - Shows exactly which DC failed (e.g., "DC01.child.contoso.com")  
 🎯 **ADPropertyValueCollection Fix** - Resolves HostName conversion errors during DC discovery  
+🎯 **Summary Tables** - Comprehensive summary tables showing all DC findings at end of assessment
 
 ### Version History
 
@@ -28,6 +29,7 @@ A completely redesigned tool for assessing DES and RC4 encryption usage in Activ
 - Resolved ADPropertyValueCollection to string conversion errors
 - Full DC enumeration in each forest domain (not just first 3)
 - Per-DC success/failure reporting with specific error details
+- Added comprehensive summary tables for single-domain and forest-wide assessments
 
 **v2.0.1** (November 2025)
 - Enhanced remote event log access troubleshooting
@@ -433,6 +435,119 @@ Exporting Results
   ]
 }
 ```
+
+---
+
+### Example 5: Summary Tables (New in v2.1.0)
+
+At the end of each assessment, comprehensive summary tables are displayed showing all findings:
+
+```
+Assessment Summary Tables
+────────────────────────────────────────────────────────────────
+
+  DOMAIN CONTROLLER SUMMARY
+  ────────────────────────────────────────────────────────────────
+
+  Domain Controller  Status   Encryption Types       Attribute Value  GPO Status  Operating System
+  -----------------  ------   ----------------       ---------------  ----------  ----------------
+  DC01.contoso.com   OK       AES128-HMAC, AES256    0x18             OK          Windows Server 2022
+  DC02.contoso.com   WARNING  RC4-HMAC, AES128       0x14             WARNING     Windows Server 2019
+  DC03.contoso.com   CRITICAL DES-CBC-MD5, RC4-HMAC  0x07             CRITICAL    Windows Server 2016
+
+  Summary:
+    Total DCs: 3
+    DES Configured: 1
+    RC4 Configured: 1
+    AES Configured: 1
+
+
+  EVENT LOG ANALYSIS SUMMARY
+  ────────────────────────────────────────────────────────────────
+
+  Domain Controller  Status   Events Analyzed  RC4 Tickets  DES Tickets  Error Message
+  -----------------  ------   ---------------  -----------  -----------  -------------
+  DC01.contoso.com   Success  12,543           0            0            -
+  DC02.contoso.com   Success  11,892           5            0            -
+  DC03.contoso.com   Failed   0                0            0            RPC server unavailable
+
+  Summary:
+    Total Events Analyzed: 24,435
+    RC4 Tickets Detected: 5
+    Failed DC Queries: 1
+
+
+  TRUST ENCRYPTION SUMMARY
+  ────────────────────────────────────────────────────────────────
+
+  Trust Name       Direction  Encryption Types       Risk Level
+  ----------       ---------  ----------------       ----------
+  child.contoso    Bidirect   AES128-HMAC, AES256    LOW
+  partner.com      Outbound   RC4-HMAC              HIGH
+
+  Summary:
+    Total Trusts: 2
+    RC4 Risk: 1 trust(s)
+    AES Secure: 1 trust(s)
+```
+
+**Forest-Wide Summary Tables** (when using Assess-ADForest.ps1):
+
+```
+================================================================================
+FOREST-WIDE SUMMARY TABLES
+================================================================================
+
+  ALL DOMAIN CONTROLLERS ACROSS FOREST
+  ────────────────────────────────────────────────────────────────
+
+  Domain: contoso.com
+
+    Domain Controller  Status   Encryption Types       Operating System
+    -----------------  ------   ----------------       ----------------
+    DC01.contoso.com   OK       AES128, AES256         Windows Server 2022
+    DC02.contoso.com   WARNING  RC4-HMAC, AES128       Windows Server 2019
+
+  Domain: child.contoso.com
+
+    Domain Controller    Status   Encryption Types       Operating System
+    -------------------  ------   ----------------       ----------------
+    DC01.child.cont...   OK       AES128, AES256         Windows Server 2022
+    DC02.child.cont...   CRITICAL DES-CBC-MD5, RC4       Windows Server 2016
+
+  Forest-Wide DC Statistics:
+    Total DCs: 4
+    CRITICAL (DES): 1
+    WARNING (RC4): 1
+    OK (AES): 2
+
+
+  EVENT LOG ANALYSIS - ALL DOMAINS
+  ────────────────────────────────────────────────────────────────
+
+  Domain: contoso.com
+
+    Domain Controller  Status   Events  RC4  DES
+    -----------------  ------   ------  ---  ---
+    DC01.contoso.com   Success  12,543  0    0
+    DC02.contoso.com   Success  11,892  5    0
+
+  Domain: child.contoso.com
+
+    Domain Controller    Status   Events  RC4  DES
+    -------------------  ------   ------  ---  ---
+    DC01.child.cont...   Success  8,234   0    0
+    DC02.child.cont...   Failed   0       0    0
+
+  Forest-Wide Event Statistics:
+    Total Events Analyzed: 32,669
+    RC4 Tickets: 5
+    Failed Queries: 1
+```
+
+---
+
+### Example 6: Comparing Results
 
 **Comparing Results:**
 ```powershell

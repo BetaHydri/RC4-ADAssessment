@@ -1,6 +1,6 @@
 # RC4_DES_Assessment.ps1 v2.1.0 - Quick Start Guide
 
-> **✨ New in v2.1.0:** WinRM-first event log queries, full forest DC enumeration, improved child domain support, and specific DC-level error reporting.
+> **✨ New in v2.1.0:** WinRM-first event log queries, full forest DC enumeration, improved child domain support, specific DC-level error reporting, and comprehensive summary tables.
 
 ## 🔐 Using with Active Directory
 
@@ -142,6 +142,53 @@ Event Log Analysis - Actual DES/RC4 Usage
   Add your account to 'Event Log Readers' group on DCs:
   PS> Add-ADGroupMember -Identity 'Event Log Readers' -Members 'YourAccount'
 ```
+
+### Summary Tables (NEW in v2.1.0)
+
+At the end of every assessment, you'll see comprehensive summary tables:
+
+```
+Assessment Summary Tables
+────────────────────────────────────────────────────────────────
+
+  DOMAIN CONTROLLER SUMMARY
+  ────────────────────────────────────────────────────────────────
+  
+  Domain Controller  Status   Encryption Types       GPO Status  Operating System
+  -----------------  ------   ----------------       ----------  ----------------
+  DC01.contoso.com   OK       AES128-HMAC, AES256    OK          Windows Server 2022
+  DC02.contoso.com   WARNING  RC4-HMAC, AES128       WARNING     Windows Server 2019
+  DC03.contoso.com   CRITICAL DES-CBC-MD5, RC4       CRITICAL    Windows Server 2016
+
+  Summary:
+    Total DCs: 3
+    DES Configured: 1
+    RC4 Configured: 1
+    AES Configured: 1
+
+
+  EVENT LOG ANALYSIS SUMMARY
+  ────────────────────────────────────────────────────────────────
+  
+  Domain Controller  Status   Events Analyzed  RC4 Tickets  DES Tickets
+  -----------------  ------   ---------------  -----------  -----------
+  DC01.contoso.com   Success  12,543           0            0
+  DC02.contoso.com   Success  11,892           5            0
+  DC03.contoso.com   Failed   0                0            0
+
+  Summary:
+    Total Events Analyzed: 24,435
+    RC4 Tickets Detected: 5
+    Failed DC Queries: 1
+```
+
+**Color Coding:**
+- 🟢 **Green** - OK/Success status
+- 🟡 **Yellow** - WARNING status
+- 🔴 **Red** - CRITICAL/Failed status
+
+**Forest-Wide** (when using Assess-ADForest.ps1):
+Tables are grouped by domain, showing all DCs, event logs, and trusts across the entire forest.
 
 ---
 

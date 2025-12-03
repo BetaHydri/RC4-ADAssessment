@@ -808,6 +808,215 @@ function Get-EventLogEncryptionAnalysis {
     return $assessment
 }
 
+function Show-AssessmentSummary {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Results
+    )
+    
+    Write-Section "Assessment Summary Tables"
+    
+    # 1. Domain Controller Summary Table
+    Write-Host "`n  DOMAIN CONTROLLER SUMMARY" -ForegroundColor Cyan
+    Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
+    
+    if ($Results.DomainControllers.Details.Count -gt 0) {
+        $dcTable = @()
+        
+        foreach ($dc in $Results.DomainControllers.Details) {
+            # Determine status color
+            $status = "OK"
+            if ($dc.EncryptionTypes -match "DES") {
+                $status = "CRITICAL"
+            }
+            elseif ($dc.EncryptionTypes -match "RC4") {
+                $status = "WARNING"
+            }
+            
+            # Check GPO status
+            $gpoStatus = if ($Results.DomainControllers.GPOConfigured) { 
+                if ($Results.DomainControllers.GPOEncryptionTypes -match "DES") { "CRITICAL" }
+                elseif ($Results.DomainControllers.GPOEncryptionTypes -match "RC4") { "WARNING" }
+                else { "OK" }
+            } else { "Not Configured" }
+            
+            $dcTable += [PSCustomObject]@{
+                'Domain Controller' = $dc.Name
+                'Status'            = $status
+                'Encryption Types'  = $dc.EncryptionTypes
+                'Attribute Value'   = if ($dc.EncryptionValue) { "0x$($dc.EncryptionValue.ToString('X'))" } else { "Not Set" }
+                'GPO Status'        = $gpoStatus
+                'Operating System'  = $dc.OperatingSystem
+            }
+        }
+        
+        # Display table with color coding
+        $dcTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
+            if ($_ -match "CRITICAL") {
+                Write-Host "  $_" -ForegroundColor Red
+            }
+            elseif ($_ -match "WARNING") {
+                Write-Host "  $_" -ForegroundColor Yellow
+            }
+            elseif ($_ -match "OK") {
+                Write-Host "  $_" -ForegroundColor Green
+            }
+            elseif ($_ -match "Domain Controller|^-+$") {
+                Write-Host "  $_" -ForegroundColor Cyan
+            }
+            else {
+                Write-Host "  $_"
+            }
+        }
+        
+        # Summary statistics
+        Write-Host "`n  Summary:" -ForegroundColor Cyan
+        Write-Host "    Total DCs: $($Results.DomainControllers.TotalDCs)" -ForegroundColor White
+        if ($Results.DomainControllers.DESConfigured -gt 0) {
+            Write-Host "    DES Configured: $($Results.DomainControllers.DESConfigured)" -ForegroundColor Red
+        }
+        if ($Results.DomainControllers.RC4Configured -gt 0) {
+            Write-Host "    RC4 Configured: $($Results.DomainControllers.RC4Configured)" -ForegroundColor Yellow
+        }
+        if ($Results.DomainControllers.AESConfigured -gt 0) {
+            Write-Host "    AES Configured: $($Results.DomainControllers.AESConfigured)" -ForegroundColor Green
+        }
+    }
+    else {
+        Write-Host "  No Domain Controller data available" -ForegroundColor Yellow
+    }
+    
+    # 2. Event Log Summary Table
+    if ($Results.EventLogs) {
+        Write-Host "`n`n  EVENT LOG ANALYSIS SUMMARY" -ForegroundColor Cyan
+        Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
+        
+        $eventTable = @()
+        
+        # Add successfully queried DCs
+        if ($Results.EventLogs.QueriedDCs) {
+            foreach ($dcName in $Results.EventLogs.QueriedDCs) {
+                $eventTable += [PSCustomObject]@{
+                    'Domain Controller' = $dcName
+                    'Status'            = 'Success'
+                    'Events Analyzed'   = if ($Results.EventLogs.TotalEvents) { $Results.EventLogs.TotalEvents } else { 0 }
+                    'RC4 Tickets'       = if ($Results.EventLogs.RC4Tickets) { $Results.EventLogs.RC4Tickets } else { 0 }
+                    'DES Tickets'       = if ($Results.EventLogs.DESTickets) { $Results.EventLogs.DESTickets } else { 0 }
+                    'Error Message'     = '-'
+                }
+            }
+        }
+        
+        # Add failed DCs
+        if ($Results.EventLogs.FailedDCs -and $Results.EventLogs.FailedDCs.Count -gt 0) {
+            foreach ($failed in $Results.EventLogs.FailedDCs) {
+                $eventTable += [PSCustomObject]@{
+                    'Domain Controller' = $failed.Name
+                    'Status'            = 'Failed'
+                    'Events Analyzed'   = 0
+                    'RC4 Tickets'       = 0
+                    'DES Tickets'       = 0
+                    'Error Message'     = $failed.Error
+                }
+            }
+        }
+        
+        # Display table with color coding
+        if ($eventTable.Count -gt 0) {
+            $eventTable | Format-Table -AutoSize -Wrap | Out-String -Stream | ForEach-Object {
+                if ($_ -match "Failed") {
+                    Write-Host "  $_" -ForegroundColor Red
+                }
+                elseif ($_ -match "Success") {
+                    Write-Host "  $_" -ForegroundColor Green
+                }
+                elseif ($_ -match "Domain Controller|^-+$") {
+                    Write-Host "  $_" -ForegroundColor Cyan
+                }
+                else {
+                    Write-Host "  $_"
+                }
+            }
+            
+            # Summary statistics
+            Write-Host "`n  Summary:" -ForegroundColor Cyan
+            Write-Host "    Total Events Analyzed: $($Results.EventLogs.TotalEvents)" -ForegroundColor White
+            if ($Results.EventLogs.RC4Tickets -gt 0) {
+                Write-Host "    RC4 Tickets Detected: $($Results.EventLogs.RC4Tickets)" -ForegroundColor Red
+            }
+            if ($Results.EventLogs.DESTickets -gt 0) {
+                Write-Host "    DES Tickets Detected: $($Results.EventLogs.DESTickets)" -ForegroundColor Red
+            }
+            if ($Results.EventLogs.FailedDCs.Count -gt 0) {
+                Write-Host "    Failed DC Queries: $($Results.EventLogs.FailedDCs.Count)" -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Host "  No event log data available" -ForegroundColor Yellow
+        }
+    }
+    
+    # 3. Trust Summary Table (if trusts exist)
+    if ($Results.Trusts -and $Results.Trusts.Details.Count -gt 0) {
+        Write-Host "`n`n  TRUST ENCRYPTION SUMMARY" -ForegroundColor Cyan
+        Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
+        
+        $trustTable = @()
+        
+        foreach ($trust in $Results.Trusts.Details) {
+            # Determine risk level
+            $risk = "LOW"
+            if ($trust.EncryptionTypes -match "DES") {
+                $risk = "CRITICAL"
+            }
+            elseif ($trust.EncryptionTypes -match "RC4") {
+                $risk = "HIGH"
+            }
+            
+            $trustTable += [PSCustomObject]@{
+                'Trust Name'       = $trust.Name
+                'Direction'        = $trust.Direction
+                'Encryption Types' = $trust.EncryptionTypes
+                'Risk Level'       = $risk
+            }
+        }
+        
+        # Display table with color coding
+        $trustTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
+            if ($_ -match "CRITICAL") {
+                Write-Host "  $_" -ForegroundColor Red
+            }
+            elseif ($_ -match "HIGH") {
+                Write-Host "  $_" -ForegroundColor Yellow
+            }
+            elseif ($_ -match "LOW") {
+                Write-Host "  $_" -ForegroundColor Green
+            }
+            elseif ($_ -match "Trust Name|^-+$") {
+                Write-Host "  $_" -ForegroundColor Cyan
+            }
+            else {
+                Write-Host "  $_"
+            }
+        }
+        
+        # Summary statistics
+        Write-Host "`n  Summary:" -ForegroundColor Cyan
+        Write-Host "    Total Trusts: $($Results.Trusts.TotalTrusts)" -ForegroundColor White
+        if ($Results.Trusts.DESRisk -gt 0) {
+            Write-Host "    DES Risk: $($Results.Trusts.DESRisk) trust(s)" -ForegroundColor Red
+        }
+        if ($Results.Trusts.RC4Risk -gt 0) {
+            Write-Host "    RC4 Risk: $($Results.Trusts.RC4Risk) trust(s)" -ForegroundColor Yellow
+        }
+        if ($Results.Trusts.AESSecure -gt 0) {
+            Write-Host "    AES Secure: $($Results.Trusts.AESSecure) trust(s)" -ForegroundColor Green
+        }
+    }
+    
+    Write-Host ""
+}
+
 function Show-ManualValidationGuidance {
     Write-Section "Manual Validation & Monitoring Guidance"
     
@@ -1080,6 +1289,9 @@ try {
         Write-Host "`n  $([char]0x26A0)  Note: Event log data is incomplete due to $($results.EventLogs.FailedDCs.Count) DC(s) being inaccessible" -ForegroundColor Yellow
         Write-Host "  Review the detailed troubleshooting guidance in the Event Log Analysis section above" -ForegroundColor Yellow
     }
+    
+    # 4. Display Summary Tables
+    Show-AssessmentSummary -Results $results
     
     # 5. Manual Validation Guidance (if requested)
     if ($IncludeGuidance) {
