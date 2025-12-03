@@ -531,7 +531,23 @@ if ($Parallel -and $PSVersionTable.PSVersion.Major -ge 7) {
     Write-Host "`nProcessing domains in parallel (max $MaxParallelDomains concurrent)..." -ForegroundColor Cyan
     
     $domainResults = $domainList | ForEach-Object -Parallel {
-        $result = & $using:assessmentScript -Domain $_ $(if ($using:AnalyzeEventLogs) { '-AnalyzeEventLogs' }) $(if ($using:ExportResults) { '-ExportResults' }) -EventLogHours $using:EventLogHours
+        # Build parameter hashtable for the assessment script
+        $params = @{
+            Domain = $_
+            EventLogHours = $using:EventLogHours
+        }
+        
+        if ($using:AnalyzeEventLogs) {
+            $params['AnalyzeEventLogs'] = $true
+        }
+        
+        if ($using:ExportResults) {
+            $params['ExportResults'] = $true
+        }
+        
+        # Run assessment with splatted parameters
+        $result = & $using:assessmentScript @params
+        
         [PSCustomObject]@{
             Domain = $_
             Result = $result
