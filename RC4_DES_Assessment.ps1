@@ -686,7 +686,7 @@ function Show-ManualValidationGuidance {
 $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
 1. Event Log Monitoring Setup
-   $([string]([char]0x2500) $([char]0x2022) 60)
+   $([string]([char]0x2500) * 60)
    Enable advanced Kerberos auditing on Domain Controllers:
    
    $([char]0x2022) Group Policy > Computer Configuration > Policies > Windows Settings
@@ -706,7 +706,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) 0x11 or 0x12: AES (GOOD - expected value)
 
 2. Splunk/SIEM Query Examples
-   $([string]([char]0x2500) $([char]0x2022) 60)
+   $([string]([char]0x2500) * 60)
    
    Splunk query to detect RC4 usage:
    index=windows EventCode=4768 OR EventCode=4769 
@@ -722,7 +722,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    This shows which accounts are still using RC4/DES encryption.
 
 3. GPO Validation
-   $([string]([char]0x2500) $([char]0x2022) 60)
+   $([string]([char]0x2500) * 60)
    
    Verify GPO is applied and effective:
    
@@ -735,7 +735,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Should NOT show: DES_CBC_CRC, DES_CBC_MD5, RC4_HMAC_MD5
 
 4. Computer Object Assessment (If Needed)
-   $([string]([char]0x2500) $([char]0x2022) 60)
+   $([string]([char]0x2500) * 60)
    
    Post-November 2022 Update Clarification:
    
@@ -757,7 +757,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Value with 0x4 bit: Has RC4 explicitly set (investigate why)
 
 5. Trust Validation
-   $([string]([char]0x2500) $([char]0x2022) 60)
+   $([string]([char]0x2500) * 60)
    
    Post-November 2022: Trusts default to AES when attribute is not set.
    
@@ -769,7 +769,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    If includes 0x4: RC4 enabled (investigate)
 
 6. Windows Server 2025 Preparation
-   $([string]([char]0x2500) $([char]0x2022) 60)
+   $([string]([char]0x2500) * 60)
    
    Windows Server 2025 disables RC4 fallback entirely.
    
@@ -780,7 +780,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2713) Testing in lab environment before production deployment
 
 7. Recommended Monitoring Schedule
-   $([string]([char]0x2500) $([char]0x2022) 60)
+   $([string]([char]0x2500) * 60)
    
    $([char]0x2022) Weekly: Check for RC4/DES events (automated alert)
    $([char]0x2022) Monthly: Review this assessment
@@ -999,6 +999,7 @@ catch {
 }
 
 #endregion
+
 
 
 
