@@ -1323,16 +1323,23 @@ try {
     if ($ExportResults) {
         Write-Section "Exporting Results"
         
+        # Create Exports folder if it doesn't exist
+        $exportFolder = Join-Path -Path $PSScriptRoot -ChildPath "Exports"
+        if (-not (Test-Path -Path $exportFolder)) {
+            New-Item -Path $exportFolder -ItemType Directory -Force | Out-Null
+            Write-Finding -Status "INFO" -Message "Created export folder: $exportFolder"
+        }
+        
         $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
         $domain = $results.Domain -replace '\.', '_'
         
         # Export JSON
-        $jsonPath = ".\DES_RC4_Assessment_${domain}_${timestamp}.json"
+        $jsonPath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Assessment_${domain}_${timestamp}.json"
         $results | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
         Write-Finding -Status "OK" -Message "JSON export: $jsonPath"
         
         # Export CSV summary
-        $csvPath = ".\DES_RC4_Assessment_${domain}_${timestamp}.csv"
+        $csvPath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Assessment_${domain}_${timestamp}.csv"
         $csvData = @()
         
         # Add DC details

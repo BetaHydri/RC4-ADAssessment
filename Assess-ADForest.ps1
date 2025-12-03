@@ -484,9 +484,19 @@ function Invoke-DomainAssessment {
             $domainSafe = $DomainName -replace '\.', '_'
             $timestamp = Get-Date -Format "yyyyMMdd"
             $jsonPattern = "DES_RC4_Assessment_${domainSafe}_${timestamp}*.json"
-            $resultFile = Get-ChildItem -Path $PSScriptRoot -Filter $jsonPattern -ErrorAction SilentlyContinue | 
+            
+            # Look in Exports folder first, then fallback to script root
+            $exportFolder = Join-Path -Path $PSScriptRoot -ChildPath "Exports"
+            $resultFile = Get-ChildItem -Path $exportFolder -Filter $jsonPattern -ErrorAction SilentlyContinue | 
             Sort-Object LastWriteTime -Descending | 
             Select-Object -First 1
+            
+            if (-not $resultFile) {
+                # Fallback to script root for backwards compatibility
+                $resultFile = Get-ChildItem -Path $PSScriptRoot -Filter $jsonPattern -ErrorAction SilentlyContinue | 
+                Sort-Object LastWriteTime -Descending | 
+                Select-Object -First 1
+            }
             
             if ($resultFile) {
                 $result = Get-Content $resultFile.FullName | ConvertFrom-Json
