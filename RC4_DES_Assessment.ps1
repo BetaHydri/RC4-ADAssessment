@@ -556,25 +556,33 @@ function Get-EventLogEncryptionAnalysis {
         else {
             $domainInfo = Get-ADDomain
         }
+        
+        # Get ALL domain controllers for comprehensive event log analysis
+        Write-Verbose "Discovering all Domain Controllers in $($domainInfo.DNSRoot)"
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * @ServerParams | Select-Object -First 3  # Sample first 3 DCs
+        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
         
         if (-not $dcs) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for event log analysis"
             return $assessment
         }
         
-        Write-Finding -Status "INFO" -Message "Querying event logs from $($dcs.Count) Domain Controller(s)..."
+        Write-Finding -Status "INFO" -Message "Querying event logs from $($dcs.Count) Domain Controller(s) in $($domainInfo.DNSRoot)"
         Write-Host "  Note: Using WinRM (PowerShell Remoting) for event log queries" -ForegroundColor Gray
         Write-Host "  If this fails, ensure WinRM is enabled on DCs: Enable-PSRemoting -Force" -ForegroundColor Gray
         
         foreach ($dc in $dcs) {
-            Write-Host "  $([char]0x2022) Querying $($dc.Name)..." -ForegroundColor Cyan
+            $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+            Write-Host "  $([char]0x2022) Querying $dcName..." -ForegroundColor Cyan
             
             try {
                 # Test connectivity first
-                if (-not (Test-Connection -ComputerName $dc.Name -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
-                    Write-Finding -Status "WARNING" -Message "Cannot reach $($dc.Name) - skipping event log query"
+                if (-not (Test-Connection -ComputerName $dcName -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
+                    Write-Host "    $([char]0x26A0) Cannot reach $dcName - skipping" -ForegroundColor Yellow
+                    $assessment.FailedDCs += @{
+                        Name  = $dcName
+                        Error = "Network unreachable - ping failed"
+                    }
                     continue
                 }
                 
@@ -593,15 +601,15 @@ function Get-EventLogEncryptionAnalysis {
                 # Try Get-WinEvent first (requires WinRM/RPC)
                 $events = $null
                 try {
-                    $events = Get-WinEvent -ComputerName $dc.Name -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
+                    $events = Get-WinEvent -ComputerName $dcName -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
                 }
                 catch [System.Runtime.InteropServices.COMException], [System.UnauthorizedAccessException] {
                     # RPC/WinRM failed, try alternative approach
-                    Write-Host "    WinRM/RPC unavailable, trying alternative method..." -ForegroundColor DarkYellow
+                    Write-Host "    $([char]0x26A0) RPC unavailable on $dcName, trying WinRM..." -ForegroundColor DarkYellow
                     
                     # Alternative: Use Invoke-Command if WinRM is enabled
                     try {
-                        $events = Invoke-Command -ComputerName $dc.Name -ScriptBlock {
+                        $events = Invoke-Command -ComputerName $dcName -ScriptBlock {
                             param($FilterXml, $MaxEvents)
                             Get-WinEvent -FilterXml $FilterXml -MaxEvents $MaxEvents -ErrorAction Stop
                         } -ArgumentList $filterXml, 1000 -ErrorAction Stop
@@ -612,10 +620,12 @@ function Get-EventLogEncryptionAnalysis {
                 }
                 
                 if (-not $events) {
+                    Write-Host "    $([char]0x24D8) No events found on $dcName" -ForegroundColor Gray
                     continue
                 }
                 
                 if ($events) {
+                    Write-Host "    $([char]0x2713) Retrieved $($events.Count) events from $dcName" -ForegroundColor Green
                     $assessment.EventsAnalyzed += $events.Count
                     
                     foreach ($event in $events) {
@@ -659,28 +669,25 @@ function Get-EventLogEncryptionAnalysis {
             catch {
                 $errorMsg = $_.Exception.Message
                 $assessment.FailedDCs += @{
-                    Name  = $dc.Name
+                    Name  = $dcName
                     Error = $errorMsg
                 }
                 
                 if ($errorMsg -match "WinRM|WSMan|PowerShell Remoting") {
-                    Write-Finding -Status "WARNING" -Message "WinRM not available on $($dc.Name)" -Detail "Enable with: Invoke-Command -ComputerName $($dc.Name) -ScriptBlock { Enable-PSRemoting -Force }"
+                    Write-Host "    $([char]0x2717) WinRM not available on $dcName" -ForegroundColor Red
+                    Write-Host "    Enable with: Invoke-Command -ComputerName $dcName -ScriptBlock { Enable-PSRemoting -Force }" -ForegroundColor Gray
                 }
                 elseif ($errorMsg -match "RPC server|network path") {
-                    Write-Finding -Status "WARNING" -Message "RPC/Network error on $($dc.Name)" -Detail "Both WinRM (5985) and RPC (135) failed. Check firewall rules or run locally on DC"
+                    Write-Host "    $([char]0x2717) RPC/Network error on $dcName" -ForegroundColor Red
+                    Write-Host "    Both WinRM (5985) and RPC (135) failed. Check firewall or run locally on DC" -ForegroundColor Gray
                 }
                 elseif ($errorMsg -match "Access is denied|unauthorized") {
-                    Write-Finding -Status "WARNING" -Message "Access denied on $($dc.Name)" -Detail "Ensure you have Event Log Readers permissions or are Domain Admin"
+                    Write-Host "    $([char]0x2717) Access denied on $dcName" -ForegroundColor Red
+                    Write-Host "    Ensure you have Event Log Readers permissions or are Domain Admin" -ForegroundColor Gray
                 }
                 else {
-                    Write-Finding -Status "WARNING" -Message "Could not query event log on $($dc.Name): $errorMsg"
+                    Write-Host "    $([char]0x2717) Failed to query $dcName`: $errorMsg" -ForegroundColor Red
                 }
-                
-                Write-Host "`n    Troubleshooting:" -ForegroundColor Yellow
-                Write-Host "    1. Enable WinRM on DC: Enable-PSRemoting -Force" -ForegroundColor Gray
-                Write-Host "    2. Or allow RPC in firewall: Port 135 + 49152-65535" -ForegroundColor Gray
-                Write-Host "    3. Or run this script directly on the DC" -ForegroundColor Gray
-                Write-Host "    4. Check permissions: Add your account to 'Event Log Readers' group`n" -ForegroundColor Gray
             }
         }
         
