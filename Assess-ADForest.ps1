@@ -172,9 +172,29 @@ function Invoke-DomainAssessment {
     Write-Host "Assessing Domain: $DomainName" -ForegroundColor Yellow
     Write-Host $("=" * 80) -ForegroundColor Yellow
     
+    # Try to discover a specific DC in this domain for better connectivity
+    $serverParam = $null
+    try {
+        Write-Host "  Discovering Domain Controller for $DomainName..." -ForegroundColor Gray
+        $dc = Get-ADDomainController -DomainName $DomainName -Discover -ErrorAction Stop
+        $serverParam = $dc.HostName[0]
+        Write-Host "  Using DC: $serverParam" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  Could not discover DC, using domain name directly" -ForegroundColor Yellow
+        Write-Host "  Warning: This may fail for child domains if not directly reachable" -ForegroundColor Yellow
+    }
+    
     # Build command parameters
-    $params = @{
-        Domain = $DomainName
+    $params = @{}
+    
+    if ($serverParam) {
+        # Use -Server with the discovered DC hostname
+        $params['Server'] = $serverParam
+    }
+    else {
+        # Fall back to -Domain
+        $params['Domain'] = $DomainName
     }
     
     if ($AnalyzeLogs) {
