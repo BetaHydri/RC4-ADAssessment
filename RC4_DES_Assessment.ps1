@@ -502,6 +502,7 @@ function Get-EventLogEncryptionAnalysis {
         DESAccounts    = @()
         RC4Accounts    = @()
         Details        = @()
+        FailedDCs      = @()  # Track DCs that couldn't be queried
     }
     
     try {
@@ -619,6 +620,11 @@ function Get-EventLogEncryptionAnalysis {
             }
             catch {
                 $errorMsg = $_.Exception.Message
+                $assessment.FailedDCs += @{
+                    Name  = $dc.Name
+                    Error = $errorMsg
+                }
+                
                 if ($errorMsg -match "WinRM|WSMan|PowerShell Remoting") {
                     Write-Finding -Status "WARNING" -Message "WinRM not available on $($dc.Name)" -Detail "Enable with: Invoke-Command -ComputerName $($dc.Name) -ScriptBlock { Enable-PSRemoting -Force }"
                 }
@@ -669,6 +675,52 @@ function Get-EventLogEncryptionAnalysis {
         }
         else {
             Write-Finding -Status "OK" -Message "No DES tickets detected in last $Hours hours"
+        }
+        
+        # Display event log query failures summary if any
+        if ($assessment.FailedDCs.Count -gt 0) {
+            Write-Host "`n  $([char]0x26A0)  Event Log Query Failures:" -ForegroundColor Yellow
+            Write-Host "  $($assessment.FailedDCs.Count) Domain Controller(s) could not be queried for event logs`n" -ForegroundColor Yellow
+            
+            foreach ($failed in $assessment.FailedDCs) {
+                Write-Host "  $([char]0x2022) $($failed.Name): $($failed.Error)" -ForegroundColor DarkYellow
+            }
+            
+            Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F527)) How to fix remote event log access issues:" -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "  Option 1: Enable WinRM (Recommended)" -ForegroundColor White
+            Write-Host "  $([string]([char]0x2500) * 40)" -ForegroundColor DarkGray
+            Write-Host "  Run on each failed DC:" -ForegroundColor Gray
+            Write-Host "  PS> Enable-PSRemoting -Force" -ForegroundColor Green
+            Write-Host "  PS> Set-Item WSMan:\localhost\Client\TrustedHosts -Value '*' -Force" -ForegroundColor Green
+            Write-Host "  PS> Restart-Service WinRM" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  Or via Group Policy (for all DCs):" -ForegroundColor Gray
+            Write-Host "  Computer Configuration > Policies > Administrative Templates" -ForegroundColor Gray
+            Write-Host "  > Windows Components > Windows Remote Management (WinRM) > WinRM Service" -ForegroundColor Gray
+            Write-Host "  - Enable 'Allow remote server management through WinRM'" -ForegroundColor Gray
+            Write-Host "  - IPv4 filter: * (or specific IPs)" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  Option 2: Configure Firewall for RPC" -ForegroundColor White
+            Write-Host "  $([string]([char]0x2500) * 40)" -ForegroundColor DarkGray
+            Write-Host "  Required ports:" -ForegroundColor Gray
+            Write-Host "  - TCP 135 (RPC Endpoint Mapper)" -ForegroundColor Gray
+            Write-Host "  - TCP 49152-65535 (Dynamic RPC ports)" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  Windows Firewall rule:" -ForegroundColor Gray
+            Write-Host "  PS> Enable-NetFirewallRule -DisplayGroup 'Remote Event Log Management'" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  Option 3: Run Locally on DC" -ForegroundColor White
+            Write-Host "  $([string]([char]0x2500) * 40)" -ForegroundColor DarkGray
+            Write-Host "  Copy script to DC and run:" -ForegroundColor Gray
+            Write-Host "  PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours $Hours" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "  Option 4: Verify Permissions" -ForegroundColor White
+            Write-Host "  $([string]([char]0x2500) * 40)" -ForegroundColor DarkGray
+            Write-Host "  Add your account to 'Event Log Readers' group on DCs:" -ForegroundColor Gray
+            Write-Host "  PS> Add-ADGroupMember -Identity 'Event Log Readers' -Members 'YourAccount'" -ForegroundColor Green
+            Write-Host "  Or use Domain Admin account (has all required permissions)" -ForegroundColor Gray
+            Write-Host ""
         }
     }
     catch {
@@ -920,6 +972,12 @@ try {
         foreach ($rec in $results.Recommendations) {
             Write-Host "    $([char]0x2022) $rec" -ForegroundColor Yellow
         }
+    }
+    
+    # Check for event log access issues
+    if ($results.EventLogs -and $results.EventLogs.FailedDCs.Count -gt 0) {
+        Write-Host "`n  $([char]0x26A0)  Note: Event log data is incomplete due to $($results.EventLogs.FailedDCs.Count) DC(s) being inaccessible" -ForegroundColor Yellow
+        Write-Host "  Review the detailed troubleshooting guidance in the Event Log Analysis section above" -ForegroundColor Yellow
     }
     
     # 5. Manual Validation Guidance (if requested)
