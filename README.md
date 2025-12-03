@@ -676,19 +676,19 @@ Overall Assessment
 **Start Here:** What's your goal?
 
 ```
-┌── Single Domain or Entire Forest? ──────────────────────────┐
-│                                                              │
-├─► Single Domain: Use RC4_DES_Assessment.ps1                 │
-│   └─► Quick Scan: .\RC4_DES_Assessment.ps1                  │
-│   └─► With Events: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs │
+┌── Single Domain or Entire Forest? ─────────────────────────────────────┐
+│                                                                        │
+├─► Single Domain: Use RC4_DES_Assessment.ps1                            │
+│   └─► Quick Scan: .\RC4_DES_Assessment.ps1                             │
+│   └─► With Events: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs          │
 │   └─► Child Domain: .\RC4_DES_Assessment.ps1 -Domain child.contoso.com │
-│                                                              │
-└─► Entire Forest: Use Assess-ADForest.ps1                    │
-    └─► Quick Scan: .\Assess-ADForest.ps1                     │
-    └─► With Events: .\Assess-ADForest.ps1 -AnalyzeEventLogs  │
-    └─► Parallel (PS7+): .\Assess-ADForest.ps1 -Parallel      │
-    └─► Export Results: .\Assess-ADForest.ps1 -ExportResults  │
-└──────────────────────────────────────────────────────────────┘
+│                                                                        │
+└─► Entire Forest: Use Assess-ADForest.ps1                               │
+    └─► Quick Scan: .\Assess-ADForest.ps1                                │
+    └─► With Events: .\Assess-ADForest.ps1 -AnalyzeEventLogs             │
+    └─► Parallel (PS7+): .\Assess-ADForest.ps1 -Parallel                 │
+    └─► Export Results: .\Assess-ADForest.ps1 -ExportResults             │
+└────────────────────────────────────────────────────────────────────────┘
 
 Do you need a quick health check?
 └─► Yes: .\RC4_DES_Assessment.ps1 -QuickScan
