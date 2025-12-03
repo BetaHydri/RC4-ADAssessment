@@ -148,14 +148,14 @@ $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
 # Initialize results collection
 $forestResults = @{
-    ForestName         = $forest.Name
-    AssessmentDate     = Get-Date
-    TotalDomains       = $forest.Domains.Count
-    DomainResults      = @()
-    OverallStatus      = "Unknown"
-    CriticalIssues     = 0
-    Warnings           = 0
-    HealthyDomains     = 0
+    ForestName     = $forest.Name
+    AssessmentDate = Get-Date
+    TotalDomains   = $forest.Domains.Count
+    DomainResults  = @()
+    OverallStatus  = "Unknown"
+    CriticalIssues = 0
+    Warnings       = 0
+    HealthyDomains = 0
 }
 
 # Function to assess a single domain
@@ -196,8 +196,8 @@ function Invoke-DomainAssessment {
             $timestamp = Get-Date -Format "yyyyMMdd"
             $jsonPattern = "DES_RC4_Assessment_${domainSafe}_${timestamp}*.json"
             $resultFile = Get-ChildItem -Path $PSScriptRoot -Filter $jsonPattern -ErrorAction SilentlyContinue | 
-                          Sort-Object LastWriteTime -Descending | 
-                          Select-Object -First 1
+            Sort-Object LastWriteTime -Descending | 
+            Select-Object -First 1
             
             if ($resultFile) {
                 $result = Get-Content $resultFile.FullName | ConvertFrom-Json
@@ -250,8 +250,8 @@ else {
     
     foreach ($domain in $domainList) {
         $result = Invoke-DomainAssessment -DomainName $domain -ScriptPath $assessmentScript `
-                                          -AnalyzeLogs $AnalyzeEventLogs -Hours $EventLogHours `
-                                          -Export $ExportResults
+            -AnalyzeLogs $AnalyzeEventLogs -Hours $EventLogHours `
+            -Export $ExportResults
         $forestResults.DomainResults += $result
     }
 }
@@ -351,9 +351,9 @@ if ($ExportResults) {
     $csvPath = ".\Forest_Assessment_${forestSafe}_${timestamp}.csv"
     $csvData = foreach ($domainResult in $forestResults.DomainResults) {
         [PSCustomObject]@{
-            Forest = $forest.Name
-            Domain = $domainResult.Domain
-            Status = $domainResult.Status
+            Forest         = $forest.Name
+            Domain         = $domainResult.Domain
+            Status         = $domainResult.Status
             AssessmentDate = $forestResults.AssessmentDate
         }
     }
