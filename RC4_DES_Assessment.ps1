@@ -1379,6 +1379,9 @@ try {
     if (-not $AnalyzeEventLogs) {
         Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F4A1)) For complete assessment, run with -AnalyzeEventLogs to detect actual DES/RC4 usage" -ForegroundColor Cyan
     }
+    
+    # Return results object for use by Assess-ADForest.ps1
+    return $results
 }
 catch {
     Write-Finding -Status "CRITICAL" -Message "Assessment failed: $($_.Exception.Message)"

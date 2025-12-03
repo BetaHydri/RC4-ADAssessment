@@ -475,8 +475,8 @@ function Invoke-DomainAssessment {
     }
     
     try {
-        # Run assessment
-        & $ScriptPath @params
+        # Run assessment and capture returned results object
+        $assessmentResults = & $ScriptPath @params
         
         # Parse results (if exported)
         if ($Export) {
@@ -494,6 +494,15 @@ function Invoke-DomainAssessment {
                     Status = $result.OverallStatus
                     Data   = $result
                 }
+            }
+        }
+        
+        # Return results from the script execution
+        if ($assessmentResults) {
+            return @{
+                Domain = $DomainName
+                Status = $assessmentResults.OverallStatus
+                Data   = $assessmentResults
             }
         }
         
