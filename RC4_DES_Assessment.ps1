@@ -219,7 +219,13 @@ function Get-DomainControllerEncryption {
     try {
         # Get domain info - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
-            $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
+            Write-Verbose "Attempting to contact DC: $($ServerParams['Server'])"
+            try {
+                $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server'] -ErrorAction Stop
+            }
+            catch {
+                throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
+            }
         }
         else {
             $domainInfo = Get-ADDomain
@@ -362,8 +368,17 @@ function Get-DomainControllerEncryption {
         }
     }
     catch {
-        $targetInfo = if ($ServerParams.ContainsKey('Server')) { " (Target: $($ServerParams['Server']))" } else { "" }
-        Write-Finding -Status "CRITICAL" -Message "Error analyzing Domain Controllers$targetInfo`: $($_.Exception.Message)"
+        $errorMsg = $_.Exception.Message
+        # Extract DC name from error message if it mentions "Failed to contact Domain Controller"
+        if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
+            Write-Finding -Status "CRITICAL" -Message $errorMsg
+        }
+        elseif ($ServerParams.ContainsKey('Server')) {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing Domain Controllers (Attempted DC: $($ServerParams['Server'])): $errorMsg"
+        }
+        else {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing Domain Controllers: $errorMsg"
+        }
     }
     
     return $assessment
@@ -388,7 +403,13 @@ function Get-TrustEncryptionAssessment {
     try {
         # Get domain info - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
-            $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
+            Write-Verbose "Attempting to contact DC: $($ServerParams['Server'])"
+            try {
+                $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server'] -ErrorAction Stop
+            }
+            catch {
+                throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
+            }
         }
         else {
             $domainInfo = Get-ADDomain
@@ -479,8 +500,17 @@ function Get-TrustEncryptionAssessment {
         Write-Host "  they default to AES encryption. No action needed for these trusts." -ForegroundColor Gray
     }
     catch {
-        $targetInfo = if ($ServerParams.ContainsKey('Server')) { " (Target: $($ServerParams['Server']))" } else { "" }
-        Write-Finding -Status "CRITICAL" -Message "Error analyzing trusts$targetInfo`: $($_.Exception.Message)"
+        $errorMsg = $_.Exception.Message
+        # Extract DC name from error message if it mentions "Failed to contact Domain Controller"
+        if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
+            Write-Finding -Status "CRITICAL" -Message $errorMsg
+        }
+        elseif ($ServerParams.ContainsKey('Server')) {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing trusts (Attempted DC: $($ServerParams['Server'])): $errorMsg"
+        }
+        else {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing trusts: $errorMsg"
+        }
     }
     
     return $assessment
@@ -515,7 +545,13 @@ function Get-EventLogEncryptionAnalysis {
         
         # Get domain controllers - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
-            $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server']
+            Write-Verbose "Attempting to contact DC: $($ServerParams['Server'])"
+            try {
+                $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server'] -ErrorAction Stop
+            }
+            catch {
+                throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
+            }
         }
         else {
             $domainInfo = Get-ADDomain
@@ -726,8 +762,17 @@ function Get-EventLogEncryptionAnalysis {
         }
     }
     catch {
-        $targetInfo = if ($ServerParams.ContainsKey('Server')) { " (Target: $($ServerParams['Server']))" } else { "" }
-        Write-Finding -Status "CRITICAL" -Message "Error analyzing event logs$targetInfo`: $($_.Exception.Message)"
+        $errorMsg = $_.Exception.Message
+        # Extract DC name from error message if it mentions "Failed to contact Domain Controller"
+        if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
+            Write-Finding -Status "CRITICAL" -Message $errorMsg
+        }
+        elseif ($ServerParams.ContainsKey('Server')) {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing event logs (Attempted DC: $($ServerParams['Server'])): $errorMsg"
+        }
+        else {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing event logs: $errorMsg"
+        }
     }
     
     return $assessment
