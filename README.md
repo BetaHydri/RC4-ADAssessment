@@ -63,8 +63,9 @@ Real-world deployment revealed several critical issues:
 
 ### Core Scripts
 
-1. **RC4_DES_Assessment.ps1** - Main assessment tool
+1. **RC4_DES_Assessment.ps1** - Main assessment tool (v2.0.1)
 2. **Compare-Assessments.ps1** - Compare assessment results over time
+3. **Test-EventLogFailureHandling.ps1** - Test script for event log error handling validation
 
 ### Fast Assessment (Default - Quick Scan)
 - Domain Controller encryption configuration
@@ -281,6 +282,43 @@ v1.0 and v2.0 can coexist:
 
 ## Troubleshooting
 
+### Event Log Access Issues (NEW in v2.0.1)
+
+The script now provides comprehensive troubleshooting guidance when it cannot access event logs on remote DCs.
+
+**Common Issues:**
+- **RPC Server Unavailable**: Firewall blocking RPC ports (135, 49152-65535)
+- **WinRM Errors**: PowerShell Remoting not enabled on DCs
+- **Access Denied**: Insufficient permissions to read event logs
+- **Network Path Not Found**: DNS resolution or network connectivity issues
+
+**Automatic Troubleshooting Summary:**
+
+When event log queries fail, the script displays:
+1. Which DCs failed and why
+2. Four detailed resolution options:
+   - Enable WinRM (recommended)
+   - Configure firewall for RPC
+   - Run script locally on DC
+   - Verify permissions
+
+See sample output above for the complete troubleshooting guidance.
+
+**Testing Error Handling:**
+
+Use the included test script to verify error handling without actual network issues:
+
+```powershell
+# Test RPC failures
+.\Test-EventLogFailureHandling.ps1 -TestScenario RPCFailure
+
+# Test mixed scenarios (most realistic)
+.\Test-EventLogFailureHandling.ps1 -TestScenario MixedFailures
+
+# Test all successful (control test)
+.\Test-EventLogFailureHandling.ps1 -TestScenario AllSuccess
+```
+
 ### "No events analyzed"
 
 **Cause:** Event log access denied or auditing not enabled.
@@ -467,14 +505,197 @@ Same as original RC4_AD_SCAN project.
 - Microsoft Kerberos security documentation team
 - Active Directory security community
 
+## Sample Output
+
+### Quick Scan Output
+
+```
+================================================================================
+DES/RC4 Kerberos Encryption Assessment v2.0
+================================================================================
+
+Domain Controller Encryption Configuration
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing domain: contoso.com
+ℹ️  Found 3 Domain Controller(s)
+
+ℹ️  Domain Controller Summary:
+  • Total DCs: 3
+  • AES Configured: 3
+  • RC4 Configured: 0
+  • DES Configured: 0
+  • Not Configured (GPO Inherited): 0
+
+  Individual DC Status:
+    • DC01: AES Configured
+      Types: AES128-HMAC, AES256-HMAC
+    • DC02: AES Configured
+      Types: AES128-HMAC, AES256-HMAC
+    • DC03: AES Configured
+      Types: AES128-HMAC, AES256-HMAC
+
+✅ All Domain Controllers have AES encryption configured
+
+
+Trust Encryption Assessment (Post-November 2022 Logic)
+────────────────────────────────────────────────────────────────
+ℹ️  Found 2 trust(s)
+✅ Trust 'partner.contoso.com': Uses AES by default (msDS-SupportedEncryptionTypes not set)
+✅ Trust 'external.com': AES explicitly configured
+
+ℹ️  Trust Assessment Summary:
+  • Total Trusts: 2
+  • AES Default (not set): 1
+  • AES Explicit: 1
+  • RC4 Risk: 0
+  • DES Risk: 0
+
+  📘 Post-November 2022 Update:
+  When msDS-SupportedEncryptionTypes is not set (0 or empty) on trusts,
+  they default to AES encryption. No action needed for these trusts.
+
+
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+✅ No DES/RC4 usage detected - environment is secure
+
+  💡 For complete assessment, run with -AnalyzeEventLogs to detect actual DES/RC4 usage
+
+
+Assessment Complete
+================================================================================
+
+📊 Summary:
+  • Domain: contoso.com
+  • Assessment Date: 2025-12-03 14:30:00
+  • Overall Status: OK
+```
+
+### Full Assessment with Event Logs
+
+```
+Event Log Analysis - Actual DES/RC4 Usage
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing last 24 hours of Kerberos ticket events
+  Time range: 2025-12-02 14:30 to 2025-12-03 14:30
+ℹ️  Querying event logs from 3 Domain Controller(s)...
+  Note: Using WinRM (PowerShell Remoting) for event log queries
+  If this fails, ensure WinRM is enabled on DCs: Enable-PSRemoting -Force
+  • Querying DC01...
+  • Querying DC02...
+  • Querying DC03...
+
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 15,432
+  • AES Tickets: 15,430
+  • RC4 Tickets: 2
+  • DES Tickets: 0
+
+❌ RC4 tickets detected in active use!
+  Unique accounts using RC4: 2
+  RC4 accounts:
+    - LEGACY-APP$
+    - OLD-SERVER$
+✅ No DES tickets detected in last 24 hours
+```
+
+### Event Log Query Failures with Troubleshooting
+
+```
+Event Log Analysis - Actual DES/RC4 Usage
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing last 24 hours of Kerberos ticket events
+  • Querying DC01.contoso.com...
+    ⚠  RPC/Network error on DC01.contoso.com
+       Both WinRM (5985) and RPC (135) failed. Check firewall rules or run locally on DC
+
+    Troubleshooting:
+    1. Enable WinRM on DC: Enable-PSRemoting -Force
+    2. Or allow RPC in firewall: Port 135 + 49152-65535
+    3. Or run this script directly on the DC
+    4. Check permissions: Add your account to 'Event Log Readers' group
+
+  • Querying DC02.contoso.com...
+    ✓ Successfully queried DC02.contoso.com
+  • Querying DC03.contoso.com...
+    ⚠  Access denied on DC03.contoso.com
+       Ensure you have Event Log Readers permissions or are Domain Admin
+
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 150
+  • AES Tickets: 148
+  • RC4 Tickets: 2
+  • DES Tickets: 0
+
+  ⚠  Event Log Query Failures:
+  2 Domain Controller(s) could not be queried for event logs
+
+  • DC01.contoso.com: The RPC server is unavailable. (Exception from HRESULT: 0x800706BA)
+  • DC03.contoso.com: Access is denied. Attempted to perform an unauthorized operation.
+
+  🔧 How to fix remote event log access issues:
+
+  Option 1: Enable WinRM (Recommended)
+  ────────────────────────────────────────
+  Run on each failed DC:
+  PS> Enable-PSRemoting -Force
+  PS> Set-Item WSMan:\localhost\Client\TrustedHosts -Value '*' -Force
+  PS> Restart-Service WinRM
+
+  Or via Group Policy (for all DCs):
+  Computer Configuration > Policies > Administrative Templates
+  > Windows Components > Windows Remote Management (WinRM) > WinRM Service
+  - Enable 'Allow remote server management through WinRM'
+  - IPv4 filter: * (or specific IPs)
+
+  Option 2: Configure Firewall for RPC
+  ────────────────────────────────────────
+  Required ports:
+  - TCP 135 (RPC Endpoint Mapper)
+  - TCP 49152-65535 (Dynamic RPC ports)
+
+  Windows Firewall rule:
+  PS> Enable-NetFirewallRule -DisplayGroup 'Remote Event Log Management'
+
+  Option 3: Run Locally on DC
+  ────────────────────────────────────────
+  Copy script to DC and run:
+  PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 24
+
+  Option 4: Verify Permissions
+  ────────────────────────────────────────
+  Add your account to 'Event Log Readers' group on DCs:
+  PS> Add-ADGroupMember -Identity 'Event Log Readers' -Members 'YourAccount'
+  Or use Domain Admin account (has all required permissions)
+
+
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+⚠  Note: Event log data is incomplete due to 2 DC(s) being inaccessible
+   Review the detailed troubleshooting guidance in the Event Log Analysis section above
+```
+
 ## Version History
 
-### v2.0 (Current)
+### v2.0.1 (Current - December 2025)
+- **NEW:** Remote event log access failure tracking and troubleshooting
+- **NEW:** Comprehensive end-of-assessment summary for RPC/WinRM issues
+- **NEW:** Test script for validating error handling (Test-EventLogFailureHandling.ps1)
+- **IMPROVED:** Child domain support with proper identity parameter handling
+- **IMPROVED:** WinRM-first approach for event log queries with RPC fallback
+- **IMPROVED:** UTF-8 console encoding for proper Unicode display in PowerShell 5.1
+- **FIXED:** Bullet characters and Unicode symbols display correctly
 - Complete rewrite based on customer feedback
 - Post-November 2022 update logic
 - Event log analysis for actual usage detection
 - Performance optimization for large forests
 - Comprehensive manual validation guidance
+
+### v2.0 (November 2025)
+- Initial v2.0 release
+- Post-November 2022 update logic
+- Event log analysis for actual usage detection
+- Performance optimization for large forests
 
 ### v1.0 (Legacy)
 - Initial implementation

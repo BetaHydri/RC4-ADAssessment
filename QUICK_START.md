@@ -1,4 +1,6 @@
-# RC4_DES_Assessment.ps1 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.0.1 - Quick Start Guide
+
+> **✨ New in v2.0.1:** Enhanced remote event log access troubleshooting with comprehensive guidance when RPC/WinRM issues occur.
 
 ## 🔐 Using with Active Directory
 
@@ -37,6 +39,94 @@
 ### Specific Domain
 ```powershell
 .\RC4_DES_Assessment.ps1 -Domain contoso.com -AnalyzeEventLogs
+```
+
+---
+
+## 📊 Sample Output
+
+### Successful Quick Scan
+```
+================================================================================
+DES/RC4 Kerberos Encryption Assessment v2.0
+================================================================================
+
+Domain Controller Encryption Configuration
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing domain: contoso.com
+ℹ️  Found 3 Domain Controller(s)
+
+✅ Domain Controllers are configured for AES encryption via GPO
+ℹ️  3 DC(s) inherit AES settings from GPO (this is normal)
+
+Trust Encryption Assessment (Post-November 2022 Logic)
+────────────────────────────────────────────────────────────────
+ℹ️  Found 1 trust(s)
+✅ Trust 'partner.com': Uses AES by default (msDS-SupportedEncryptionTypes not set)
+
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+✅ No DES/RC4 usage detected - environment is secure
+```
+
+### Event Log Analysis with RC4 Detection
+```
+Event Log Analysis - Actual DES/RC4 Usage
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing last 24 hours of Kerberos ticket events
+ℹ️  Querying event logs from 3 Domain Controller(s)...
+  • Querying DC01...
+  • Querying DC02...
+  • Querying DC03...
+
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 15,432
+  • AES Tickets: 15,430
+  • RC4 Tickets: 2
+  • DES Tickets: 0
+
+❌ RC4 tickets detected in active use!
+  Unique accounts using RC4: 2
+  RC4 accounts:
+    - LEGACY-APP$
+    - OLD-SERVER$
+```
+
+### Event Log Access Failures (NEW in v2.0.1)
+```
+  ⚠  Event Log Query Failures:
+  2 Domain Controller(s) could not be queried for event logs
+
+  • DC01.contoso.com: The RPC server is unavailable. (Exception from HRESULT: 0x800706BA)
+  • DC03.contoso.com: Access is denied. Attempted to perform an unauthorized operation.
+
+  🔧 How to fix remote event log access issues:
+
+  Option 1: Enable WinRM (Recommended)
+  ────────────────────────────────────────
+  Run on each failed DC:
+  PS> Enable-PSRemoting -Force
+  PS> Set-Item WSMan:\localhost\Client\TrustedHosts -Value '*' -Force
+  PS> Restart-Service WinRM
+
+  Option 2: Configure Firewall for RPC
+  ────────────────────────────────────────
+  Required ports:
+  - TCP 135 (RPC Endpoint Mapper)
+  - TCP 49152-65535 (Dynamic RPC ports)
+
+  Windows Firewall rule:
+  PS> Enable-NetFirewallRule -DisplayGroup 'Remote Event Log Management'
+
+  Option 3: Run Locally on DC
+  ────────────────────────────────────────
+  Copy script to DC and run:
+  PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 24
+
+  Option 4: Verify Permissions
+  ────────────────────────────────────────
+  Add your account to 'Event Log Readers' group on DCs:
+  PS> Add-ADGroupMember -Identity 'Event Log Readers' -Members 'YourAccount'
 ```
 
 ---
@@ -94,6 +184,29 @@ Follow recommendations from the assessment report.
 
 ## 🆘 Troubleshooting
 
+### Event Log Access Issues (NEW in v2.0.1)
+
+**Problem:** Script shows "RPC server unavailable" or "Access denied" when querying DCs
+
+**Solution:** The script now provides automatic troubleshooting guidance. When failures occur, you'll see:
+- Which DCs failed and the specific error
+- Four detailed options to fix the issue
+- PowerShell commands to run
+
+**Test the Error Handling:**
+```powershell
+# Simulate RPC failures to see the troubleshooting output
+.\Test-EventLogFailureHandling.ps1 -TestScenario MixedFailures
+```
+
+Available test scenarios:
+- `RPCFailure` - Simulates RPC server unavailable
+- `WinRMFailure` - Simulates PowerShell Remoting issues
+- `AccessDenied` - Simulates permission errors
+- `NetworkFailure` - Simulates network connectivity issues
+- `MixedFailures` - Realistic scenario with multiple failure types
+- `AllSuccess` - Control test (no failures)
+
 ### "Cannot find Active Directory module"
 **Solution**: Install RSAT tools or run on domain controller
 ```powershell
@@ -114,8 +227,16 @@ Test-Connection -ComputerName your-dc-name
 Resolve-DnsName your-domain.com
 ```
 
+### Child Domain Issues
+**Problem:** Errors when running against child domains
+
+**Solution:** Use both `-Domain` and `-Server` parameters:
+```powershell
+.\RC4_DES_Assessment.ps1 -Domain child.contoso.com -Server DC01.child.contoso.com -AnalyzeEventLogs
+```
+
 ### Emojis not displaying correctly
-**Solution**: Already fixed! Script uses `[System.Char]::ConvertFromUtf32()` for PowerShell 5.1 compatibility
+**Solution**: Already fixed in v2.0.1! Script uses UTF-8 encoding and compatible Unicode characters for PowerShell 5.1
 
 ### Script runs very slowly
 **Solution**: Use `-QuickScan` to skip event log analysis
@@ -127,10 +248,34 @@ Resolve-DnsName your-domain.com
 
 ## 📚 Additional Resources
 
-- **README.md** - Comprehensive documentation
+- **README.md** - Comprehensive documentation with sample outputs
+- **Test-EventLogFailureHandling.ps1** - Test script for error handling validation
 - **archive/README_v1_LEGACY.md** - Legacy v1.0 documentation (archived)
 - **Microsoft KB5021131** - Post-Nov 2022 Kerberos changes
 - **Windows Server 2025** - RC4 completely disabled by default
+
+---
+
+## 🎯 What's New in v2.0.1
+
+### Remote Event Log Access Troubleshooting
+- **Automatic failure tracking** - Script now tracks which DCs couldn't be queried
+- **Comprehensive troubleshooting** - Detailed guidance for RPC/WinRM issues at end of assessment
+- **Four fix options** - WinRM setup, firewall configuration, local execution, or permission fixes
+- **Test script included** - Validate error handling without requiring actual failures
+
+### Enhanced Multi-Domain Support
+- **Child domain fixes** - Proper identity parameter handling for cross-domain queries
+- **Better error messages** - Clear guidance when querying child domains
+
+### PowerShell 5.1 Compatibility
+- **UTF-8 encoding** - Automatic console encoding configuration
+- **Unicode symbols** - Proper bullet points and status symbols in both PS 5.1 and 7
+
+### Event Log Query Improvements
+- **WinRM-first approach** - Tries PowerShell Remoting before falling back to RPC
+- **Connectivity testing** - Checks DC reachability before attempting queries
+- **Better error categorization** - Distinguishes between WinRM, RPC, permission, and network errors
 
 ---
 
