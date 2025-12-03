@@ -9,6 +9,10 @@
   - Event log ticket usage patterns
   - Overall security posture
 
+.NOTES
+  Author: Jan Tiedemann
+  Version: 2.1.0
+
 .PARAMETER BaselineFile
   Path to the baseline (older) assessment JSON file.
 

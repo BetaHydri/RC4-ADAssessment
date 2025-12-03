@@ -6,7 +6,8 @@
 
 ### Prerequisites
 - PowerShell 5.1 or later
-- Active Directory PowerShell module
+- Active Directory PowerShell module (`RSAT-AD-PowerShell`)
+- Group Policy PowerShell module (`GPMC`)
 - Domain Admin or equivalent permissions
 - Network access to domain controllers
 

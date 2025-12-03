@@ -49,11 +49,12 @@
   Assess specific forest with 7 days of event log analysis.
 
 .NOTES
-  Author: Active Directory Security Team
+  Author: Jan Tiedemann
   Version: 2.1.0
   Requirements:
     - PowerShell 5.1 or later (7+ for parallel processing)
     - Active Directory PowerShell module
+    - Group Policy PowerShell module (GroupPolicy)
     - RC4_DES_Assessment.ps1 in same directory
     - Domain Admin or equivalent permissions in each domain
 #>

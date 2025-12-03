@@ -98,6 +98,36 @@ Real-world deployment revealed several critical issues:
 - [What happened to Kerberos authentication after November 2022 updates](https://techcommunity.microsoft.com/blog/askds/what-happened-to-kerberos-authentication-after-installing-the-november-2022oob-u/3696351)
 - [Decrypting Kerberos Encryption Types Selection](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797)
 
+## Installation & Prerequisites
+
+### Required PowerShell Modules
+
+```powershell
+# Install RSAT tools on Windows 10/11 client
+Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0
+Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
+
+# Or on Windows Server
+Install-WindowsFeature RSAT-AD-PowerShell, GPMC
+```
+
+### Prerequisites
+- **PowerShell:** 5.1 or later (PowerShell 7+ recommended for parallel forest assessment)
+- **Modules:** Active Directory (`RSAT-AD-PowerShell`), Group Policy (`GPMC`)
+- **Permissions:** Domain Admin or equivalent read permissions (Event Log Readers for event analysis)
+- **Network:** Access to domain controllers (WinRM port 5985 or RPC port 135)
+
+### Quick Verification
+
+```powershell
+# Verify modules are installed
+Get-Module -ListAvailable ActiveDirectory, GroupPolicy
+
+# Test connectivity
+Import-Module ActiveDirectory, GroupPolicy
+Get-ADDomain
+```
+
 ## Features
 
 ### Core Scripts
