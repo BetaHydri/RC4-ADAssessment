@@ -895,15 +895,20 @@ function Show-AssessmentSummary {
         Write-Host "`n`n  EVENT LOG ANALYSIS SUMMARY" -ForegroundColor Cyan
         Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
         
+        # Debug: Check what properties we have
+        Write-Verbose "EventLogs properties: $($Results.EventLogs.Keys -join ', ')"
+        Write-Verbose "QueriedDCs count: $($Results.EventLogs.QueriedDCs.Count)"
+        Write-Verbose "TotalEvents: $($Results.EventLogs.EventsAnalyzed)"
+        
         $eventTable = @()
         
         # Add successfully queried DCs
-        if ($Results.EventLogs.QueriedDCs) {
+        if ($Results.EventLogs.QueriedDCs -and $Results.EventLogs.QueriedDCs.Count -gt 0) {
             foreach ($dcName in $Results.EventLogs.QueriedDCs) {
                 $eventTable += [PSCustomObject]@{
                     'Domain Controller' = $dcName
                     'Status'            = 'Success'
-                    'Events Analyzed'   = if ($Results.EventLogs.TotalEvents) { $Results.EventLogs.TotalEvents } else { 0 }
+                    'Events Analyzed'   = if ($Results.EventLogs.EventsAnalyzed) { $Results.EventLogs.EventsAnalyzed } else { 0 }
                     'RC4 Tickets'       = if ($Results.EventLogs.RC4Tickets) { $Results.EventLogs.RC4Tickets } else { 0 }
                     'DES Tickets'       = if ($Results.EventLogs.DESTickets) { $Results.EventLogs.DESTickets } else { 0 }
                     'Error Message'     = '-'
@@ -944,7 +949,7 @@ function Show-AssessmentSummary {
             
             # Summary statistics
             Write-Host "`n  Summary:" -ForegroundColor Cyan
-            Write-Host "    Total Events Analyzed: $($Results.EventLogs.TotalEvents)" -ForegroundColor White
+            Write-Host "    Total Events Analyzed: $($Results.EventLogs.EventsAnalyzed)" -ForegroundColor White
             if ($Results.EventLogs.RC4Tickets -gt 0) {
                 Write-Host "    RC4 Tickets Detected: $($Results.EventLogs.RC4Tickets)" -ForegroundColor Red
             }
