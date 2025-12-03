@@ -177,12 +177,17 @@ function Invoke-DomainAssessment {
     try {
         Write-Host "  Discovering Domain Controller for $DomainName..." -ForegroundColor Gray
         $dc = Get-ADDomainController -DomainName $DomainName -Discover -ErrorAction Stop
-        # Ensure we get a string, not an array or collection
-        $serverParam = if ($dc.HostName -is [array]) { 
-            $dc.HostName[0].ToString() 
-        } 
-        else { 
-            $dc.HostName.ToString() 
+        # Extract hostname as a simple string (handle arrays, collections, and objects)
+        if ($dc.HostName -is [array]) {
+            $serverParam = [string]$dc.HostName[0]
+        }
+        elseif ($dc.HostName.Value) {
+            # Handle ADPropertyValueCollection
+            $serverParam = [string]$dc.HostName.Value
+        }
+        else {
+            # Direct property access
+            $serverParam = [string]$dc.HostName
         }
         Write-Host "  Using DC: $serverParam" -ForegroundColor Green
     }
