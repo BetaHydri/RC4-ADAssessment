@@ -136,7 +136,7 @@ function Show-ForestSummary {
                             'Domain'            = $domainName
                             'Domain Controller' = $dcName
                             'Status'            = 'Success'
-                            'Events'            = if ($eventData.TotalEvents) { $eventData.TotalEvents } else { 0 }
+                            'Events'            = if ($eventData.EventsAnalyzed) { $eventData.EventsAnalyzed } else { 0 }
                             'RC4'               = if ($eventData.RC4Tickets) { $eventData.RC4Tickets } else { 0 }
                             'DES'               = if ($eventData.DESTickets) { $eventData.DESTickets } else { 0 }
                         }
