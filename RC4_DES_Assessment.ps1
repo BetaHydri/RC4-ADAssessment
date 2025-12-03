@@ -628,11 +628,35 @@ function Get-EventLogEncryptionAnalysis {
                     $assessment.EventsAnalyzed += $events.Count
                     
                     foreach ($event in $events) {
-                        $xml = [xml]$event.ToXml()
+                        # Handle both direct and remoted event objects
+                        $eventXml = if ($event.ToXml) { 
+                            $event.ToXml() 
+                        } 
+                        else { 
+                            # For deserialized objects from Invoke-Command, reconstruct XML manually
+                            $event | ConvertTo-Xml -As String -Depth 3
+                        }
+                        
+                        $xml = [xml]$eventXml
                         $eventData = @{}
                         
-                        foreach ($data in $xml.Event.EventData.Data) {
-                            $eventData[$data.Name] = $data.'#text'
+                        # Handle both native EventLogRecord and deserialized objects
+                        if ($xml.Event.EventData.Data) {
+                            foreach ($data in $xml.Event.EventData.Data) {
+                                $eventData[$data.Name] = $data.'#text'
+                            }
+                        }
+                        elseif ($event.Properties) {
+                            # Fallback: Use Properties collection for deserialized events
+                            # Event 4768/4769 property indexes (may vary, use properties by name if available)
+                            if ($event.Properties.Count -ge 10) {
+                                $eventData['TargetUserName'] = $event.Properties[0].Value
+                                $eventData['TicketEncryptionType'] = $event.Properties[7].Value
+                            }
+                        }
+                        
+                        if (-not $eventData['TicketEncryptionType']) {
+                            continue
                         }
                         
                         $encType = [int]$eventData['TicketEncryptionType']
