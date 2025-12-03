@@ -110,6 +110,15 @@ param(
 
 #Requires -Modules ActiveDirectory
 
+# Configure console encoding for proper Unicode display (PowerShell 5.1 compatibility)
+$originalOutputEncoding = [Console]::OutputEncoding
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $Host.UI.RawUI.OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {
+    # Silently continue if console encoding cannot be set (e.g., in ISE)
+}
+
 # Script version and metadata
 $script:Version = "2.0"
 $script:AssessmentTimestamp = Get-Date
@@ -119,16 +128,16 @@ $script:AssessmentTimestamp = Get-Date
 function Write-Header {
     param([string]$Title, [string]$Color = "Cyan")
     
-    Write-Host "`n$("=" * 80)" -ForegroundColor $Color
+    Write-Host "`n$("=" $([char]0x2022) 80)" -ForegroundColor $Color
     Write-Host $Title -ForegroundColor $Color
-    Write-Host $("=" * 80) -ForegroundColor $Color
+    Write-Host $("=" $([char]0x2022) 80) -ForegroundColor $Color
 }
 
 function Write-Section {
     param([string]$Title, [string]$Color = "Yellow")
     
     Write-Host "`n$Title" -ForegroundColor $Color
-    Write-Host $("-" * 60) -ForegroundColor $Color
+    Write-Host $("-" $([char]0x2022) 60) -ForegroundColor $Color
 }
 
 function Write-Finding {
@@ -143,7 +152,7 @@ function Write-Finding {
         "WARNING" { "$([char]0x26A0) "; $color = "Yellow" } # ⚠ Warning sign
         "CRITICAL" { "$([char]0x2717)"; $color = "Red" }     # ✗ Cross mark
         "INFO" { "$([char]0x24D8) "; $color = "Cyan" }   # ⓘ Circled i (PS 5.1 compatible)
-        default { "$([char]0x2022)"; $color = "White" }   # • Bullet
+        default { "$([char]0x2022)"; $color = "White" }   # $([char]0x2022) Asterisk (ASCII)
     }
     
     Write-Host "$statusSymbol $Message" -ForegroundColor $color
@@ -219,7 +228,7 @@ function Get-DomainControllerEncryption {
         Write-Finding -Status "INFO" -Message "Analyzing domain: $($domainInfo.DNSRoot)"
         
         # Get all domain controllers
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
+        $dcs = Get-ADComputer -SearchBase $dcOU -Filter $([char]0x2022) -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
         $assessment.TotalDCs = if ($dcs) { if ($dcs -is [array]) { $dcs.Count } else { 1 } } else { 0 }
         
         Write-Finding -Status "INFO" -Message "Found $($assessment.TotalDCs) Domain Controller(s)"
@@ -382,7 +391,7 @@ function Get-TrustEncryptionAssessment {
         else {
             $domainInfo = Get-ADDomain
         }
-        $trusts = Get-ADTrust -Filter * @ServerParams -Properties msDS-SupportedEncryptionTypes, TrustDirection, TrustType
+        $trusts = Get-ADTrust -Filter $([char]0x2022) @ServerParams -Properties msDS-SupportedEncryptionTypes, TrustDirection, TrustType
         
         if (-not $trusts) {
             Write-Finding -Status "INFO" -Message "No trusts found in domain: $($domainInfo.DNSRoot)"
@@ -508,7 +517,7 @@ function Get-EventLogEncryptionAnalysis {
             $domainInfo = Get-ADDomain
         }
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * @ServerParams | Select-Object -First 3  # Sample first 3 DCs
+        $dcs = Get-ADComputer -SearchBase $dcOU -Filter $([char]0x2022) @ServerParams | Select-Object -First 3  # Sample first 3 DCs
         
         if (-not $dcs) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for event log analysis"
@@ -520,7 +529,7 @@ function Get-EventLogEncryptionAnalysis {
         Write-Host "  If this fails, ensure WinRM is enabled on DCs: Enable-PSRemoting -Force" -ForegroundColor Gray
         
         foreach ($dc in $dcs) {
-            Write-Host "  • Querying $($dc.Name)..." -ForegroundColor Cyan
+            Write-Host "  $([char]0x2022) Querying $($dc.Name)..." -ForegroundColor Cyan
             
             try {
                 # Test connectivity first
@@ -535,7 +544,7 @@ function Get-EventLogEncryptionAnalysis {
 <QueryList>
   <Query Id="0" Path="Security">
     <Select Path="Security">
-      *[System[(EventID=4768 or EventID=4769) and TimeCreated[timediff(@SystemTime) &lt;= $($Hours * 3600000)]]]
+      *[System[(EventID=4768 or EventID=4769) and TimeCreated[timediff(@SystemTime) &lt;= $($Hours $([char]0x2022) 3600000)]]]
     </Select>
   </Query>
 </QueryList>
@@ -676,7 +685,7 @@ function Show-ManualValidationGuidance {
 $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
 1. Event Log Monitoring Setup
-   $([string]([char]0x2500) * 60)
+   $([string]([char]0x2500) $([char]0x2022) 60)
    Enable advanced Kerberos auditing on Domain Controllers:
    
    $([char]0x2022) Group Policy > Computer Configuration > Policies > Windows Settings
@@ -696,7 +705,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) 0x11 or 0x12: AES (GOOD - expected value)
 
 2. Splunk/SIEM Query Examples
-   $([string]([char]0x2500) * 60)
+   $([string]([char]0x2500) $([char]0x2022) 60)
    
    Splunk query to detect RC4 usage:
    index=windows EventCode=4768 OR EventCode=4769 
@@ -712,7 +721,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    This shows which accounts are still using RC4/DES encryption.
 
 3. GPO Validation
-   $([string]([char]0x2500) * 60)
+   $([string]([char]0x2500) $([char]0x2022) 60)
    
    Verify GPO is applied and effective:
    
@@ -725,7 +734,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Should NOT show: DES_CBC_CRC, DES_CBC_MD5, RC4_HMAC_MD5
 
 4. Computer Object Assessment (If Needed)
-   $([string]([char]0x2500) * 60)
+   $([string]([char]0x2500) $([char]0x2022) 60)
    
    Post-November 2022 Update Clarification:
    
@@ -747,19 +756,19 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Value with 0x4 bit: Has RC4 explicitly set (investigate why)
 
 5. Trust Validation
-   $([string]([char]0x2500) * 60)
+   $([string]([char]0x2500) $([char]0x2022) 60)
    
    Post-November 2022: Trusts default to AES when attribute is not set.
    
    To verify trust encryption from both sides:
-   PS> Get-ADTrust -Filter * | Select-Object Name, msDS-SupportedEncryptionTypes
+   PS> Get-ADTrust -Filter $([char]0x2022) | Select-Object Name, msDS-SupportedEncryptionTypes
    
    If msDS-SupportedEncryptionTypes is 0 or empty: Uses AES (secure)
    If set to 0x18 or 0x1C: Explicitly configured for AES (secure)
    If includes 0x4: RC4 enabled (investigate)
 
 6. Windows Server 2025 Preparation
-   $([string]([char]0x2500) * 60)
+   $([string]([char]0x2500) $([char]0x2022) 60)
    
    Windows Server 2025 disables RC4 fallback entirely.
    
@@ -770,7 +779,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2713) Testing in lab environment before production deployment
 
 7. Recommended Monitoring Schedule
-   $([string]([char]0x2500) * 60)
+   $([string]([char]0x2500) $([char]0x2022) 60)
    
    $([char]0x2022) Weekly: Check for RC4/DES events (automated alert)
    $([char]0x2022) Monthly: Review this assessment
@@ -989,3 +998,9 @@ catch {
 }
 
 #endregion
+
+
+
+
+
+
