@@ -1,10 +1,45 @@
-# DES/RC4 Kerberos Encryption Assessment v2.0
+# DES/RC4 Kerberos Encryption Assessment v2.1
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
 ## Overview
 
 A completely redesigned tool for assessing DES and RC4 encryption usage in Active Directory environments, addressing critical limitations discovered in v1.0 and incorporating post-November 2022 Microsoft Kerberos security updates.
+
+## What's New in v2.1.0
+
+### Enhanced Multi-Domain & Event Log Support
+
+🎯 **WinRM-First Event Queries** - Invoke-Command now primary method (more reliable than RPC for child domains)  
+🎯 **Full Forest DC Enumeration** - Discovers and queries ALL DCs in each domain when using Assess-ADForest.ps1  
+🎯 **Improved Child Domain Support** - Fixed Get-ADDomain parameter handling for cross-domain queries  
+🎯 **Deserialized Event Handling** - Properly processes events from remote DCs via PowerShell Remoting  
+🎯 **Specific DC Error Reporting** - Shows exactly which DC failed (e.g., "DC01.child.contoso.com")  
+🎯 **ADPropertyValueCollection Fix** - Resolves HostName conversion errors during DC discovery  
+
+### Version History
+
+**v2.1.0** (December 2025)
+- WinRM-first approach for event log queries (Invoke-Command before Get-WinEvent -ComputerName)
+- Fixed deserialized event object processing from remote DCs
+- Enhanced forest assessment with automatic DC discovery per domain
+- Improved error messages showing specific DC names for failures
+- Fixed Get-ADDomain -Identity parameter issue for child domains
+- Resolved ADPropertyValueCollection to string conversion errors
+- Full DC enumeration in each forest domain (not just first 3)
+- Per-DC success/failure reporting with specific error details
+
+**v2.0.1** (November 2025)
+- Enhanced remote event log access troubleshooting
+- Comprehensive RPC/WinRM failure guidance
+- Child domain identity parameter fixes
+- Better error categorization (WinRM, RPC, permission, network)
+
+**v2.0.0** (October 2025)
+- Complete rewrite with post-November 2022 logic
+- Fast execution (< 5 minutes vs 5+ hours in v1.0)
+- Event-based actual usage detection
+- Realistic computer object assessment
 
 ## Why Version 2.0?
 
@@ -18,13 +53,15 @@ Real-world deployment revealed several critical issues:
 4. **False Positives**: Flagged theoretical risks instead of actual usage
 5. **Missing Validation**: No guidance for manual checks and event monitoring
 
-### Key Improvements in v2.0
+### Key Improvements in v2.0+
 
 ✅ **Fast Execution**: < 5 minutes vs 5+ hours  
 ✅ **Post-Nov 2022 Logic**: Accurate trust and computer encryption assessment  
 ✅ **Event-Based Analysis**: Detects actual DES/RC4 usage from Kerberos tickets  
 ✅ **Clear Guidance**: Actionable manual validation steps and SIEM queries  
-✅ **Realistic Assessment**: No unnecessary computer object enumeration
+✅ **Realistic Assessment**: No unnecessary computer object enumeration  
+✅ **Full Forest Support**: Assess all domains and all DCs automatically  
+✅ **Child Domain Ready**: Works across complex multi-domain forests
 
 ## Post-November 2022 Updates - Critical Understanding
 

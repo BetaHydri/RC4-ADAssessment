@@ -1,6 +1,6 @@
-# RC4_DES_Assessment.ps1 v2.0.1 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.1.0 - Quick Start Guide
 
-> **✨ New in v2.0.1:** Enhanced remote event log access troubleshooting with comprehensive guidance when RPC/WinRM issues occur.
+> **✨ New in v2.1.0:** WinRM-first event log queries, full forest DC enumeration, improved child domain support, and specific DC-level error reporting.
 
 ## 🔐 Using with Active Directory
 
@@ -270,7 +270,25 @@ Resolve-DnsName your-domain.com
 
 ---
 
-## 🎯 What's New in v2.0.1
+## 🎯 What's New in v2.1.0
+
+### WinRM-First Event Log Queries (NEW!)
+- **Invoke-Command as primary method** - More reliable for child domains than RPC
+- **Automatic fallback to RPC** - Tries Get-WinEvent -ComputerName if WinRM fails
+- **Deserialized event handling** - Properly processes events from remote DCs
+- **Works across domain boundaries** - Successfully queries child domain DCs
+
+### Full Forest DC Enumeration (NEW!)
+- **Discovers ALL DCs per domain** - No longer limited to first 3 DCs
+- **Per-DC success/failure reporting** - Shows exactly which DC succeeded or failed
+- **Specific error messages** - "DC01.child.contoso.com: RPC server unavailable"
+- **Complete forest coverage** - Every DC in every domain assessed
+
+### Enhanced Child Domain Support (NEW!)
+- **Fixed Get-ADDomain calls** - Removed incorrect -Identity parameter usage
+- **ADPropertyValueCollection fix** - Proper HostName to string conversion
+- **Auto-discovery improvements** - Reliably finds DCs in child domains
+- **Cross-domain connectivity** - Works from root or child domain DCs
 
 ### Forest-Wide Assessment (NEW!)
 - **Assess-ADForest.ps1** - New script for assessing all domains in an AD forest
@@ -279,13 +297,13 @@ Resolve-DnsName your-domain.com
 - **Consolidated reporting** - Forest-wide summary + per-domain exports
 - **Flexible deployment** - Quick scan or full event log analysis across entire forest
 
-### Remote Event Log Access Troubleshooting
+### Remote Event Log Access Troubleshooting (v2.0.1)
 - **Automatic failure tracking** - Script now tracks which DCs couldn't be queried
 - **Comprehensive troubleshooting** - Detailed guidance for RPC/WinRM issues at end of assessment
 - **Four fix options** - WinRM setup, firewall configuration, local execution, or permission fixes
 - **Test script included** - Validate error handling without requiring actual failures
 
-### Enhanced Multi-Domain Support
+### Enhanced Multi-Domain Support (v2.0.1)
 - **Child domain fixes** - Proper identity parameter handling for cross-domain queries
 - **Better error messages** - Clear guidance when querying child domains
 

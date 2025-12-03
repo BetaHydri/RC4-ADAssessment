@@ -50,7 +50,7 @@
 
 .NOTES
   Author: Active Directory Security Team
-  Version: 2.0.1
+  Version: 2.1.0
   Requirements:
     - PowerShell 5.1 or later (7+ for parallel processing)
     - Active Directory PowerShell module
