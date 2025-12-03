@@ -129,16 +129,16 @@ $script:AssessmentTimestamp = Get-Date
 function Write-Header {
     param([string]$Title, [string]$Color = "Cyan")
     
-    Write-Host "`n$("=" $([char]0x2022) 80)" -ForegroundColor $Color
+    Write-Host "`n$("=" * 80)" -ForegroundColor $Color
     Write-Host $Title -ForegroundColor $Color
-    Write-Host $("=" $([char]0x2022) 80) -ForegroundColor $Color
+    Write-Host $("=" * 80) -ForegroundColor $Color
 }
 
 function Write-Section {
     param([string]$Title, [string]$Color = "Yellow")
     
     Write-Host "`n$Title" -ForegroundColor $Color
-    Write-Host $("-" $([char]0x2022) 60) -ForegroundColor $Color
+    Write-Host $("-" * 60) -ForegroundColor $Color
 }
 
 function Write-Finding {
@@ -229,7 +229,7 @@ function Get-DomainControllerEncryption {
         Write-Finding -Status "INFO" -Message "Analyzing domain: $($domainInfo.DNSRoot)"
         
         # Get all domain controllers
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter $([char]0x2022) -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
+        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
         $assessment.TotalDCs = if ($dcs) { if ($dcs -is [array]) { $dcs.Count } else { 1 } } else { 0 }
         
         Write-Finding -Status "INFO" -Message "Found $($assessment.TotalDCs) Domain Controller(s)"
@@ -392,7 +392,7 @@ function Get-TrustEncryptionAssessment {
         else {
             $domainInfo = Get-ADDomain
         }
-        $trusts = Get-ADTrust -Filter $([char]0x2022) @ServerParams -Properties msDS-SupportedEncryptionTypes, TrustDirection, TrustType
+        $trusts = Get-ADTrust -Filter * @ServerParams -Properties msDS-SupportedEncryptionTypes, TrustDirection, TrustType
         
         if (-not $trusts) {
             Write-Finding -Status "INFO" -Message "No trusts found in domain: $($domainInfo.DNSRoot)"
@@ -518,7 +518,7 @@ function Get-EventLogEncryptionAnalysis {
             $domainInfo = Get-ADDomain
         }
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter $([char]0x2022) @ServerParams | Select-Object -First 3  # Sample first 3 DCs
+        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * @ServerParams | Select-Object -First 3  # Sample first 3 DCs
         
         if (-not $dcs) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for event log analysis"
@@ -545,7 +545,7 @@ function Get-EventLogEncryptionAnalysis {
 <QueryList>
   <Query Id="0" Path="Security">
     <Select Path="Security">
-      *[System[(EventID=4768 or EventID=4769) and TimeCreated[timediff(@SystemTime) &lt;= $($Hours $([char]0x2022) 3600000)]]]
+      *[System[(EventID=4768 or EventID=4769) and TimeCreated[timediff(@SystemTime) &lt;= $($Hours * 3600000)]]]
     </Select>
   </Query>
 </QueryList>
