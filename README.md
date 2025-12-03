@@ -102,9 +102,10 @@ Real-world deployment revealed several critical issues:
 
 ### Core Scripts
 
-1. **RC4_DES_Assessment.ps1** - Main assessment tool (v2.0.1)
-2. **Compare-Assessments.ps1** - Compare assessment results over time
-3. **Test-EventLogFailureHandling.ps1** - Test script for event log error handling validation
+1. **RC4_DES_Assessment.ps1** - Main assessment tool (v2.1.0)
+2. **Assess-ADForest.ps1** - Forest-wide assessment wrapper (v2.1.0)
+3. **Compare-Assessments.ps1** - Compare assessment results over time
+4. **Test-EventLogFailureHandling.ps1** - Test script for event log error handling validation
 
 ### Fast Assessment (Default - Quick Scan)
 - Domain Controller encryption configuration
@@ -138,7 +139,7 @@ PS> .\RC4_DES_Assessment.ps1 -QuickScan
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.0
+DES/RC4 Kerberos Encryption Assessment v2.1
 ================================================================================
 
 This tool performs a fast, accurate assessment of DES and RC4 encryption usage
@@ -394,7 +395,7 @@ Exporting Results
 ```json
 {
   "AssessmentDate": "2025-12-03T14:30:15",
-  "Version": "2.0",
+  "Version": "2.1.0",
   "Domain": "contoso.com",
   "OverallStatus": "WARNING",
   "DomainControllers": {

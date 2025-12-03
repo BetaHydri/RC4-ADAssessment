@@ -62,7 +62,7 @@
 ### Successful Quick Scan
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.0
+DES/RC4 Kerberos Encryption Assessment v2.1
 ================================================================================
 
 Domain Controller Encryption Configuration
