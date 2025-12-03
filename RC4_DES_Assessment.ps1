@@ -598,21 +598,20 @@ function Get-EventLogEncryptionAnalysis {
 </QueryList>
 "@
                 
-                # Try Get-WinEvent first (requires WinRM/RPC)
+                # Try Invoke-Command first (WinRM - more reliable for remote DCs)
                 $events = $null
                 try {
-                    $events = Get-WinEvent -ComputerName $dcName -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
+                    $events = Invoke-Command -ComputerName $dcName -ScriptBlock {
+                        param($FilterXml, $MaxEvents)
+                        Get-WinEvent -FilterXml $FilterXml -MaxEvents $MaxEvents -ErrorAction Stop
+                    } -ArgumentList $filterXml, 1000 -ErrorAction Stop
                 }
-                catch [System.Runtime.InteropServices.COMException], [System.UnauthorizedAccessException] {
-                    # RPC/WinRM failed, try alternative approach
-                    Write-Host "    $([char]0x26A0) RPC unavailable on $dcName, trying WinRM..." -ForegroundColor DarkYellow
+                catch {
+                    # WinRM failed, try RPC as fallback
+                    Write-Host "    $([char]0x26A0) WinRM unavailable on $dcName, trying RPC..." -ForegroundColor DarkYellow
                     
-                    # Alternative: Use Invoke-Command if WinRM is enabled
                     try {
-                        $events = Invoke-Command -ComputerName $dcName -ScriptBlock {
-                            param($FilterXml, $MaxEvents)
-                            Get-WinEvent -FilterXml $FilterXml -MaxEvents $MaxEvents -ErrorAction Stop
-                        } -ArgumentList $filterXml, 1000 -ErrorAction Stop
+                        $events = Get-WinEvent -ComputerName $dcName -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
                     }
                     catch {
                         throw $_
