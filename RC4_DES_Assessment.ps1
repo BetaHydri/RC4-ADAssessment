@@ -921,8 +921,19 @@ Write-Host "  $([char]0x2713) Actionable guidance for manual validation`n" -Fore
 $serverParams = @{}
 if ($PSBoundParameters.ContainsKey('Domain')) {
     if ($Domain) {
-        $serverParams['Server'] = $Domain
-        Write-Finding -Status "INFO" -Message "Targeting domain: $Domain"
+        # When domain is specified, try to resolve to a specific DC for clearer error messages
+        try {
+            $resolvedDC = (Get-ADDomainController -DomainName $Domain -Discover -ErrorAction Stop).HostName
+            $serverParams['Server'] = $resolvedDC
+            Write-Finding -Status "INFO" -Message "Targeting domain: $Domain (using DC: $resolvedDC)"
+        }
+        catch {
+            # If discovery fails, fall back to domain name
+            $serverParams['Server'] = $Domain
+            Write-Finding -Status "WARNING" -Message "Could not auto-discover DC for domain '$Domain', using domain name directly"
+            Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  Tip: Use -Server parameter to specify a specific DC if the domain is unreachable" -ForegroundColor Gray
+        }
     }
 }
 elseif ($PSBoundParameters.ContainsKey('Server')) {
