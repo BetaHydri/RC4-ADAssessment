@@ -362,7 +362,8 @@ function Get-DomainControllerEncryption {
         }
     }
     catch {
-        Write-Finding -Status "CRITICAL" -Message "Error analyzing Domain Controllers: $($_.Exception.Message)"
+        $targetInfo = if ($ServerParams.ContainsKey('Server')) { " (Target: $($ServerParams['Server']))" } else { "" }
+        Write-Finding -Status "CRITICAL" -Message "Error analyzing Domain Controllers$targetInfo`: $($_.Exception.Message)"
     }
     
     return $assessment
@@ -478,7 +479,8 @@ function Get-TrustEncryptionAssessment {
         Write-Host "  they default to AES encryption. No action needed for these trusts." -ForegroundColor Gray
     }
     catch {
-        Write-Finding -Status "CRITICAL" -Message "Error analyzing trusts: $($_.Exception.Message)"
+        $targetInfo = if ($ServerParams.ContainsKey('Server')) { " (Target: $($ServerParams['Server']))" } else { "" }
+        Write-Finding -Status "CRITICAL" -Message "Error analyzing trusts$targetInfo`: $($_.Exception.Message)"
     }
     
     return $assessment
@@ -724,7 +726,8 @@ function Get-EventLogEncryptionAnalysis {
         }
     }
     catch {
-        Write-Finding -Status "CRITICAL" -Message "Error analyzing event logs: $($_.Exception.Message)"
+        $targetInfo = if ($ServerParams.ContainsKey('Server')) { " (Target: $($ServerParams['Server']))" } else { "" }
+        Write-Finding -Status "CRITICAL" -Message "Error analyzing event logs$targetInfo`: $($_.Exception.Message)"
     }
     
     return $assessment
