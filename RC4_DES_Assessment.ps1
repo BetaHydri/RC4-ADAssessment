@@ -535,6 +535,7 @@ function Get-EventLogEncryptionAnalysis {
         RC4Accounts    = @()
         Details        = @()
         FailedDCs      = @()  # Track DCs that couldn't be queried
+        QueriedDCs     = @()  # Track DCs that were successfully queried
     }
     
     try {
@@ -620,12 +621,14 @@ function Get-EventLogEncryptionAnalysis {
                 
                 if (-not $events) {
                     Write-Host "    $([char]0x24D8) No events found on $dcName" -ForegroundColor Gray
+                    $assessment.QueriedDCs += $dcName  # Still track as successfully queried
                     continue
                 }
                 
                 if ($events) {
                     Write-Host "    $([char]0x2713) Retrieved $($events.Count) events from $dcName" -ForegroundColor Green
                     $assessment.EventsAnalyzed += $events.Count
+                    $assessment.QueriedDCs += $dcName  # Track successfully queried DC
                     
                     foreach ($event in $events) {
                         # Handle both direct and remoted event objects
@@ -953,8 +956,16 @@ function Show-AssessmentSummary {
             }
         }
         else {
-            Write-Host "  No event log data available" -ForegroundColor Yellow
+            # Event logs section exists but no data - likely DC discovery failed
+            Write-Host "  Event log analysis was attempted but no data was collected" -ForegroundColor Yellow
+            Write-Host "  This typically means DC discovery failed (see errors above)" -ForegroundColor Yellow
+            Write-Host "  Review the 'Event Log Analysis' section for specific error details" -ForegroundColor Gray
         }
+    }
+    else {
+        Write-Host "`n`n  EVENT LOG ANALYSIS SUMMARY" -ForegroundColor Cyan
+        Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
+        Write-Host "  Event log analysis was not performed (use -AnalyzeEventLogs parameter)" -ForegroundColor Gray
     }
     
     # 3. Trust Summary Table (if trusts exist)
