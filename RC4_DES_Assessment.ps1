@@ -221,7 +221,7 @@ function Get-DomainControllerEncryption {
         if ($ServerParams.ContainsKey('Server')) {
             Write-Verbose "Attempting to contact DC: $($ServerParams['Server'])"
             try {
-                $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server'] -ErrorAction Stop
+                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
             }
             catch {
                 throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
@@ -405,7 +405,7 @@ function Get-TrustEncryptionAssessment {
         if ($ServerParams.ContainsKey('Server')) {
             Write-Verbose "Attempting to contact DC: $($ServerParams['Server'])"
             try {
-                $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server'] -ErrorAction Stop
+                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
             }
             catch {
                 throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
@@ -547,7 +547,7 @@ function Get-EventLogEncryptionAnalysis {
         if ($ServerParams.ContainsKey('Server')) {
             Write-Verbose "Attempting to contact DC: $($ServerParams['Server'])"
             try {
-                $domainInfo = Get-ADDomain -Identity $ServerParams['Server'] -Server $ServerParams['Server'] -ErrorAction Stop
+                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
             }
             catch {
                 throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"

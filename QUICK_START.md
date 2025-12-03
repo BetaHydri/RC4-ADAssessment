@@ -300,6 +300,72 @@ Resolve-DnsName your-domain.com
 
 ---
 
+## 🔄 Common Workflows
+
+### Workflow 1: Quick Domain Health Check (1 minute)
+```powershell
+# Single command for domain readiness
+.\RC4_DES_Assessment.ps1 -QuickScan
+
+# Expected output:
+# ✅ Domain Controllers are configured for AES encryption via GPO
+# ✅ Trusts use AES by default
+# ✅ No DES/RC4 usage detected - environment is secure
+```
+
+---
+
+### Workflow 2: Deep Event Log Analysis (5 minutes)
+```powershell
+# Analyze 7 days of actual usage across ALL DCs
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+
+# Script auto-discovers all DCs and shows per-DC results:
+# • Querying DC01.contoso.com...
+#   ✓ Retrieved 15,234 events from DC01.contoso.com
+# • Querying DC02.contoso.com...
+#   ✓ Retrieved 12,456 events from DC02.contoso.com
+# • Querying DC03.contoso.com...
+#   ✗ RPC/Network error on DC03.contoso.com
+```
+
+---
+
+### Workflow 3: Multi-Domain Forest Assessment (10-15 minutes)
+```powershell
+# Assess all domains in forest with parallel processing
+.\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 3
+
+# Forest output shows per-domain DC discovery and assessment results
+```
+
+---
+
+### Workflow 4: Child Domain with Connectivity Issues (3 minutes)
+```powershell
+# Problem: Auto-discovery fails for child domain
+.\RC4_DES_Assessment.ps1 -Domain labs.contoso.com -AnalyzeEventLogs
+
+# Solution: Specify a known DC
+.\RC4_DES_Assessment.ps1 -Server DC01.labs.contoso.com -AnalyzeEventLogs
+```
+
+---
+
+### Workflow 5: Track Remediation Progress (5 minutes per run)
+```powershell
+# Week 1: Baseline
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+
+# Week 2: After fixes
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+
+# Compare
+.\Compare-Assessments.ps1 -BaselineFile old.json -CurrentFile new.json -ShowDetails
+```
+
+---
+
 ## 💡 Pro Tips
 
 1. **Start with QuickScan** - Get quick results, then add event log analysis
@@ -309,6 +375,8 @@ Resolve-DnsName your-domain.com
 5. **Check event logs regularly** - Weekly alerts for RC4/DES usage
 6. **Export results** - Keep historical data for compliance/auditing
 7. **Include guidance** - Get actionable steps for remediation and monitoring
+8. **Use -Server for child domains** - Specify a known DC when auto-discovery fails
+9. **Review per-DC results** - Script now shows which specific DCs succeeded or failed
 
 ---
 

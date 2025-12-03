@@ -656,6 +656,279 @@ Get-Content .\Forest_Assessment_contoso_com_20250117.json | ConvertFrom-Json | S
 .\Compare-Assessments.ps1 -BaselineFile .\DES_RC4_Assessment_domain1_20250101.json -CurrentFile .\DES_RC4_Assessment_domain1_20250117.json
 ```
 
+---
+
+## Practical Workflow Examples
+
+### Example 1: Single Domain - Quick Health Check
+
+**Goal:** Verify your domain is ready for Windows Server 2025
+
+```powershell
+# Step 1: Quick configuration scan
+PS> .\RC4_DES_Assessment.ps1 -QuickScan
+
+# Output shows:
+# ✅ Domain Controllers are configured for AES encryption via GPO
+# ✅ Trusts use AES by default
+# ✅ No DES/RC4 usage detected - environment is secure
+
+# Result: Ready to proceed with Server 2025 upgrade
+```
+
+**Time:** 30 seconds | **Risk Level:** Low
+
+---
+
+### Example 2: Single Domain - Deep Analysis with Event Logs
+
+**Goal:** Find any hidden RC4/DES usage before migration
+
+```powershell
+# Step 1: Analyze 30 days of event logs
+PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 720 -ExportResults
+
+# Script will:
+# 1. Auto-discover DC: contoso.com (using DC: DC01.contoso.com)
+# 2. Query ALL DCs in domain for event logs
+# 3. Show detailed progress:
+#    • Querying DC01.contoso.com...
+#      ✓ Retrieved 15,234 events from DC01.contoso.com
+#    • Querying DC02.contoso.com...
+#      ✓ Retrieved 12,456 events from DC02.contoso.com
+#    • Querying DC03.contoso.com...
+#      ✗ RPC/Network error on DC03.contoso.com
+#      Both WinRM (5985) and RPC (135) failed. Check firewall or run locally on DC
+
+# Step 2: Review findings
+# Output shows:
+# ⚠ RC4 tickets detected in active use!
+#   Unique accounts using RC4: 3
+#   RC4 accounts:
+#     - LEGACY-APP$
+#     - SQL-SERVICE
+#     - OLD-SERVER$
+
+# Step 3: Export created
+# Files: DES_RC4_Assessment_contoso_com_20250103_140523.json
+#        DES_RC4_Assessment_contoso_com_20250103_140523.csv
+```
+
+**Time:** 3-5 minutes | **Action Required:** Investigate 3 RC4 accounts
+
+---
+
+### Example 3: Multi-Domain Forest - Complete Assessment
+
+**Goal:** Assess entire forest with 5 domains efficiently
+
+```powershell
+# Step 1: Discover all domains and assess
+PS> .\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 3
+
+# Output shows forest structure:
+# Forest Information:
+#   Name: contoso.com
+#   Domains: 5
+#
+# Domains to assess:
+#   • contoso.com (root)
+#   • us.contoso.com
+#   • emea.contoso.com
+#   • apac.contoso.com
+#   • labs.contoso.com
+
+# For each domain, script will:
+# 1. Discover specific DC in that domain
+# 2. Query all DCs for event logs
+# 3. Show detailed DC-level results
+
+# Example output for child domain:
+# Assessing Domain: labs.contoso.com
+#   Discovering Domain Controller for labs.contoso.com...
+#   Using DC: DC01.labs.contoso.com
+#
+#   Targeting server: DC01.labs.contoso.com
+#   Querying event logs from 3 Domain Controller(s) in labs.contoso.com
+#     • Querying DC01.labs.contoso.com...
+#       ✓ Retrieved 8,234 events from DC01.labs.contoso.com
+#     • Querying DC02.labs.contoso.com...
+#       ✗ Cannot reach DC02.labs.contoso.com - skipping
+#       Network unreachable - ping failed
+#     • Querying DC03.labs.contoso.com...
+#       ✓ Retrieved 7,891 events from DC03.labs.contoso.com
+
+# Step 2: Review forest-wide summary
+# Forest-Wide Assessment Summary
+# Domain Status Summary:
+#   • Total Domains: 5
+#   • Healthy: 3
+#   • Warnings: 2
+#   • Critical: 0
+#
+# Per-Domain Results:
+#   ✓ contoso.com: OK
+#   ⚠ us.contoso.com: WARNING
+#   ✓ emea.contoso.com: OK
+#   ⚠ apac.contoso.com: WARNING
+#   ✓ labs.contoso.com: OK
+
+# Step 3: Investigate warnings
+PS> Get-Content .\DES_RC4_Assessment_us_contoso_com_20250103.json | ConvertFrom-Json | 
+    Select-Object -ExpandProperty EventLogs | 
+    Select-Object RC4Accounts
+
+# RC4Accounts
+# -----------
+# {APP-SERVER-01$, LEGACY-DB$}
+```
+
+**Time:** 10-15 minutes (parallel) | **Domains Needing Attention:** 2 of 5
+
+---
+
+### Example 4: Troubleshooting Child Domain Access
+
+**Goal:** Assess child domain when auto-discovery fails
+
+```powershell
+# Problem: Auto-discovery failing
+PS> .\RC4_DES_Assessment.ps1 -Domain labs.contoso.com -AnalyzeEventLogs
+
+# Output shows:
+# ⚠ Could not auto-discover DC for domain 'labs.contoso.com', using domain name directly
+#   Error: The specified domain either does not exist or could not be contacted
+#   Tip: Use -Server parameter to specify a specific DC if the domain is unreachable
+# ❌ Failed to contact Domain Controller 'labs.contoso.com': Unable to contact the server...
+
+# Solution: Specify a known DC in the child domain
+PS> .\RC4_DES_Assessment.ps1 -Server DC01.labs.contoso.com -AnalyzeEventLogs
+
+# Output shows:
+# ℹ️  Targeting server: DC01.labs.contoso.com
+# ✅ Successfully connected to DC01.labs.contoso.com
+# ℹ️  Querying event logs from 3 Domain Controller(s) in labs.contoso.com
+#     • Querying DC01.labs.contoso.com...
+#       ✓ Retrieved 5,123 events from DC01.labs.contoso.com
+#     • Querying DC02.labs.contoso.com...
+#       ✓ Retrieved 4,987 events from DC02.labs.contoso.com
+```
+
+**Time:** 3-5 minutes | **Key Learning:** Use `-Server` for child domains with connectivity issues
+
+---
+
+### Example 5: Tracking Remediation Progress
+
+**Goal:** Validate RC4 removal over time
+
+```powershell
+# Week 1: Baseline assessment
+PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+# Result: 
+#   RC4 Tickets: 234
+#   RC4 Accounts: 5 (LEGACY-APP$, SQL-SERVICE, OLD-SERVER$, APP01$, TEST-VM$)
+# File: DES_RC4_Assessment_contoso_com_20250101_100000.json
+
+# Week 2: After removing RC4 from 3 accounts
+PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+# Result:
+#   RC4 Tickets: 67
+#   RC4 Accounts: 2 (LEGACY-APP$, TEST-VM$)
+# File: DES_RC4_Assessment_contoso_com_20250108_100000.json
+
+# Compare progress
+PS> .\Compare-Assessments.ps1 `
+    -BaselineFile DES_RC4_Assessment_contoso_com_20250101_100000.json `
+    -CurrentFile DES_RC4_Assessment_contoso_com_20250108_100000.json `
+    -ShowDetails
+
+# Output shows:
+# Assessment Comparison
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Baseline: 2025-01-01 10:00:00
+# Current:  2025-01-08 10:00:00
+#
+# Event Log Analysis Changes:
+#   RC4 Tickets:  234 → 67 (✓ 71% reduction)
+#   RC4 Accounts: 5 → 2 (✓ 60% reduction)
+#   
+#   Improvements:
+#     ✓ SQL-SERVICE: No longer using RC4
+#     ✓ OLD-SERVER$: No longer using RC4
+#     ✓ APP01$: No longer using RC4
+#   
+#   Remaining Issues:
+#     ⚠ LEGACY-APP$: Still using RC4 (67 tickets)
+#     ⚠ TEST-VM$: Still using RC4 (new detection)
+```
+
+**Time:** 5 minutes per assessment | **Progress:** 71% reduction in RC4 usage
+
+---
+
+### Example 6: Event Log Access Troubleshooting
+
+**Goal:** Diagnose and fix event log connectivity issues
+
+```powershell
+# Problem: Some DCs not accessible
+PS> .\RC4_DES_Assessment.ps1 -Domain contoso.com -AnalyzeEventLogs
+
+# Output shows mixed results:
+# Querying event logs from 5 Domain Controller(s) in contoso.com
+#   • Querying DC01.contoso.com...
+#     ✓ Retrieved 12,345 events from DC01.contoso.com
+#   • Querying DC02.contoso.com...
+#     ✗ RPC/Network error on DC02.contoso.com
+#     Both WinRM (5985) and RPC (135) failed. Check firewall or run locally on DC
+#   • Querying DC03.contoso.com...
+#     ✗ Access denied on DC03.contoso.com
+#     Ensure you have Event Log Readers permissions or are Domain Admin
+#   • Querying DC04.contoso.com...
+#     ✗ Cannot reach DC04.contoso.com - skipping
+#     Network unreachable - ping failed
+#   • Querying DC05.contoso.com...
+#     ✓ Retrieved 11,234 events from DC05.contoso.com
+#
+# Troubleshooting Summary:
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ⚠  Event Log Query Failures:
+# 3 Domain Controller(s) could not be queried for event logs
+#
+#   • DC02.contoso.com: RPC server unavailable
+#   • DC03.contoso.com: Access is denied
+#   • DC04.contoso.com: Network unreachable - ping failed
+#
+# Resolution Options:
+#   Option 1: Enable WinRM (Recommended)
+#     Run on each failed DC: Enable-PSRemoting -Force
+#
+#   Option 2: Configure Firewall
+#     Allow WinRM: TCP 5985, 5986
+#     Allow RPC: TCP 135 + 49152-65535
+#
+#   Option 3: Run Script Locally on DCs
+#     Copy script to DC02, DC03, DC04 and run locally
+#
+#   Option 4: Verify Permissions
+#     Add-ADGroupMember -Identity 'Event Log Readers' -Members 'YourAccount'
+
+# Fix DC02: Enable WinRM
+PS> Invoke-Command -ComputerName DC02.contoso.com -ScriptBlock { Enable-PSRemoting -Force }
+
+# Fix DC03: Add permissions
+PS> Add-ADGroupMember -Identity 'Event Log Readers' -Members 'AdminAccount'
+
+# Re-run assessment
+PS> .\RC4_DES_Assessment.ps1 -Domain contoso.com -AnalyzeEventLogs
+# Now all 5 DCs accessible ✓
+```
+
+**Time:** 10 minutes troubleshooting + 3 minutes retest | **Result:** All DCs now accessible
+
+---
+
 ## Usage
 
 ### Single Domain Assessment
