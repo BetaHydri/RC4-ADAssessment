@@ -1541,25 +1541,6 @@ index=windows EventCode=4768 OR EventCode=4769
 - `0x17`: RC4-HMAC (WARNING)
 - `0x11` or `0x12`: AES (GOOD)
 
-## Migration from v1.0
-
-### Running Both Versions
-
-v1.0 and v2.0 can coexist:
-- v1.0: `archive/RC4_AD_SCAN_v1_LEGACY.ps1` (comprehensive, slow)
-- v2.0: `RC4_DES_Assessment.ps1` (fast, accurate)
-
-### Key Differences
-
-| Feature | v1.0 | v2.0 |
-|---------|------|------|
-| Runtime (large forest) | 5.5+ hours | < 5 minutes |
-| Computer object scan | Full enumeration | Not performed |
-| Trust assessment | Pre-Nov 2022 logic | Post-Nov 2022 accurate |
-| Actual usage detection | No | Yes (event logs) |
-| Manual guidance | Limited | Comprehensive |
-| False positives | High | Low |
-
 ### Recommended Approach
 
 1. **Initial Assessment:** Use v2.0 for fast, accurate results
