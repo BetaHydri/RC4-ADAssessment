@@ -523,6 +523,20 @@ Overall Assessment
 **Start Here:** What's your goal?
 
 ```
+┌── Single Domain or Entire Forest? ──────────────────────────┐
+│                                                              │
+├─► Single Domain: Use RC4_DES_Assessment.ps1                 │
+│   └─► Quick Scan: .\RC4_DES_Assessment.ps1                  │
+│   └─► With Events: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs │
+│   └─► Child Domain: .\RC4_DES_Assessment.ps1 -Domain child.contoso.com │
+│                                                              │
+└─► Entire Forest: Use Assess-ADForest.ps1                    │
+    └─► Quick Scan: .\Assess-ADForest.ps1                     │
+    └─► With Events: .\Assess-ADForest.ps1 -AnalyzeEventLogs  │
+    └─► Parallel (PS7+): .\Assess-ADForest.ps1 -Parallel      │
+    └─► Export Results: .\Assess-ADForest.ps1 -ExportResults  │
+└──────────────────────────────────────────────────────────────┘
+
 Do you need a quick health check?
 └─► Yes: .\RC4_DES_Assessment.ps1 -QuickScan
     └─► Runtime: ~30 seconds
@@ -581,14 +595,14 @@ Having event log access issues?
 
 **Month 1: Discovery Phase**
 ```powershell
-# Week 1: Quick scan all domains
-.\RC4_DES_Assessment.ps1 -Domain domain1.com -QuickScan
-.\RC4_DES_Assessment.ps1 -Domain domain2.com -QuickScan
+# Week 1: Quick scan entire forest
+.\Assess-ADForest.ps1 -ExportResults
 
-# Week 2-4: Deep dive per domain
-.\RC4_DES_Assessment.ps1 -Domain domain1.com -AnalyzeEventLogs -EventLogHours 720 -ExportResults
+# Week 2-4: Deep dive per domain (parallel processing)
+.\Assess-ADForest.ps1 -AnalyzeEventLogs -EventLogHours 720 -ExportResults -Parallel -MaxParallelDomains 5
 ```
-- Identify high-risk domains
+- Identify high-risk domains from forest summary
+- Review per-domain JSON exports for detailed findings
 - Map RC4/DES usage to business applications
 
 **Month 2-3: Phased Remediation**
@@ -605,56 +619,95 @@ Having event log access issues?
 .\Compare-Assessments.ps1 -BaselineFile baseline.json -CurrentFile current.json
 ```
 
-#### Scenario 3: Child Domain / Complex Forest
+#### Scenario 3: Multi-Domain Forest
 
-**Challenge:** Cross-domain authentication and event log access
+**Challenge:** Assessing multiple domains efficiently
 
-**Solution:**
+**Solution: Use Forest-Wide Assessment**
 ```powershell
-# Assess parent domain
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+# Quick forest scan (all domains, config only)
+.\Assess-ADForest.ps1 -ExportResults
 
-# Assess child domain (specify both domain and DC)
-.\RC4_DES_Assessment.ps1 `
-    -Domain child.contoso.com `
-    -Server DC01.child.contoso.com `
-    -AnalyzeEventLogs `
-    -ExportResults
+# Full forest assessment with event logs
+.\Assess-ADForest.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 
-# If event log access fails, run locally on child DC
-# Copy script to child DC and run:
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+# Parallel processing for faster completion (PowerShell 7+)
+.\Assess-ADForest.ps1 -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs -ExportResults
 ```
 
-**Aggregating Results:**
-- Export from each domain
-- Use Compare-Assessments.ps1 for trending
-- Consolidate findings in enterprise reporting tool
+**Forest Assessment Benefits:**
+- ✅ Automatic domain discovery
+- ✅ Per-domain results exported individually
+- ✅ Forest-wide summary with aggregated status
+- ✅ Parallel processing support (PS 7+)
+- ✅ Single consolidated view of entire forest
+
+**Output Files:**
+- `Forest_Assessment_<forestname>_<timestamp>.json` - Forest summary
+- `Forest_Assessment_<forestname>_<timestamp>.csv` - Per-domain status
+- `DES_RC4_Assessment_<domain>_<timestamp>.json` - Individual domain results (one per domain)
+
+**Reviewing Results:**
+```powershell
+# Forest-wide status
+Get-Content .\Forest_Assessment_contoso_com_20250117.json | ConvertFrom-Json | Select-Object OverallStatus, CriticalIssues, Warnings
+
+# Per-domain comparison
+.\Compare-Assessments.ps1 -BaselineFile .\DES_RC4_Assessment_domain1_20250101.json -CurrentFile .\DES_RC4_Assessment_domain1_20250117.json
+```
 
 ## Usage
 
-### Quick Scan (Default)
+### Single Domain Assessment
+
+#### Quick Scan (Default)
 ```powershell
 .\RC4_DES_Assessment.ps1
 ```
 Fast assessment of DC, GPO, and trust configuration.
 
-### Full Assessment with Event Logs
+#### Full Assessment with Event Logs
 ```powershell
 .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 48
 ```
 Includes 48 hours of event log analysis for actual DES/RC4 usage.
 
-### Cross-Domain Assessment
+#### Cross-Domain Assessment
 ```powershell
 .\RC4_DES_Assessment.ps1 -Domain child.contoso.com -AnalyzeEventLogs
 ```
 
-### With Export and Guidance
+#### With Export and Guidance
 ```powershell
 .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults -IncludeGuidance
 ```
 Full assessment with JSON/CSV export and manual validation guidance.
+
+### Forest-Wide Assessment
+
+#### Quick Forest Scan
+```powershell
+.\Assess-ADForest.ps1
+```
+Assess all domains in current forest (configuration only, fast).
+
+#### Full Forest Assessment with Event Logs
+```powershell
+.\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults
+```
+Complete forest assessment with event log analysis and per-domain exports.
+
+#### Parallel Processing (PowerShell 7+)
+```powershell
+.\Assess-ADForest.ps1 -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs
+```
+Assess up to 5 domains concurrently for faster completion.
+
+#### Specific Forest with Extended Analysis
+```powershell
+.\Assess-ADForest.ps1 -ForestName contoso.com -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+```
+Assess specific forest with 7 days of event logs across all domains.
 
 ### Comparing Assessments Over Time
 ```powershell
@@ -662,7 +715,7 @@ Full assessment with JSON/CSV export and manual validation guidance.
 ```
 Compare two assessment results to track improvements, identify new issues, and validate remediation efforts.
 
-### Parameters
+### RC4_DES_Assessment.ps1 Parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
@@ -673,6 +726,17 @@ Compare two assessment results to track improvements, identify new issues, and v
 | `-ExportResults` | Export to JSON and CSV | Not enabled |
 | `-IncludeGuidance` | Show manual validation guidance | Not enabled |
 | `-QuickScan` | Quick scan only (explicit) | Default mode |
+
+### Assess-ADForest.ps1 Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `-ForestName` | Target AD forest to assess | Current forest |
+| `-AnalyzeEventLogs` | Include event log analysis per domain | Not enabled |
+| `-EventLogHours` | Hours of events to analyze (1-168) | 24 |
+| `-ExportResults` | Export per-domain and forest summary | Not enabled |
+| `-Parallel` | Process domains in parallel (PS 7+) | Not enabled |
+| `-MaxParallelDomains` | Max concurrent domains (1-10) | 3 |
 
 ## Understanding the Results
 

@@ -41,6 +41,20 @@
 .\RC4_DES_Assessment.ps1 -Domain contoso.com -AnalyzeEventLogs
 ```
 
+### Forest-Wide Assessment
+```powershell
+# Quick scan all domains in forest
+.\Assess-ADForest.ps1
+
+# Full assessment with event logs
+.\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults
+
+# Parallel processing (PowerShell 7+)
+.\Assess-ADForest.ps1 -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs
+```
+**Runtime**: Varies (parallel mode processes multiple domains concurrently)  
+**Output**: Per-domain JSON exports + forest-wide summary
+
 ---
 
 ## 📊 Sample Output
@@ -258,6 +272,13 @@ Resolve-DnsName your-domain.com
 
 ## 🎯 What's New in v2.0.1
 
+### Forest-Wide Assessment (NEW!)
+- **Assess-ADForest.ps1** - New script for assessing all domains in an AD forest
+- **Automatic domain discovery** - Get-ADForest enumerates all domains
+- **Parallel processing** - Process multiple domains concurrently (PowerShell 7+)
+- **Consolidated reporting** - Forest-wide summary + per-domain exports
+- **Flexible deployment** - Quick scan or full event log analysis across entire forest
+
 ### Remote Event Log Access Troubleshooting
 - **Automatic failure tracking** - Script now tracks which DCs couldn't be queried
 - **Comprehensive troubleshooting** - Detailed guidance for RPC/WinRM issues at end of assessment
@@ -282,10 +303,12 @@ Resolve-DnsName your-domain.com
 ## 💡 Pro Tips
 
 1. **Start with QuickScan** - Get quick results, then add event log analysis
-2. **Monitor for 30 days** - Capture monthly/quarterly activities before Server 2025 upgrade
-3. **Check event logs regularly** - Weekly alerts for RC4/DES usage
-4. **Export results** - Keep historical data for compliance/auditing
-5. **Include guidance** - Get actionable steps for remediation and monitoring
+2. **Use Forest Assessment for multi-domain environments** - `Assess-ADForest.ps1` automates domain enumeration
+3. **Enable parallel processing** - Use `-Parallel` with PowerShell 7+ for faster forest assessments
+4. **Monitor for 30 days** - Capture monthly/quarterly activities before Server 2025 upgrade
+5. **Check event logs regularly** - Weekly alerts for RC4/DES usage
+6. **Export results** - Keep historical data for compliance/auditing
+7. **Include guidance** - Get actionable steps for remediation and monitoring
 
 ---
 
