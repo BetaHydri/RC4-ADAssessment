@@ -762,7 +762,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Post-November 2022: Trusts default to AES when attribute is not set.
    
    To verify trust encryption from both sides:
-   PS> Get-ADTrust -Filter $([char]0x2022) | Select-Object Name, msDS-SupportedEncryptionTypes
+   PS> Get-ADTrust -Filter * | Select-Object Name, msDS-SupportedEncryptionTypes
    
    If msDS-SupportedEncryptionTypes is 0 or empty: Uses AES (secure)
    If set to 0x18 or 0x1C: Explicitly configured for AES (secure)
@@ -999,6 +999,7 @@ catch {
 }
 
 #endregion
+
 
 
 
