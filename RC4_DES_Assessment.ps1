@@ -139,11 +139,11 @@ function Write-Finding {
     )
     
     $statusSymbol = switch ($Status) {
-        "OK" { "$([char]0x2713)"; $color = "Green" }  # ✓ Check mark
-        "WARNING" { "$([char]0x26A0) "; $color = "Yellow" }  # ⚠ Warning sign
-        "CRITICAL" { "$([char]0x2717)"; $color = "Red" }  # ✗ Cross mark
-        "INFO" { "$([char]0x2139) "; $color = "Cyan" }  # ℹ Info
-        default { "$([char]0x2022)"; $color = "White" }  # • Bullet
+        "OK"       { "$([char]0x2713)"; $color = "Green" }   # ✓ Check mark
+        "WARNING"  { "$([char]0x26A0) "; $color = "Yellow" } # ⚠ Warning sign
+        "CRITICAL" { "$([char]0x2717)"; $color = "Red" }     # ✗ Cross mark
+        "INFO"     { "$([char]0x24D8) "; $color = "Cyan" }   # ⓘ Circled i (PS 5.1 compatible)
+        default    { "$([char]0x2022)"; $color = "White" }   # • Bullet
     }
     
     Write-Host "$statusSymbol $Message" -ForegroundColor $color
