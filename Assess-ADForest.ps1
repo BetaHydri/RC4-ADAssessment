@@ -533,7 +533,7 @@ if ($Parallel -and $PSVersionTable.PSVersion.Major -ge 7) {
     $domainResults = $domainList | ForEach-Object -Parallel {
         # Build parameter hashtable for the assessment script
         $params = @{
-            Domain = $_
+            Domain        = $_
             EventLogHours = $using:EventLogHours
         }
         
