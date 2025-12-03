@@ -89,6 +89,548 @@ Real-world deployment revealed several critical issues:
 - Trust validation steps
 - Windows Server 2025 preparation
 
+## Sample Output
+
+### Example 1: Quick Scan - Healthy Environment
+
+```powershell
+PS> .\RC4_DES_Assessment.ps1 -QuickScan
+```
+
+```
+================================================================================
+DES/RC4 Kerberos Encryption Assessment v2.0
+================================================================================
+
+This tool performs a fast, accurate assessment of DES and RC4 encryption usage
+in Active Directory based on post-November 2022 Microsoft updates.
+
+Key improvements over v1.0:
+
+  ✓ Fast execution (<5 minutes vs 5+ hours)
+  ✓ Post-Nov 2022 trust logic (AES default when not set)
+  ✓ Realistic computer object assessment (no unnecessary enumeration)
+  ✓ Event log analysis for actual usage vs theoretical risk
+  ✓ Actionable guidance for manual validation
+
+
+Domain Controller Encryption Configuration
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing domain: contoso.com
+ℹ️  Found 3 Domain Controller(s)
+
+  Checking GPO Kerberos encryption policy...
+✅ GPO 'Default Domain Controllers Policy' configures Kerberos encryption
+   Encryption types: AES128-HMAC, AES256-HMAC
+
+ℹ️  Domain Controller Summary:
+  • Total DCs: 3
+  • AES Configured: 0
+  • RC4 Configured: 0
+  • DES Configured: 0
+  • Not Configured (GPO Inherited): 3
+
+  Individual DC Status:
+    • DC01: Not Configured (Inherits from GPO)
+    • DC02: Not Configured (Inherits from GPO)
+    • DC03: Not Configured (Inherits from GPO)
+
+✅ Domain Controllers are configured for AES encryption via GPO
+ℹ️  3 DC(s) inherit AES settings from GPO (this is normal)
+
+
+Trust Encryption Assessment (Post-November 2022 Logic)
+────────────────────────────────────────────────────────────────
+ℹ️  Found 1 trust(s)
+✅ Trust 'partner.contoso.com': Uses AES by default (msDS-SupportedEncryptionTypes not set)
+
+ℹ️  Trust Assessment Summary:
+  • Total Trusts: 1
+  • AES Default (not set): 1
+  • AES Explicit: 0
+  • RC4 Risk: 0
+  • DES Risk: 0
+
+  📘 Post-November 2022 Update:
+  When msDS-SupportedEncryptionTypes is not set (0 or empty) on trusts,
+  they default to AES encryption. No action needed for these trusts.
+
+
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+✅ No DES/RC4 usage detected - environment is secure
+
+  💡 Tip: Use -IncludeGuidance to see detailed manual validation steps and monitoring setup.
+
+
+Assessment Complete
+================================================================================
+
+📊 Summary:
+  • Domain: contoso.com
+  • Assessment Date: 2025-12-03 14:30:15
+  • Overall Status: OK
+
+  💡 For complete assessment, run with -AnalyzeEventLogs to detect actual DES/RC4 usage
+```
+
+---
+
+### Example 2: Full Assessment with Event Logs - RC4 Detected
+
+```powershell
+PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 48
+```
+
+```
+================================================================================
+DES/RC4 Kerberos Encryption Assessment v2.0
+================================================================================
+
+[... DC and Trust assessment similar to Example 1 ...]
+
+
+Event Log Analysis - Actual DES/RC4 Usage
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing last 48 hours of Kerberos ticket events
+  Time range: 2025-12-01 14:30 to 2025-12-03 14:30
+ℹ️  Querying event logs from 3 Domain Controller(s)...
+  Note: Using WinRM (PowerShell Remoting) for event log queries
+  If this fails, ensure WinRM is enabled on DCs: Enable-PSRemoting -Force
+  • Querying DC01...
+  • Querying DC02...
+  • Querying DC03...
+
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 31,287
+  • AES Tickets: 31,279
+  • RC4 Tickets: 8
+  • DES Tickets: 0
+
+❌ RC4 tickets detected in active use!
+  Unique accounts using RC4: 3
+  RC4 accounts:
+    - LEGACY-APP$
+    - SQL2008-SRV$
+    - FILESERVER01$
+✅ No DES tickets detected in last 48 hours
+
+
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+❌ Critical security issues detected requiring immediate attention
+
+  Recommendations:
+    • CRITICAL: RC4 tickets detected in event logs - active usage detected
+
+Assessment Complete
+================================================================================
+
+📊 Summary:
+  • Domain: contoso.com
+  • Assessment Date: 2025-12-03 14:32:45
+  • Overall Status: CRITICAL
+```
+
+---
+
+### Example 3: Assessment with Event Log Access Issues
+
+```powershell
+PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 24
+```
+
+```
+Event Log Analysis - Actual DES/RC4 Usage
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing last 24 hours of Kerberos ticket events
+  Time range: 2025-12-02 14:30 to 2025-12-03 14:30
+ℹ️  Querying event logs from 3 Domain Controller(s)...
+  Note: Using WinRM (PowerShell Remoting) for event log queries
+  If this fails, ensure WinRM is enabled on DCs: Enable-PSRemoting -Force
+  • Querying DC01...
+    ⚠️  RPC/Network error on DC01
+       Both WinRM (5985) and RPC (135) failed. Check firewall rules or run locally on DC
+
+    Troubleshooting:
+    1. Enable WinRM on DC: Enable-PSRemoting -Force
+    2. Or allow RPC in firewall: Port 135 + 49152-65535
+    3. Or run this script directly on the DC
+    4. Check permissions: Add your account to 'Event Log Readers' group
+
+  • Querying DC02...
+  • Querying DC03...
+    ⚠️  Access denied on DC03
+       Ensure you have Event Log Readers permissions or are Domain Admin
+
+    Troubleshooting:
+    1. Enable WinRM on DC: Enable-PSRemoting -Force
+    2. Or allow RPC in firewall: Port 135 + 49152-65535
+    3. Or run this script directly on the DC
+    4. Check permissions: Add your account to 'Event Log Readers' group
+
+
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 10,431
+  • AES Tickets: 10,429
+  • RC4 Tickets: 2
+  • DES Tickets: 0
+
+❌ RC4 tickets detected in active use!
+  Unique accounts using RC4: 1
+  RC4 accounts:
+    - LEGACY-APP$
+
+  ⚠️  Event Log Query Failures:
+  2 Domain Controller(s) could not be queried for event logs
+
+  • DC01: The RPC server is unavailable. (Exception from HRESULT: 0x800706BA)
+  • DC03: Access is denied. Attempted to perform an unauthorized operation.
+
+  🔧 How to fix remote event log access issues:
+
+  Option 1: Enable WinRM (Recommended)
+  ────────────────────────────────────────
+  Run on each failed DC:
+  PS> Enable-PSRemoting -Force
+  PS> Set-Item WSMan:\localhost\Client\TrustedHosts -Value '*' -Force
+  PS> Restart-Service WinRM
+
+  Or via Group Policy (for all DCs):
+  Computer Configuration > Policies > Administrative Templates
+  > Windows Components > Windows Remote Management (WinRM) > WinRM Service
+  - Enable 'Allow remote server management through WinRM'
+  - IPv4 filter: * (or specific IPs)
+
+  Option 2: Configure Firewall for RPC
+  ────────────────────────────────────────
+  Required ports:
+  - TCP 135 (RPC Endpoint Mapper)
+  - TCP 49152-65535 (Dynamic RPC ports)
+
+  Windows Firewall rule:
+  PS> Enable-NetFirewallRule -DisplayGroup 'Remote Event Log Management'
+
+  Option 3: Run Locally on DC
+  ────────────────────────────────────────
+  Copy script to DC and run:
+  PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 24
+
+  Option 4: Verify Permissions
+  ────────────────────────────────────────
+  Add your account to 'Event Log Readers' group on DCs:
+  PS> Add-ADGroupMember -Identity 'Event Log Readers' -Members 'YourAccount'
+  Or use Domain Admin account (has all required permissions)
+
+
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+❌ Critical security issues detected requiring immediate attention
+
+  Recommendations:
+    • CRITICAL: RC4 tickets detected in event logs - active usage detected
+
+  ⚠️  Note: Event log data is incomplete due to 2 DC(s) being inaccessible
+     Review the detailed troubleshooting guidance in the Event Log Analysis section above
+```
+
+---
+
+### Example 4: Export Results for Comparison
+
+```powershell
+PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+```
+
+```
+[... assessment output ...]
+
+Exporting Results
+────────────────────────────────────────────────────────────────
+✅ JSON export: .\DES_RC4_Assessment_contoso_com_20251203_143015.json
+✅ CSV export: .\DES_RC4_Assessment_contoso_com_20251203_143015.csv
+```
+
+**JSON Export Sample:**
+```json
+{
+  "AssessmentDate": "2025-12-03T14:30:15",
+  "Version": "2.0",
+  "Domain": "contoso.com",
+  "OverallStatus": "WARNING",
+  "DomainControllers": {
+    "TotalDCs": 3,
+    "AESConfigured": 3,
+    "RC4Configured": 0,
+    "DESConfigured": 0,
+    "NotConfigured": 0,
+    "GPOConfigured": true,
+    "GPOEncryptionTypes": 24,
+    "Details": [
+      {
+        "Name": "DC01",
+        "EncryptionValue": 24,
+        "EncryptionTypes": "AES128-HMAC, AES256-HMAC",
+        "OS": "Windows Server 2022 Datacenter",
+        "Status": "AES Configured"
+      }
+    ]
+  },
+  "Trusts": {
+    "TotalTrusts": 1,
+    "ExplicitAES": 0,
+    "DefaultAES": 1,
+    "RC4Risk": 0,
+    "DESRisk": 0
+  },
+  "EventLogs": {
+    "EventsAnalyzed": 15432,
+    "DESTickets": 0,
+    "RC4Tickets": 2,
+    "AESTickets": 15430,
+    "RC4Accounts": ["LEGACY-APP$", "SQL2008-SRV$"],
+    "FailedDCs": []
+  },
+  "Recommendations": [
+    "CRITICAL: RC4 tickets detected in event logs - active usage detected"
+  ]
+}
+```
+
+**Comparing Results:**
+```powershell
+PS> .\Compare-Assessments.ps1 `
+    -BaselineFile .\DES_RC4_Assessment_contoso_com_20251201_100000.json `
+    -CurrentFile .\DES_RC4_Assessment_contoso_com_20251203_143015.json `
+    -ShowDetails
+```
+
+```
+================================================================================
+Assessment Comparison Report
+================================================================================
+
+Baseline: DES_RC4_Assessment_contoso_com_20251201_100000.json (2025-12-01 10:00:00)
+Current:  DES_RC4_Assessment_contoso_com_20251203_143015.json (2025-12-03 14:30:15)
+
+Domain Controllers
+────────────────────────────────────────────────────────────────
+  Total DCs:          3 → 3 (unchanged)
+  AES Configured:     2 → 3 (↑ +1 improved)
+  RC4 Configured:     1 → 0 (↓ -1 improved)
+  DES Configured:     0 → 0 (unchanged)
+
+Trusts
+────────────────────────────────────────────────────────────────
+  Total Trusts:       1 → 1 (unchanged)
+  RC4 Risk:           0 → 0 (unchanged)
+
+Event Logs (if analyzed)
+────────────────────────────────────────────────────────────────
+  RC4 Tickets:        5 → 2 (↓ -3 improved)
+  DES Tickets:        0 → 0 (unchanged)
+  RC4 Accounts:       4 → 2 (↓ -2 improved)
+
+Overall Assessment
+────────────────────────────────────────────────────────────────
+  Status:             WARNING → WARNING (unchanged)
+  
+✅ Improvements:
+  • RC4 removed from 1 Domain Controller
+  • 2 fewer accounts using RC4 tickets
+
+⚠️  Remaining Issues:
+  • 2 accounts still using RC4: LEGACY-APP$, SQL2008-SRV$
+```
+
+---
+
+## Workflow Guidance
+
+### Recommended Assessment Workflow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Phase 1: Initial Discovery (5 minutes)                      │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+        Run Quick Scan to assess baseline
+        .\RC4_DES_Assessment.ps1 -QuickScan
+                            │
+                            ├─── ✅ All OK? ────► Continue monitoring
+                            │
+                            └─── ⚠ Issues Found
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Phase 2: Actual Usage Analysis (10 minutes)                 │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+    Analyze 7 days of event logs for real usage
+    .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168
+                            │
+                            ├─── No RC4/DES in logs? ────► Low priority
+                            │
+                            └─── Active RC4/DES usage detected
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Phase 3: Detailed Investigation (30 minutes)                │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+    Get manual validation guidance & export results
+    .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults -IncludeGuidance
+                            │
+                            ▼
+    Review specific accounts/computers using RC4/DES
+    Identify: Applications, Service Accounts, Legacy Systems
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Phase 4: Remediation Planning (varies)                      │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+    For DCs:  Update GPO to enforce AES-only
+    For Trusts: Set msDS-SupportedEncryptionTypes to 0x18 (AES)
+    For Apps: Work with vendors for AES support
+    For Legacy: Plan migration or containment strategy
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Phase 5: Implement & Validate (ongoing)                     │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+    Re-run assessment after each change
+    .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+                            │
+                            ▼
+    Compare before/after results
+    .\Compare-Assessments.ps1 -BaselineFile before.json -CurrentFile after.json
+                            │
+                            ▼
+    Monitor event logs for 30+ days to ensure no RC4/DES usage
+                            │
+                            └─── Ready for Windows Server 2025
+```
+
+### Quick Decision Tree
+
+**Start Here:** What's your goal?
+
+```
+Do you need a quick health check?
+└─► Yes: .\RC4_DES_Assessment.ps1 -QuickScan
+    └─► Runtime: ~30 seconds
+    └─► Shows: DC/GPO/Trust configuration
+
+Are you preparing for Windows Server 2025?
+└─► Yes: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168
+    └─► Runtime: ~5 minutes
+    └─► Shows: Actual RC4/DES usage over 7 days
+    └─► Critical: Must show ZERO RC4 usage before upgrading
+
+Do you have RC4/DES issues to investigate?
+└─► Yes: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -IncludeGuidance
+    └─► Runtime: ~5 minutes
+    └─► Shows: Which accounts/computers using weak encryption
+    └─► Provides: Splunk queries, manual validation steps
+
+Need to track progress over time?
+└─► Yes: 
+    1. .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+    2. Make changes
+    3. .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+    4. .\Compare-Assessments.ps1 -BaselineFile old.json -CurrentFile new.json
+
+Having event log access issues?
+└─► Yes: Run test script to see troubleshooting guidance
+    └─► .\Test-EventLogFailureHandling.ps1 -TestScenario MixedFailures
+```
+
+### Typical Deployment Scenarios
+
+#### Scenario 1: Small Environment (< 10 DCs, < 1,000 computers)
+
+**Week 1: Initial Assessment**
+```powershell
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults -IncludeGuidance
+```
+- Review all findings
+- Export for baseline
+- Read manual validation guidance
+
+**Week 2-3: Remediation**
+- Fix DC/Trust configurations
+- Address any RC4/DES usage found in event logs
+- Re-run assessment after each fix
+
+**Week 4: Validation**
+```powershell
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+.\Compare-Assessments.ps1 -BaselineFile week1.json -CurrentFile week4.json -ShowDetails
+```
+- Verify no RC4/DES usage
+- Document remediation
+
+#### Scenario 2: Large Enterprise (100+ DCs, 50,000+ computers)
+
+**Month 1: Discovery Phase**
+```powershell
+# Week 1: Quick scan all domains
+.\RC4_DES_Assessment.ps1 -Domain domain1.com -QuickScan
+.\RC4_DES_Assessment.ps1 -Domain domain2.com -QuickScan
+
+# Week 2-4: Deep dive per domain
+.\RC4_DES_Assessment.ps1 -Domain domain1.com -AnalyzeEventLogs -EventLogHours 720 -ExportResults
+```
+- Identify high-risk domains
+- Map RC4/DES usage to business applications
+
+**Month 2-3: Phased Remediation**
+- Start with least critical domains
+- Fix DC/GPO configurations first
+- Address application-specific RC4 usage
+
+**Month 4-6: Continuous Monitoring**
+```powershell
+# Weekly automated assessments
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+
+# Monthly comparison
+.\Compare-Assessments.ps1 -BaselineFile baseline.json -CurrentFile current.json
+```
+
+#### Scenario 3: Child Domain / Complex Forest
+
+**Challenge:** Cross-domain authentication and event log access
+
+**Solution:**
+```powershell
+# Assess parent domain
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+
+# Assess child domain (specify both domain and DC)
+.\RC4_DES_Assessment.ps1 `
+    -Domain child.contoso.com `
+    -Server DC01.child.contoso.com `
+    -AnalyzeEventLogs `
+    -ExportResults
+
+# If event log access fails, run locally on child DC
+# Copy script to child DC and run:
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+```
+
+**Aggregating Results:**
+- Export from each domain
+- Use Compare-Assessments.ps1 for trending
+- Consolidate findings in enterprise reporting tool
+
 ## Usage
 
 ### Quick Scan (Default)
@@ -134,43 +676,298 @@ Compare two assessment results to track improvements, identify new issues, and v
 
 ## Understanding the Results
 
+### Reading the Assessment Output
+
+The script provides color-coded findings to help you quickly identify issues:
+
+- **✅ Green (OK)**: Secure configuration, no action needed
+- **⚠️ Yellow (WARNING)**: RC4 detected, should remediate before Server 2025
+- **❌ Red (CRITICAL)**: DES detected or active RC4 usage - immediate action required
+- **ℹ️ Cyan (INFO)**: Informational messages, context
+
 ### Domain Controller Assessment
 
+**Scenario 1: All DCs Properly Configured via GPO**
 ```
+Domain Controller Encryption Configuration
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing domain: contoso.com
+ℹ️  Found 5 Domain Controller(s)
+
+  Checking GPO Kerberos encryption policy...
+✅ GPO 'Default Domain Controllers Policy' configures Kerberos encryption
+   Encryption types: AES128-HMAC, AES256-HMAC
+
+ℹ️  Domain Controller Summary:
+  • Total DCs: 5
+  • AES Configured: 0
+  • RC4 Configured: 0
+  • DES Configured: 0
+  • Not Configured (GPO Inherited): 5
+
+  Individual DC Status:
+    • DC01: Not Configured (Inherits from GPO)
+    • DC02: Not Configured (Inherits from GPO)
+    • DC03: Not Configured (Inherits from GPO)
+    • DC04: Not Configured (Inherits from GPO)
+    • DC05: Not Configured (Inherits from GPO)
+
 ✅ Domain Controllers are configured for AES encryption via GPO
-ℹ️  3 DC(s) inherit AES settings from GPO (this is normal)
+ℹ️  5 DC(s) inherit AES settings from GPO (this is normal)
 ```
 
-**What it means:** DCs are properly configured. Empty `msDS-SupportedEncryptionTypes` on DCs that inherit from GPO is expected and secure.
+**What it means:** Perfect configuration! DCs inherit AES from GPO, which is the recommended approach. No action needed.
+
+---
+
+**Scenario 2: Mixed Configuration with RC4**
+```
+Domain Controller Encryption Configuration
+────────────────────────────────────────────────────────────────
+ℹ️  Domain Controller Summary:
+  • Total DCs: 3
+  • AES Configured: 2
+  • RC4 Configured: 1
+  • DES Configured: 0
+  • Not Configured (GPO Inherited): 0
+
+  Individual DC Status:
+    • DC01: AES Configured
+      Types: AES128-HMAC, AES256-HMAC
+    • DC02: AES Configured
+      Types: AES128-HMAC, AES256-HMAC
+    • DC03: AES Configured + RC4
+      Types: AES128-HMAC, AES256-HMAC, RC4-HMAC
+
+⚠️  1 DC(s) have RC4 encryption enabled
+```
+
+**What it means:** DC03 has RC4 still enabled alongside AES. While not critical, RC4 should be removed before Windows Server 2025.
+
+**Action:** Remove RC4 from DC03:
+```powershell
+Set-ADComputer DC03 -Replace @{'msDS-SupportedEncryptionTypes'=24}
+# 24 = 0x18 = AES128 + AES256
+```
+
+---
+
+**Scenario 3: CRITICAL - DES Detected**
+```
+  • DES Configured: 1
+
+  Individual DC Status:
+    • OLD-DC: DES Only
+      Types: DES-CBC-CRC, DES-CBC-MD5
+
+❌ 1 DC(s) have DES encryption enabled - immediate remediation required
+```
+
+**What it means:** OLD-DC only supports DES encryption - critically insecure!
+
+**Action:** URGENT - Upgrade or decommission this DC immediately. DES is broken encryption.
 
 ### Trust Assessment
 
+**Scenario 1: Post-Nov 2022 Secure Default**
 ```
-✅ Trust 'partner.com': Uses AES by default (msDS-SupportedEncryptionTypes not set)
+Trust Encryption Assessment (Post-November 2022 Logic)
+────────────────────────────────────────────────────────────────
+ℹ️  Found 2 trust(s)
+✅ Trust 'partner.contoso.com': Uses AES by default (msDS-SupportedEncryptionTypes not set)
+✅ Trust 'external.com': AES explicitly configured
 
-📘 Post-November 2022 Update:
-When msDS-SupportedEncryptionTypes is not set (0 or empty) on trusts,
-they default to AES encryption. No action needed for these trusts.
+ℹ️  Trust Assessment Summary:
+  • Total Trusts: 2
+  • AES Default (not set): 1
+  • AES Explicit: 1
+  • RC4 Risk: 0
+  • DES Risk: 0
+
+  📘 Post-November 2022 Update:
+  When msDS-SupportedEncryptionTypes is not set (0 or empty) on trusts,
+  they default to AES encryption. No action needed for these trusts.
 ```
 
-**What it means:** Trust is secure. The November 2022 update changed trusts to default to AES when the attribute is not set.
+**What it means:** Both trusts are secure. The first trust uses the new default (AES), the second has explicit AES configuration.
+
+---
+
+**Scenario 2: Trust with RC4 Enabled**
+```
+⚠️  Trust 'legacy.external.com': AES configured but RC4 also enabled
+    Encryption: AES128-HMAC, AES256-HMAC, RC4-HMAC
+
+  • RC4 Risk: 1
+```
+
+**What it means:** Trust has AES but RC4 is still allowed. Should clean this up.
+
+**Action:** Remove RC4 from trust:
+```powershell
+# Get the trust
+$trust = Get-ADTrust -Identity "legacy.external.com"
+
+# Set to AES only (0x18 = AES128 + AES256)
+Set-ADTrust -Identity $trust -Replace @{'msDS-SupportedEncryptionTypes'=24}
+```
 
 ### Event Log Analysis
 
+**Scenario 1: Clean Environment**
 ```
-Events Analyzed: 15,432
-• AES Tickets: 15,430 ✅
-• RC4 Tickets: 2 ❌
-• DES Tickets: 0 ✅
+Event Log Analysis - Actual DES/RC4 Usage
+────────────────────────────────────────────────────────────────
+ℹ️  Analyzing last 24 hours of Kerberos ticket events
+  Time range: 2025-12-02 10:00 to 2025-12-03 10:00
+ℹ️  Querying event logs from 3 Domain Controller(s)...
+  Note: Using WinRM (PowerShell Remoting) for event log queries
+  • Querying DC01...
+  • Querying DC02...
+  • Querying DC03...
+
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 28,543
+  • AES Tickets: 28,543
+  • RC4 Tickets: 0
+  • DES Tickets: 0
+
+✅ No RC4 tickets detected in last 24 hours
+✅ No DES tickets detected in last 24 hours
+```
+
+**What it means:** Perfect! No actual RC4/DES usage detected. Environment is ready for Windows Server 2025.
+
+---
+
+**Scenario 2: RC4 Usage Detected**
+```
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 15,432
+  • AES Tickets: 15,430
+  • RC4 Tickets: 2
+  • DES Tickets: 0
 
 ❌ RC4 tickets detected in active use!
-Unique accounts using RC4: 2
-RC4 accounts:
-  - LEGACY-APP$
-  - OLD-SERVER$
+  Unique accounts using RC4: 2
+  RC4 accounts:
+    - LEGACY-APP$
+    - SQL-SERVER-2008$
 ```
 
-**What it means:** Despite secure DC configuration, 2 accounts are actually using RC4. These need investigation.
+**What it means:** Two computer accounts are actively requesting RC4 tickets despite DCs supporting AES. These systems need investigation.
+
+**Action:**
+1. Check why these systems are using RC4:
+   ```powershell
+   Get-ADComputer LEGACY-APP -Properties msDS-SupportedEncryptionTypes
+   Get-ADComputer SQL-SERVER-2008 -Properties msDS-SupportedEncryptionTypes
+   ```
+
+2. Investigate the applications:
+   - LEGACY-APP$: May be running old software that doesn't support AES
+   - SQL-SERVER-2008$: SQL Server 2008 is EOL, needs upgrade
+
+3. Plan remediation:
+   - Upgrade to newer OS/applications that support AES
+   - Or isolate these systems (not recommended long-term)
+
+---
+
+**Scenario 3: Event Log Access Issues**
+```
+Event Log Analysis - Actual DES/RC4 Usage
+────────────────────────────────────────────────────────────────
+ℹ️  Querying event logs from 3 Domain Controller(s)...
+  • Querying DC01...
+    ⚠️  RPC/Network error on DC01
+       Both WinRM (5985) and RPC (135) failed. Check firewall rules
+
+  • Querying DC02...
+    ✓ Successfully queried DC02
+  
+  • Querying DC03...
+    ⚠️  Access denied on DC03
+       Ensure you have Event Log Readers permissions or are Domain Admin
+
+ℹ️  Event Log Analysis Results:
+  • Events Analyzed: 4,231
+  • AES Tickets: 4,229
+  • RC4 Tickets: 2
+  • DES Tickets: 0
+
+  ⚠️  Event Log Query Failures:
+  2 Domain Controller(s) could not be queried for event logs
+
+  • DC01: The RPC server is unavailable. (Exception from HRESULT: 0x800706BA)
+  • DC03: Access is denied. Attempted to perform an unauthorized operation.
+
+  🔧 How to fix remote event log access issues:
+  [... detailed troubleshooting guidance displayed ...]
+```
+
+**What it means:** Only partial data collected due to access issues. Results may be incomplete.
+
+**Action:** Follow the displayed troubleshooting guidance to:
+- Enable WinRM on failed DCs
+- Configure firewall rules
+- Verify permissions
+- Or run script locally on DCs
+
+### Overall Assessment Summary
+
+**Scenario 1: Fully Secure**
+```
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+✅ No DES/RC4 usage detected - environment is secure
+
+Assessment Complete
+================================================================================
+
+📊 Summary:
+  • Domain: contoso.com
+  • Assessment Date: 2025-12-03 10:30:00
+  • Overall Status: OK
+
+  💡 For complete assessment, run with -AnalyzeEventLogs to detect actual DES/RC4 usage
+```
+
+---
+
+**Scenario 2: Warnings Detected**
+```
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+⚠️  Security warnings detected - remediation recommended
+
+  Recommendations:
+    • WARNING: Remove RC4 encryption from 1 Domain Controller(s)
+    • WARNING: 1 trust(s) have RC4 enabled
+
+  Overall Status: WARNING
+```
+
+---
+
+**Scenario 3: Critical Issues**
+```
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+❌ Critical security issues detected requiring immediate attention
+
+  Recommendations:
+    • CRITICAL: Remove DES encryption from 1 Domain Controller(s)
+    • CRITICAL: RC4 tickets detected in event logs - active usage detected
+    • WARNING: Remove RC4 encryption from 2 Domain Controller(s)
+
+  ⚠️  Note: Event log data is incomplete due to 2 DC(s) being inaccessible
+     Review the detailed troubleshooting guidance in the Event Log Analysis section above
+
+  Overall Status: CRITICAL
+```
+
+**What it means:** Immediate action required. DES usage and active RC4 tickets must be addressed before Windows Server 2025 migration.
 
 ## What This Tool Does NOT Check
 

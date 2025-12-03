@@ -60,7 +60,7 @@
 
 .NOTES
   Author: Active Directory Security Team
-  Version: 2.0
+  Version: 2.0.1
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module
@@ -121,7 +121,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.0"
+$script:Version = "2.0.1"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
