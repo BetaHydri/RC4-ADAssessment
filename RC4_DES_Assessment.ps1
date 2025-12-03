@@ -953,7 +953,14 @@ if ($PSBoundParameters.ContainsKey('Domain')) {
     if ($Domain) {
         # When domain is specified, try to resolve to a specific DC for clearer error messages
         try {
-            $resolvedDC = (Get-ADDomainController -DomainName $Domain -Discover -ErrorAction Stop).HostName
+            $discoveredDC = Get-ADDomainController -DomainName $Domain -Discover -ErrorAction Stop
+            # Ensure we get a string, not an array or collection
+            $resolvedDC = if ($discoveredDC.HostName -is [array]) { 
+                $discoveredDC.HostName[0].ToString() 
+            } 
+            else { 
+                $discoveredDC.HostName.ToString() 
+            }
             $serverParams['Server'] = $resolvedDC
             Write-Finding -Status "INFO" -Message "Targeting domain: $Domain (using DC: $resolvedDC)"
         }
