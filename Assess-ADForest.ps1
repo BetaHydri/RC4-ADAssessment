@@ -545,12 +545,14 @@ if ($Parallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             $params['ExportResults'] = $true
         }
         
-        # Run assessment with splatted parameters
-        $result = & $using:assessmentScript @params
+        # Run assessment with splatted parameters and capture returned results object
+        $assessmentResults = & $using:assessmentScript @params
         
-        [PSCustomObject]@{
+        # Return same structure as Invoke-DomainAssessment for consistency
+        @{
             Domain = $_
-            Result = $result
+            Status = if ($assessmentResults) { $assessmentResults.OverallStatus } else { "UNKNOWN" }
+            Data   = $assessmentResults
         }
     } -ThrottleLimit $MaxParallelDomains
     
