@@ -1,6 +1,15 @@
-# DES/RC4 Kerberos Encryption Assessment v2.1
+# DES/RC4 Kerberos Encryption Assessment
+
+![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Version](https://img.shields.io/badge/version-2.1.0-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
+
+A powerful and efficient PowerShell toolkit for assessing DES and RC4 Kerberos encryption usage in Active Directory environments with event log analysis, forest-wide scanning, and comprehensive reporting. **Calculate encryption risks across all domain controllers** with color-coded output and actionable remediation guidance.
+
+**Requirements:** PowerShell 5.1+ (Windows PowerShell) or PowerShell 7+ (PowerShell Core)
 
 ## Overview
 
