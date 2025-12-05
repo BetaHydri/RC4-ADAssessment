@@ -115,7 +115,8 @@ Install-WindowsFeature RSAT-AD-PowerShell, GPMC
 - **PowerShell:** 5.1 or later (PowerShell 7+ recommended for parallel forest assessment)
 - **Modules:** Active Directory (`RSAT-AD-PowerShell`), Group Policy (`GPMC`)
 - **Permissions:** Domain Admin or equivalent read permissions (Event Log Readers for event analysis)
-- **Network:** Access to domain controllers (WinRM port 5985 or RPC port 135)
+- **Network:** Access to domain controllers (WinRM port 5985 for remote event log queries, or RPC port 135 as fallback)
+- **Event Logs (Optional):** For `-AnalyzeEventLogs`, ensure WinRM is enabled on DCs or run locally on each DC
 
 ### Quick Verification
 
