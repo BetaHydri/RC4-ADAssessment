@@ -10,6 +10,9 @@
   - Fast DC-level assessment (no full computer object enumeration)
   - Event log analysis for actual DES/RC4 ticket usage (Event IDs 4768/4769)
   - Post-Nov 2022 logic: Trusts default to AES when msDS-SupportedEncryptionTypes is unset
+  - KRBTGT account password age and encryption type assessment
+  - Service account (SPN) and gMSA/sMSA RC4/DES encryption detection
+  - Accounts with USE_DES_KEY_ONLY UserAccountControl flag detection
   - Realistic computer object assessment: Only flags actual RC4 fallback scenarios
   - Actionable guidance for manual validation and monitoring setup
   - Performance optimized for large forests (<5 minutes vs 5+ hours)
@@ -60,7 +63,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.1.0
+  Version: 2.2.0
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -122,7 +125,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.1.0"
+$script:Version = "2.2.0"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -812,6 +815,351 @@ function Get-EventLogEncryptionAnalysis {
     return $assessment
 }
 
+function Get-AccountEncryptionAssessment {
+    param(
+        [hashtable]$ServerParams
+    )
+    
+    Write-Section "KRBTGT & Service Account Encryption Assessment"
+    
+    $assessment = @{
+        KRBTGT                 = @{
+            PasswordAgeDays = 0
+            PasswordLastSet = $null
+            EncryptionValue = $null
+            EncryptionTypes = ""
+            Status          = "Unknown"
+        }
+        DESFlagAccounts        = @()
+        RC4OnlyServiceAccounts = @()
+        RC4OnlyMSAs            = @()
+        StaleServiceAccounts   = @()
+        TotalDESFlag           = 0
+        TotalRC4OnlySvc        = 0
+        TotalRC4OnlyMSA        = 0
+        TotalStaleSvc          = 0
+        Details                = @()
+    }
+    
+    try {
+        # Get domain info
+        if ($ServerParams.ContainsKey('Server')) {
+            Write-Verbose "Attempting to contact DC: $($ServerParams['Server'])"
+            try {
+                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
+            }
+            catch {
+                throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
+            }
+        }
+        else {
+            $domainInfo = Get-ADDomain
+        }
+        
+        Write-Finding -Status "INFO" -Message "Analyzing accounts in domain: $($domainInfo.DNSRoot)"
+        
+        # ────────────────────────────────────────────────
+        # 1. KRBTGT Account Assessment
+        # ────────────────────────────────────────────────
+        Write-Host "`n  Checking KRBTGT account..." -ForegroundColor Cyan
+        
+        try {
+            $krbtgt = Get-ADUser -Identity "krbtgt" `
+                -Properties pwdLastSet, 'msDS-SupportedEncryptionTypes', PasswordLastSet, WhenChanged @ServerParams -ErrorAction Stop
+            
+            $pwdLastSet = $krbtgt.PasswordLastSet
+            if (-not $pwdLastSet -and $krbtgt.pwdLastSet) {
+                $pwdLastSet = [DateTime]::FromFileTime($krbtgt.pwdLastSet)
+            }
+            
+            $passwordAgeDays = if ($pwdLastSet) { ((Get-Date) - $pwdLastSet).Days } else { -1 }
+            $encValue = $krbtgt.'msDS-SupportedEncryptionTypes'
+            $encTypes = Get-EncryptionTypeString -Value $encValue
+            
+            $assessment.KRBTGT.PasswordAgeDays = $passwordAgeDays
+            $assessment.KRBTGT.PasswordLastSet = $pwdLastSet
+            $assessment.KRBTGT.EncryptionValue = $encValue
+            $assessment.KRBTGT.EncryptionTypes = $encTypes
+            
+            # Assess KRBTGT password age
+            if ($passwordAgeDays -lt 0) {
+                $assessment.KRBTGT.Status = "UNKNOWN"
+                Write-Finding -Status "WARNING" -Message "KRBTGT password last set date could not be determined"
+            }
+            elseif ($passwordAgeDays -gt 365) {
+                $assessment.KRBTGT.Status = "CRITICAL"
+                Write-Finding -Status "CRITICAL" -Message "KRBTGT password is $passwordAgeDays days old (last set: $($pwdLastSet.ToString('yyyy-MM-dd')))" `
+                    -Detail "Microsoft recommends rotating KRBTGT password at least every 180 days. Stale KRBTGT may retain old RC4-only keys."
+            }
+            elseif ($passwordAgeDays -gt 180) {
+                $assessment.KRBTGT.Status = "WARNING"
+                Write-Finding -Status "WARNING" -Message "KRBTGT password is $passwordAgeDays days old (last set: $($pwdLastSet.ToString('yyyy-MM-dd')))" `
+                    -Detail "Consider rotating KRBTGT password (recommended: every 180 days)"
+            }
+            else {
+                $assessment.KRBTGT.Status = "OK"
+                Write-Finding -Status "OK" -Message "KRBTGT password age: $passwordAgeDays days (last set: $($pwdLastSet.ToString('yyyy-MM-dd')))"
+            }
+            
+            # Assess KRBTGT encryption types
+            if ($encValue -and ($encValue -band 0x3) -and -not ($encValue -band 0x18)) {
+                Write-Finding -Status "CRITICAL" -Message "KRBTGT has DES encryption configured without AES" `
+                    -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X')))"
+            }
+            elseif ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
+                Write-Finding -Status "CRITICAL" -Message "KRBTGT has RC4-only encryption configured" `
+                    -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X')))"
+            }
+            elseif (-not $encValue -or $encValue -eq 0) {
+                Write-Finding -Status "INFO" -Message "KRBTGT msDS-SupportedEncryptionTypes: Not Set (uses domain defaults)" `
+                    -Detail "Encryption keys depend on domain functional level and when password was last set"
+            }
+            else {
+                Write-Finding -Status "OK" -Message "KRBTGT encryption types: $encTypes"
+            }
+        }
+        catch {
+            Write-Finding -Status "WARNING" -Message "Could not query KRBTGT account: $($_.Exception.Message)"
+        }
+        
+        # ────────────────────────────────────────────────
+        # 2. Accounts with USE_DES_KEY_ONLY flag
+        # ────────────────────────────────────────────────
+        Write-Host "`n  Checking for accounts with USE_DES_KEY_ONLY flag..." -ForegroundColor Cyan
+        
+        try {
+            # UAC bit 0x200000 = 2097152 = USE_DES_KEY_ONLY
+            $desAccounts = Get-ADUser -Filter 'UserAccountControl -band 2097152' `
+                -Properties UserAccountControl, 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, Enabled @ServerParams -ErrorAction Stop
+            
+            if ($desAccounts) {
+                $desList = @($desAccounts)
+                $assessment.TotalDESFlag = $desList.Count
+                
+                foreach ($acct in $desList) {
+                    $acctInfo = @{
+                        Name            = $acct.SamAccountName
+                        DN              = $acct.DistinguishedName
+                        Enabled         = $acct.Enabled
+                        PasswordLastSet = $acct.PasswordLastSet
+                        EncryptionValue = $acct.'msDS-SupportedEncryptionTypes'
+                        EncryptionTypes = Get-EncryptionTypeString -Value $acct.'msDS-SupportedEncryptionTypes'
+                        HasSPN          = [bool]$acct.ServicePrincipalName
+                        Flag            = "USE_DES_KEY_ONLY"
+                    }
+                    $assessment.DESFlagAccounts += $acctInfo
+                }
+                
+                Write-Finding -Status "CRITICAL" -Message "$($desList.Count) account(s) have USE_DES_KEY_ONLY flag set in UserAccountControl" `
+                    -Detail "These accounts are forced to use DES encryption - immediate remediation required"
+                
+                foreach ($acct in $assessment.DESFlagAccounts) {
+                    $enabledStr = if ($acct.Enabled) { "Enabled" } else { "Disabled" }
+                    Write-Host "    $([char]0x2022) $($acct.Name) ($enabledStr)" -ForegroundColor Red
+                }
+            }
+            else {
+                Write-Finding -Status "OK" -Message "No accounts have USE_DES_KEY_ONLY flag set"
+            }
+        }
+        catch {
+            Write-Finding -Status "WARNING" -Message "Could not query for DES flag accounts: $($_.Exception.Message)"
+        }
+        
+        # ────────────────────────────────────────────────
+        # 3. Service accounts with RC4/DES-only encryption
+        # ────────────────────────────────────────────────
+        Write-Host "`n  Checking service accounts (accounts with SPNs)..." -ForegroundColor Cyan
+        
+        try {
+            # Get user accounts with SPNs (service accounts)
+            $svcAccounts = Get-ADUser -Filter 'ServicePrincipalName -like "*"' `
+                -Properties ServicePrincipalName, 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, DisplayName @ServerParams -ErrorAction Stop
+            
+            if ($svcAccounts) {
+                $svcList = @($svcAccounts)
+                Write-Finding -Status "INFO" -Message "Found $($svcList.Count) service account(s) with SPNs"
+                
+                foreach ($svc in $svcList) {
+                    $encValue = $svc.'msDS-SupportedEncryptionTypes'
+                    $pwdAge = if ($svc.PasswordLastSet) { ((Get-Date) - $svc.PasswordLastSet).Days } else { -1 }
+                    
+                    # Check for RC4-only (has RC4 bit but no AES bits)
+                    if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
+                        $svcInfo = @{
+                            Name            = $svc.SamAccountName
+                            DN              = $svc.DistinguishedName
+                            Enabled         = $svc.Enabled
+                            PasswordLastSet = $svc.PasswordLastSet
+                            PasswordAgeDays = $pwdAge
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            Type            = "RC4-Only Service Account"
+                        }
+                        $assessment.RC4OnlyServiceAccounts += $svcInfo
+                    }
+                    
+                    # Check for DES-only (has DES bits but no AES bits)
+                    if ($encValue -and ($encValue -band 0x3) -and -not ($encValue -band 0x18)) {
+                        $svcInfo = @{
+                            Name            = $svc.SamAccountName
+                            DN              = $svc.DistinguishedName
+                            Enabled         = $svc.Enabled
+                            PasswordLastSet = $svc.PasswordLastSet
+                            PasswordAgeDays = $pwdAge
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            Type            = "DES-Only Service Account"
+                        }
+                        # Avoid duplicate if already caught by RC4 check (e.g., value 0x7 = DES+RC4)
+                        if ($svc.SamAccountName -notin $assessment.RC4OnlyServiceAccounts.Name) {
+                            $assessment.RC4OnlyServiceAccounts += $svcInfo
+                        }
+                    }
+                    
+                    # Check for stale password with RC4 enabled (>365 days old, RC4 bit set, account enabled)
+                    if ($pwdAge -gt 365 -and $encValue -and ($encValue -band 0x4) -and $svc.Enabled) {
+                        $svcInfo = @{
+                            Name            = $svc.SamAccountName
+                            DN              = $svc.DistinguishedName
+                            Enabled         = $svc.Enabled
+                            PasswordLastSet = $svc.PasswordLastSet
+                            PasswordAgeDays = $pwdAge
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            Type            = "Stale Password Service Account"
+                        }
+                        # Avoid duplicates with RC4-only list
+                        if ($svc.SamAccountName -notin $assessment.StaleServiceAccounts.Name) {
+                            $assessment.StaleServiceAccounts += $svcInfo
+                        }
+                    }
+                }
+                
+                $assessment.TotalRC4OnlySvc = $assessment.RC4OnlyServiceAccounts.Count
+                $assessment.TotalStaleSvc = $assessment.StaleServiceAccounts.Count
+                
+                if ($assessment.RC4OnlyServiceAccounts.Count -gt 0) {
+                    Write-Finding -Status "CRITICAL" -Message "$($assessment.RC4OnlyServiceAccounts.Count) service account(s) have RC4/DES-only encryption configured"
+                    foreach ($svc in $assessment.RC4OnlyServiceAccounts) {
+                        $enabledStr = if ($svc.Enabled) { "Enabled" } else { "Disabled" }
+                        Write-Host "    $([char]0x2022) $($svc.Name) ($enabledStr) - $($svc.EncryptionTypes)" -ForegroundColor Red
+                        Write-Host "      SPNs: $($svc.SPNs)" -ForegroundColor Gray
+                    }
+                }
+                else {
+                    Write-Finding -Status "OK" -Message "No service accounts have RC4/DES-only encryption configured"
+                }
+                
+                if ($assessment.StaleServiceAccounts.Count -gt 0) {
+                    Write-Finding -Status "WARNING" -Message "$($assessment.StaleServiceAccounts.Count) service account(s) have stale passwords (>365 days) with RC4 enabled"
+                    foreach ($svc in $assessment.StaleServiceAccounts) {
+                        Write-Host "    $([char]0x2022) $($svc.Name) - Password age: $($svc.PasswordAgeDays) days, Types: $($svc.EncryptionTypes)" -ForegroundColor Yellow
+                    }
+                }
+            }
+            else {
+                Write-Finding -Status "INFO" -Message "No service accounts with SPNs found (excluding computer accounts)"
+            }
+        }
+        catch {
+            Write-Finding -Status "WARNING" -Message "Could not query service accounts: $($_.Exception.Message)"
+        }
+        
+        # ────────────────────────────────────────────────
+        # 4. Managed Service Accounts (gMSA/sMSA)
+        # ────────────────────────────────────────────────
+        Write-Host "`n  Checking Managed Service Accounts (gMSA/sMSA)..." -ForegroundColor Cyan
+        
+        try {
+            $msaAccounts = Get-ADServiceAccount -Filter * `
+                -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, ServicePrincipalName, ObjectClass @ServerParams -ErrorAction Stop
+            
+            if ($msaAccounts) {
+                $msaList = @($msaAccounts)
+                Write-Finding -Status "INFO" -Message "Found $($msaList.Count) Managed Service Account(s)"
+                
+                foreach ($msa in $msaList) {
+                    $encValue = $msa.'msDS-SupportedEncryptionTypes'
+                    
+                    # Check for RC4-only (has RC4 bit but no AES bits)
+                    if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
+                        $msaInfo = @{
+                            Name            = $msa.SamAccountName
+                            DN              = $msa.DistinguishedName
+                            Enabled         = $msa.Enabled
+                            PasswordLastSet = $msa.PasswordLastSet
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            ObjectClass     = $msa.ObjectClass
+                            Type            = if ($msa.ObjectClass -eq 'msDS-GroupManagedServiceAccount') { "gMSA" } else { "sMSA" }
+                        }
+                        $assessment.RC4OnlyMSAs += $msaInfo
+                    }
+                }
+                
+                $assessment.TotalRC4OnlyMSA = $assessment.RC4OnlyMSAs.Count
+                
+                if ($assessment.RC4OnlyMSAs.Count -gt 0) {
+                    Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
+                    foreach ($msa in $assessment.RC4OnlyMSAs) {
+                        Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)" -ForegroundColor Yellow
+                    }
+                }
+                else {
+                    Write-Finding -Status "OK" -Message "All Managed Service Accounts use AES or default encryption"
+                }
+            }
+            else {
+                Write-Finding -Status "INFO" -Message "No Managed Service Accounts found"
+            }
+        }
+        catch {
+            if ($_.Exception.Message -match "cmdlet.*not recognized|not loaded|is not recognized") {
+                Write-Finding -Status "INFO" -Message "Get-ADServiceAccount not available - skipping MSA check"
+            }
+            else {
+                Write-Finding -Status "WARNING" -Message "Could not query Managed Service Accounts: $($_.Exception.Message)"
+            }
+        }
+        
+        # ────────────────────────────────────────────────
+        # Summary
+        # ────────────────────────────────────────────────
+        Write-Host ""
+        Write-Finding -Status "INFO" -Message "Account Encryption Assessment Summary:"
+        
+        $krbtgtColor = switch ($assessment.KRBTGT.Status) {
+            "OK" { "Green" }
+            "WARNING" { "Yellow" }
+            "CRITICAL" { "Red" }
+            default { "Gray" }
+        }
+        Write-Host "  $([char]0x2022) KRBTGT Password Age: $($assessment.KRBTGT.PasswordAgeDays) days" -ForegroundColor $krbtgtColor
+        Write-Host "  $([char]0x2022) USE_DES_KEY_ONLY Accounts: $($assessment.TotalDESFlag)" -ForegroundColor $(if ($assessment.TotalDESFlag -gt 0) { "Red" } else { "Green" })
+        Write-Host "  $([char]0x2022) RC4/DES-Only Service Accounts: $($assessment.TotalRC4OnlySvc)" -ForegroundColor $(if ($assessment.TotalRC4OnlySvc -gt 0) { "Red" } else { "Green" })
+        Write-Host "  $([char]0x2022) RC4-Only Managed Service Accounts: $($assessment.TotalRC4OnlyMSA)" -ForegroundColor $(if ($assessment.TotalRC4OnlyMSA -gt 0) { "Yellow" } else { "Green" })
+        Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
+    }
+    catch {
+        $errorMsg = $_.Exception.Message
+        if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
+            Write-Finding -Status "CRITICAL" -Message $errorMsg
+        }
+        elseif ($ServerParams.ContainsKey('Server')) {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing accounts (Attempted DC: $($ServerParams['Server'])): $errorMsg"
+        }
+        else {
+            Write-Finding -Status "CRITICAL" -Message "Error analyzing accounts: $errorMsg"
+        }
+    }
+    
+    return $assessment
+}
+
 function Show-AssessmentSummary {
     param(
         [Parameter(Mandatory = $true)]
@@ -1032,6 +1380,106 @@ function Show-AssessmentSummary {
         }
     }
     
+    # 4. KRBTGT & Account Summary Table
+    if ($Results.Accounts) {
+        Write-Host "`n`n  KRBTGT & ACCOUNT ENCRYPTION SUMMARY" -ForegroundColor Cyan
+        Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
+        
+        # KRBTGT row
+        $krbtgtTable = @()
+        $krbtgtStatus = $Results.Accounts.KRBTGT.Status
+        $krbtgtTable += [PSCustomObject]@{
+            'Account'          = 'krbtgt'
+            'Type'             = 'KRBTGT'
+            'Status'           = $krbtgtStatus
+            'Password Age'     = if ($Results.Accounts.KRBTGT.PasswordAgeDays -ge 0) { "$($Results.Accounts.KRBTGT.PasswordAgeDays) days" } else { "Unknown" }
+            'Encryption Types' = if ($Results.Accounts.KRBTGT.EncryptionTypes) { $Results.Accounts.KRBTGT.EncryptionTypes } else { "Not Set" }
+        }
+        
+        # DES flag accounts
+        foreach ($acct in $Results.Accounts.DESFlagAccounts) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $acct.Name
+                'Type'             = 'USE_DES_KEY_ONLY'
+                'Status'           = 'CRITICAL'
+                'Password Age'     = if ($acct.PasswordLastSet) { "$([int]((Get-Date) - $acct.PasswordLastSet).TotalDays) days" } else { "Unknown" }
+                'Encryption Types' = $acct.EncryptionTypes
+            }
+        }
+        
+        # RC4/DES-only service accounts
+        foreach ($svc in $Results.Accounts.RC4OnlyServiceAccounts) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $svc.Name
+                'Type'             = $svc.Type
+                'Status'           = 'CRITICAL'
+                'Password Age'     = if ($svc.PasswordAgeDays -ge 0) { "$($svc.PasswordAgeDays) days" } else { "Unknown" }
+                'Encryption Types' = $svc.EncryptionTypes
+            }
+        }
+        
+        # Stale password service accounts (not already in RC4-only list)
+        foreach ($svc in $Results.Accounts.StaleServiceAccounts) {
+            if ($svc.Name -notin $Results.Accounts.RC4OnlyServiceAccounts.Name) {
+                $krbtgtTable += [PSCustomObject]@{
+                    'Account'          = $svc.Name
+                    'Type'             = 'Stale Password SPN'
+                    'Status'           = 'WARNING'
+                    'Password Age'     = "$($svc.PasswordAgeDays) days"
+                    'Encryption Types' = $svc.EncryptionTypes
+                }
+            }
+        }
+        
+        # RC4-only MSAs
+        foreach ($msa in $Results.Accounts.RC4OnlyMSAs) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $msa.Name
+                'Type'             = "RC4-Only $($msa.Type)"
+                'Status'           = 'WARNING'
+                'Password Age'     = if ($msa.PasswordLastSet) { "$([int]((Get-Date) - $msa.PasswordLastSet).TotalDays) days" } else { "Auto-managed" }
+                'Encryption Types' = $msa.EncryptionTypes
+            }
+        }
+        
+        # Display table with color coding
+        $krbtgtTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
+            if ($_ -match "CRITICAL") {
+                Write-Host "  $_" -ForegroundColor Red
+            }
+            elseif ($_ -match "WARNING") {
+                Write-Host "  $_" -ForegroundColor Yellow
+            }
+            elseif ($_ -match "^.*OK.*$" -and $_ -notmatch "Account|^-+$") {
+                Write-Host "  $_" -ForegroundColor Green
+            }
+            elseif ($_ -match "Account|^-+$") {
+                Write-Host "  $_" -ForegroundColor Cyan
+            }
+            else {
+                Write-Host "  $_"
+            }
+        }
+        
+        # Summary statistics
+        Write-Host "`n  Summary:" -ForegroundColor Cyan
+        Write-Host "    KRBTGT Status: $($Results.Accounts.KRBTGT.Status)" -ForegroundColor $(
+            switch ($Results.Accounts.KRBTGT.Status) { "OK" { "Green" } "WARNING" { "Yellow" } "CRITICAL" { "Red" } default { "Gray" } }
+        )
+        if ($Results.Accounts.TotalDESFlag -gt 0) {
+            Write-Host "    USE_DES_KEY_ONLY Accounts: $($Results.Accounts.TotalDESFlag)" -ForegroundColor Red
+        }
+        if ($Results.Accounts.TotalRC4OnlySvc -gt 0) {
+            Write-Host "    RC4/DES-Only Service Accounts: $($Results.Accounts.TotalRC4OnlySvc)" -ForegroundColor Red
+        }
+        if ($Results.Accounts.TotalRC4OnlyMSA -gt 0) {
+            Write-Host "    RC4-Only MSAs: $($Results.Accounts.TotalRC4OnlyMSA)" -ForegroundColor Yellow
+        }
+        if ($Results.Accounts.TotalStaleSvc -gt 0) {
+            Write-Host "    Stale Password Service Accounts: $($Results.Accounts.TotalStaleSvc)" -ForegroundColor Yellow
+        }
+    }
+    
     Write-Host ""
 }
 
@@ -1125,7 +1573,35 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    If set to 0x18 or 0x1C: Explicitly configured for AES (secure)
    If includes 0x4: RC4 enabled (investigate)
 
-6. Windows Server 2025 Preparation
+6. KRBTGT Account & Service Account Hygiene
+   $([string]([char]0x2500) * 60)
+   
+   KRBTGT Password Rotation:
+   $([char]0x2022) The KRBTGT password encrypts all TGTs in the domain
+   $([char]0x2022) If never rotated since pre-AES era, only RC4/DES keys may exist
+   $([char]0x2022) Microsoft recommends rotation at least every 180 days
+   $([char]0x2022) Always rotate TWICE (first rotation, wait for replication, second rotation)
+   
+   Check KRBTGT:
+   PS> Get-ADUser krbtgt -Properties PasswordLastSet, msDS-SupportedEncryptionTypes |
+       Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
+   
+   Service Accounts with RC4/DES:
+   PS> Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Properties `
+       msDS-SupportedEncryptionTypes, PasswordLastSet, ServicePrincipalName |
+       Where-Object { `$_.'msDS-SupportedEncryptionTypes' -band 4 -and
+                       -not (`$_.'msDS-SupportedEncryptionTypes' -band 0x18) } |
+       Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
+   
+   Remove USE_DES_KEY_ONLY flag:
+   PS> Get-ADUser -Filter 'UserAccountControl -band 2097152' |
+       ForEach-Object { Set-ADAccountControl `$_ -UseDESKeyOnly `$false }
+   
+   Update service accounts to AES:
+   PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+   # Then reset the password to generate new AES keys
+
+7. Windows Server 2025 Preparation
    $([string]([char]0x2500) * 60)
    
    Windows Server 2025 disables RC4 fallback entirely.
@@ -1134,9 +1610,11 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2713) Monitoring event logs for 30+ days to detect RC4 usage
    $([char]0x2713) Identifying and upgrading systems that can't handle AES
    $([char]0x2713) Ensuring all trusts and service accounts use AES
+   $([char]0x2713) Rotating KRBTGT password to generate current AES keys
+   $([char]0x2713) Removing USE_DES_KEY_ONLY flag from all accounts
    $([char]0x2713) Testing in lab environment before production deployment
 
-7. Recommended Monitoring Schedule
+8. Recommended Monitoring Schedule
    $([string]([char]0x2500) * 60)
    
    $([char]0x2022) Weekly: Check for RC4/DES events (automated alert)
@@ -1172,6 +1650,7 @@ Write-Host "  $([char]0x2713) Fast execution (<5 minutes vs 5+ hours)" -Foregrou
 Write-Host "  $([char]0x2713) Post-Nov 2022 trust logic (AES default when not set)" -ForegroundColor Gray
 Write-Host "  $([char]0x2713) Realistic computer object assessment (no unnecessary enumeration)" -ForegroundColor Gray
 Write-Host "  $([char]0x2713) Event log analysis for actual usage vs theoretical risk" -ForegroundColor Gray
+Write-Host "  $([char]0x2713) KRBTGT & service account encryption assessment" -ForegroundColor Gray
 Write-Host "  $([char]0x2713) Actionable guidance for manual validation`n" -ForegroundColor Gray
 
 # Set up parameters for AD commands
@@ -1219,6 +1698,7 @@ $results = @{
     Domain            = if ($Domain) { $Domain } else { (Get-ADDomain).DNSRoot }
     DomainControllers = $null
     Trusts            = $null
+    Accounts          = $null
     EventLogs         = $null
     OverallStatus     = "Unknown"
     Recommendations   = @()
@@ -1231,7 +1711,10 @@ try {
     # 2. Trust Assessment
     $results.Trusts = Get-TrustEncryptionAssessment -ServerParams $serverParams
     
-    # 3. Event Log Analysis (if requested)
+    # 3. KRBTGT & Account Assessment
+    $results.Accounts = Get-AccountEncryptionAssessment -ServerParams $serverParams
+    
+    # 4. Event Log Analysis (if requested)
     if ($AnalyzeEventLogs) {
         $results.EventLogs = Get-EventLogEncryptionAnalysis -ServerParams $serverParams -Hours $EventLogHours
     }
@@ -1242,7 +1725,7 @@ try {
         Write-Host "  Example: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 48" -ForegroundColor Gray
     }
     
-    # 4. Overall Assessment
+    # 5. Overall Assessment
     Write-Section "Overall Security Assessment"
     
     $criticalIssues = 0
@@ -1280,6 +1763,38 @@ try {
         $results.Recommendations += "CRITICAL: RC4 tickets detected in event logs - active usage detected"
     }
     
+    # Check for KRBTGT and account issues
+    if ($results.Accounts) {
+        if ($results.Accounts.KRBTGT.Status -eq "CRITICAL") {
+            $criticalIssues++
+            $results.Recommendations += "CRITICAL: KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - rotate immediately"
+        }
+        elseif ($results.Accounts.KRBTGT.Status -eq "WARNING") {
+            $warnings++
+            $results.Recommendations += "WARNING: KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - consider rotation"
+        }
+        
+        if ($results.Accounts.TotalDESFlag -gt 0) {
+            $criticalIssues++
+            $results.Recommendations += "CRITICAL: $($results.Accounts.TotalDESFlag) account(s) have USE_DES_KEY_ONLY flag - remove flag immediately"
+        }
+        
+        if ($results.Accounts.TotalRC4OnlySvc -gt 0) {
+            $criticalIssues++
+            $results.Recommendations += "CRITICAL: $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only encryption"
+        }
+        
+        if ($results.Accounts.TotalRC4OnlyMSA -gt 0) {
+            $warnings++
+            $results.Recommendations += "WARNING: $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption"
+        }
+        
+        if ($results.Accounts.TotalStaleSvc -gt 0) {
+            $warnings++
+            $results.Recommendations += "WARNING: $($results.Accounts.TotalStaleSvc) service account(s) have stale passwords (>365 days) with RC4 enabled"
+        }
+    }
+    
     # Determine overall status
     if ($criticalIssues -gt 0) {
         $results.OverallStatus = "CRITICAL"
@@ -1308,10 +1823,10 @@ try {
         Write-Host "  Review the detailed troubleshooting guidance in the Event Log Analysis section above" -ForegroundColor Yellow
     }
     
-    # 4. Display Summary Tables
+    # 6. Display Summary Tables
     Show-AssessmentSummary -Results $results
     
-    # 5. Manual Validation Guidance (if requested)
+    # 7. Manual Validation Guidance (if requested)
     if ($IncludeGuidance) {
         Show-ManualValidationGuidance
     }
@@ -1319,7 +1834,7 @@ try {
         Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F4A1)) Tip: Use -IncludeGuidance to see detailed manual validation steps and monitoring setup." -ForegroundColor Cyan
     }
     
-    # 6. Export Results (if requested)
+    # 8. Export Results (if requested)
     if ($ExportResults) {
         Write-Section "Exporting Results"
         
@@ -1361,6 +1876,50 @@ try {
                 Status          = $trust.Status
                 EncryptionTypes = $trust.EncryptionTypes
                 EncryptionValue = $trust.EncryptionValue
+            }
+        }
+        
+        # Add KRBTGT details
+        if ($results.Accounts) {
+            $csvData += [PSCustomObject]@{
+                Type            = "KRBTGT"
+                Name            = "krbtgt"
+                Status          = "$($results.Accounts.KRBTGT.Status) (Password age: $($results.Accounts.KRBTGT.PasswordAgeDays) days)"
+                EncryptionTypes = $results.Accounts.KRBTGT.EncryptionTypes
+                EncryptionValue = $results.Accounts.KRBTGT.EncryptionValue
+            }
+            
+            # Add DES flag accounts
+            foreach ($acct in $results.Accounts.DESFlagAccounts) {
+                $csvData += [PSCustomObject]@{
+                    Type            = "DES Flag Account"
+                    Name            = $acct.Name
+                    Status          = "USE_DES_KEY_ONLY"
+                    EncryptionTypes = $acct.EncryptionTypes
+                    EncryptionValue = $acct.EncryptionValue
+                }
+            }
+            
+            # Add RC4/DES-only service accounts
+            foreach ($svc in $results.Accounts.RC4OnlyServiceAccounts) {
+                $csvData += [PSCustomObject]@{
+                    Type            = $svc.Type
+                    Name            = $svc.Name
+                    Status          = "$($svc.Type) (Password age: $($svc.PasswordAgeDays) days)"
+                    EncryptionTypes = $svc.EncryptionTypes
+                    EncryptionValue = $svc.EncryptionValue
+                }
+            }
+            
+            # Add RC4-only MSAs
+            foreach ($msa in $results.Accounts.RC4OnlyMSAs) {
+                $csvData += [PSCustomObject]@{
+                    Type            = "RC4-Only $($msa.Type)"
+                    Name            = $msa.Name
+                    Status          = "RC4-Only"
+                    EncryptionTypes = $msa.EncryptionTypes
+                    EncryptionValue = $msa.EncryptionValue
+                }
             }
         }
         

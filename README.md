@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.1.0-orange)
+![Version](https://img.shields.io/badge/version-2.2.0-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -14,6 +14,20 @@ A powerful and efficient PowerShell toolkit for assessing DES and RC4 Kerberos e
 ## Overview
 
 A completely redesigned tool for assessing DES and RC4 encryption usage in Active Directory environments, addressing critical limitations discovered in v1.0 and incorporating post-November 2022 Microsoft Kerberos security updates.
+
+## What's New in v2.2.0
+
+### KRBTGT & Service Account Encryption Assessment
+
+🎯 **KRBTGT Password Age Check** - Detects stale KRBTGT passwords that may retain old RC4-only encryption keys  
+🎯 **USE_DES_KEY_ONLY Detection** - Finds accounts with the UserAccountControl flag forcing DES encryption  
+🎯 **Service Account RC4/DES Check** - Identifies SPN accounts with RC4-only or DES-only `msDS-SupportedEncryptionTypes`  
+🎯 **gMSA/sMSA Encryption Review** - Checks Managed Service Accounts for RC4-only configurations  
+🎯 **Stale Password Detection** - Flags service accounts with passwords >365 days old and RC4 enabled  
+🎯 **Account Summary Table** - New summary table showing KRBTGT, DES flag, and service account findings  
+🎯 **Enhanced Guidance** - Added KRBTGT rotation and service account remediation steps to manual guidance
+
+### Previous Versions
 
 ## What's New in v2.1.0
 
@@ -28,6 +42,16 @@ A completely redesigned tool for assessing DES and RC4 encryption usage in Activ
 🎯 **Summary Tables** - Comprehensive summary tables showing all DC findings at end of assessment
 
 ### Version History
+
+**v2.2.0** (February 2026)
+- KRBTGT account password age and encryption type assessment
+- USE_DES_KEY_ONLY UserAccountControl flag detection across all user accounts
+- Service account (SPN) RC4/DES-only encryption detection
+- gMSA/sMSA Managed Service Account encryption review
+- Stale password service account detection (>365 days with RC4)
+- New KRBTGT & Account summary table in assessment output
+- KRBTGT rotation and service account remediation guidance
+- CSV/JSON export now includes account assessment data
 
 **v2.1.0** (December 2025)
 - WinRM-first approach for event log queries (Invoke-Command before Get-WinEvent -ComputerName)
@@ -69,6 +93,7 @@ Real-world deployment revealed several critical issues:
 ✅ **Fast Execution**: < 5 minutes vs 5+ hours  
 ✅ **Post-Nov 2022 Logic**: Accurate trust and computer encryption assessment  
 ✅ **Event-Based Analysis**: Detects actual DES/RC4 usage from Kerberos tickets  
+✅ **KRBTGT & Account Assessment**: Checks KRBTGT password age, service accounts, gMSA/sMSA, and DES flags  
 ✅ **Clear Guidance**: Actionable manual validation steps and SIEM queries  
 ✅ **Realistic Assessment**: No unnecessary computer object enumeration  
 ✅ **Full Forest Support**: Assess all domains and all DCs automatically  
@@ -151,6 +176,10 @@ Get-ADDomain
 - Domain Controller encryption configuration
 - GPO Kerberos policy analysis
 - Trust encryption assessment (post-Nov 2022 logic)
+- KRBTGT account password age and encryption types
+- Service account (SPN) RC4/DES encryption detection
+- USE_DES_KEY_ONLY flag detection
+- gMSA/sMSA encryption configuration
 - Overall security posture
 - **Runtime:** < 2 minutes
 
@@ -167,6 +196,7 @@ Get-ADDomain
 - GPO validation procedures
 - Computer object assessment (when needed)
 - Trust validation steps
+- KRBTGT rotation and service account remediation
 - Windows Server 2025 preparation
 
 ## Sample Output
@@ -465,6 +495,27 @@ Exporting Results
     "DefaultAES": 1,
     "RC4Risk": 0,
     "DESRisk": 0
+  },
+  "Accounts": {
+    "KRBTGT": {
+      "PasswordAgeDays": 95,
+      "PasswordLastSet": "2025-11-15T08:30:00",
+      "EncryptionValue": null,
+      "EncryptionTypes": "Not Set (Default)",
+      "Status": "OK"
+    },
+    "TotalDESFlag": 0,
+    "TotalRC4OnlySvc": 1,
+    "TotalRC4OnlyMSA": 0,
+    "TotalStaleSvc": 0,
+    "RC4OnlyServiceAccounts": [
+      {
+        "Name": "SQL-SERVICE",
+        "EncryptionTypes": "RC4-HMAC",
+        "EncryptionValue": 4,
+        "Type": "RC4-Only Service Account"
+      }
+    ]
   },
   "EventLogs": {
     "EventsAnalyzed": 15432,
@@ -1524,18 +1575,6 @@ Get-ADComputer "COMPUTERNAME" -Properties msDS-SupportedEncryptionTypes
 Get-ADComputer -Filter 'msDS-SupportedEncryptionTypes -band 4' -Properties msDS-SupportedEncryptionTypes
 ```
 
-### Service Accounts (Use Event Logs Instead)
-
-**Why:** Service account SPN enumeration is slow and doesn't show actual usage.
-
-**Better Approach:** Event log analysis shows which accounts actually request RC4/DES tickets.
-
-### KRBTGT Password Age
-
-**Why:** This is a general AD hygiene issue, not specific to DES/RC4 assessment.
-
-**Recommendation:** Use dedicated KRBTGT rotation tools.
-
 ## Event Log Monitoring Setup
 
 ### Enable Kerberos Auditing
@@ -1988,7 +2027,18 @@ Overall Security Assessment
 
 ## Version History
 
-### v2.0.1 (Current - December 2025)
+### v2.2.0 (Current - February 2026)
+- **NEW:** KRBTGT account password age and encryption type assessment
+- **NEW:** USE_DES_KEY_ONLY UserAccountControl flag detection
+- **NEW:** Service account (SPN) RC4/DES-only encryption detection
+- **NEW:** gMSA/sMSA Managed Service Account encryption review
+- **NEW:** Stale password service account detection (>365 days with RC4 enabled)
+- **NEW:** KRBTGT & Account summary table in assessment output
+- **NEW:** KRBTGT rotation and service account remediation guidance
+- **IMPROVED:** CSV/JSON export includes account assessment data
+- **IMPROVED:** Manual validation guidance with KRBTGT hygiene steps
+
+### v2.1.0 (December 2025)
 - **NEW:** Remote event log access failure tracking and troubleshooting
 - **NEW:** Comprehensive end-of-assessment summary for RPC/WinRM issues
 - **NEW:** Test script for validating error handling (Test-EventLogFailureHandling.ps1)
