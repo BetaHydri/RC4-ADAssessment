@@ -167,10 +167,11 @@ Get-ADDomain
 
 ### Core Scripts
 
-1. **RC4_DES_Assessment.ps1** - Main assessment tool (v2.1.0)
+1. **RC4_DES_Assessment.ps1** - Main assessment tool (v2.2.0)
 2. **Assess-ADForest.ps1** - Forest-wide assessment wrapper (v2.1.0)
 3. **Compare-Assessments.ps1** - Compare assessment results over time
 4. **Test-EventLogFailureHandling.ps1** - Test script for event log error handling validation
+5. **Tests/** - Pester unit tests for all scripts (139 tests)
 
 ### Fast Assessment (Default - Quick Scan)
 - Domain Controller encryption configuration
@@ -196,7 +197,9 @@ Get-ADDomain
 - GPO validation procedures
 - Computer object assessment (when needed)
 - Trust validation steps
-- KRBTGT rotation and service account remediation
+- **KRBTGT rotation step-by-step procedure** (pre-checks, double rotation, replication wait, post-validation)
+- Service account remediation (RC4/DES removal, AES migration)
+- USE_DES_KEY_ONLY flag cleanup
 - Windows Server 2025 preparation
 
 ## Sample Output
@@ -209,7 +212,7 @@ PS> .\RC4_DES_Assessment.ps1 -QuickScan
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.1
+DES/RC4 Kerberos Encryption Assessment v2.2.0
 ================================================================================
 
 This tool performs a fast, accurate assessment of DES and RC4 encryption usage
@@ -221,6 +224,7 @@ Key improvements over v1.0:
   ✓ Post-Nov 2022 trust logic (AES default when not set)
   ✓ Realistic computer object assessment (no unnecessary enumeration)
   ✓ Event log analysis for actual usage vs theoretical risk
+  ✓ KRBTGT & service account encryption assessment
   ✓ Actionable guidance for manual validation
 
 
@@ -266,6 +270,22 @@ Trust Encryption Assessment (Post-November 2022 Logic)
   they default to AES encryption. No action needed for these trusts.
 
 
+KRBTGT & Account Encryption Assessment
+────────────────────────────────────────────────────────────────
+  Checking KRBTGT account...
+✅ KRBTGT password age: 90 days (last set: 2025-09-05)
+✅ KRBTGT encryption types: AES128-HMAC, AES256-HMAC
+
+  Checking for accounts with USE_DES_KEY_ONLY flag...
+✅ No accounts with USE_DES_KEY_ONLY flag found
+
+  Checking service accounts (SPN) encryption...
+✅ No service accounts with RC4-only encryption
+
+  Checking Managed Service Accounts...
+✅ No Managed Service Accounts with RC4-only encryption
+
+
 Overall Security Assessment
 ────────────────────────────────────────────────────────────────
 ✅ No DES/RC4 usage detected - environment is secure
@@ -294,7 +314,7 @@ PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 48
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.0
+DES/RC4 Kerberos Encryption Assessment v2.2.0
 ================================================================================
 
 [... DC and Trust assessment similar to Example 1 ...]
@@ -743,6 +763,9 @@ Overall Assessment
                             ▼
     For DCs:  Update GPO to enforce AES-only
     For Trusts: Set msDS-SupportedEncryptionTypes to 0x18 (AES)
+    For KRBTGT: Double-rotate password (see -IncludeGuidance)
+    For SvcAccts: Remove RC4/DES, set AES, reset password
+    For DES Flags: Remove USE_DES_KEY_ONLY from all accounts
     For Apps: Work with vendors for AES support
     For Legacy: Plan migration or containment strategy
                             │
@@ -1351,6 +1374,98 @@ Set-ADComputer DC03 -Replace @{'msDS-SupportedEncryptionTypes'=24}
 
 **Action:** URGENT - Upgrade or decommission this DC immediately. DES is broken encryption.
 
+### KRBTGT & Account Assessment
+
+**Scenario 1: Healthy KRBTGT and Clean Accounts**
+```
+KRBTGT & Account Encryption Assessment
+────────────────────────────────────────────────────────────────
+  Checking KRBTGT account...
+✅ KRBTGT password age: 45 days (last set: 2026-01-04)
+✅ KRBTGT encryption types: AES128-HMAC, AES256-HMAC
+
+  Checking for accounts with USE_DES_KEY_ONLY flag...
+✅ No accounts with USE_DES_KEY_ONLY flag found
+
+  Checking service accounts (SPN) encryption...
+✅ No service accounts with RC4-only encryption
+
+  Checking Managed Service Accounts...
+✅ No Managed Service Accounts with RC4-only encryption
+```
+
+**What it means:** KRBTGT password is fresh, uses AES, and no accounts have legacy encryption flags. No action needed.
+
+---
+
+**Scenario 2: KRBTGT Password Age WARNING**
+```
+  Checking KRBTGT account...
+⚠️  KRBTGT password is 250 days old (last set: 2025-06-13)
+    Consider rotating KRBTGT password (recommended: every 180 days)
+```
+
+**What it means:** KRBTGT password hasn't been rotated in over 180 days. While not critical, it should be rotated soon.
+
+**Action:** Use `-IncludeGuidance` to see the full KRBTGT rotation procedure, or follow these steps:
+```powershell
+# 1. Verify all DCs are replicating
+repadmin /replsummary
+
+# 2. First rotation
+Reset-ADAccountPassword -Identity krbtgt -NewPassword `
+  (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset
+
+# 3. Wait 10-12 hours for TGT expiry + replication
+
+# 4. Second rotation
+Reset-ADAccountPassword -Identity krbtgt -NewPassword `
+  (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset
+```
+
+---
+
+**Scenario 3: CRITICAL - Stale KRBTGT with RC4-Only Encryption**
+```
+  Checking KRBTGT account...
+❌ KRBTGT password is 1,200 days old (last set: 2022-10-15)
+   Microsoft recommends rotating KRBTGT password at least every 180 days.
+   Stale KRBTGT may retain old RC4-only keys.
+❌ KRBTGT has RC4-only encryption configured
+   Encryption types: RC4-HMAC (Value: 0x4)
+```
+
+**What it means:** The KRBTGT password predates the November 2022 AES updates and only has RC4 keys. All TGTs in this domain are encrypted with RC4. This is a critical security risk.
+
+**Action:** Rotate the KRBTGT password immediately using the double-rotation procedure (see `-IncludeGuidance`). After rotation, new AES keys will be generated.
+
+---
+
+**Scenario 4: USE_DES_KEY_ONLY Flag and RC4-Only Service Accounts**
+```
+  Checking for accounts with USE_DES_KEY_ONLY flag...
+❌ Found 2 account(s) with USE_DES_KEY_ONLY flag:
+    svc_legacy    Enabled:True   Flag:USE_DES_KEY_ONLY  Encryption:DES-CBC-CRC, DES-CBC-MD5
+    test_des      Enabled:False  Flag:USE_DES_KEY_ONLY  Encryption:Not Set (Default)
+
+  Checking service accounts (SPN) encryption...
+⚠️  Found 1 service account(s) with RC4-only encryption:
+    svc_sql       Encryption:RC4-HMAC  SPN:MSSQLSvc/sqlserver.contoso.com:1433
+```
+
+**What it means:** Two accounts are forced to use DES (critically weak), and one service account only supports RC4.
+
+**Action:**
+```powershell
+# Remove USE_DES_KEY_ONLY flag
+Get-ADUser -Filter 'UserAccountControl -band 2097152' |
+  ForEach-Object { Set-ADAccountControl $_ -UseDESKeyOnly $false }
+
+# Update service account to AES
+Set-ADUser "svc_sql" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+# Then reset the password to generate new AES keys
+```
+
 ### Trust Assessment
 
 **Scenario 1: Post-Nov 2022 Secure Default**
@@ -1861,7 +1976,7 @@ Same as original RC4_AD_SCAN project.
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.0
+DES/RC4 Kerberos Encryption Assessment v2.2.0
 ================================================================================
 
 Domain Controller Encryption Configuration
