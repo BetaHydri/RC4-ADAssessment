@@ -1796,64 +1796,64 @@ try {
     # Check for DES
     if ($results.DomainControllers.DESConfigured -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: Remove DES encryption from $($results.DomainControllers.DESConfigured) Domain Controller(s)"
+        $results.Recommendations += "CRITICAL: [$($results.Domain)] Remove DES encryption from $($results.DomainControllers.DESConfigured) Domain Controller(s)"
     }
     
     if ($results.Trusts.DESRisk -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: Remove DES encryption from $($results.Trusts.DESRisk) trust(s)"
+        $results.Recommendations += "CRITICAL: [$($results.Domain)] Remove DES encryption from $($results.Trusts.DESRisk) trust(s)"
     }
     
     if ($results.EventLogs -and $results.EventLogs.DESTickets -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: DES tickets detected in event logs - active usage detected"
+        $results.Recommendations += "CRITICAL: [$($results.Domain)] DES tickets detected in event logs - active usage detected"
     }
     
     # Check for RC4
     if ($results.DomainControllers.RC4Configured -gt 0) {
         $warnings++
-        $results.Recommendations += "WARNING: Remove RC4 encryption from $($results.DomainControllers.RC4Configured) Domain Controller(s)"
+        $results.Recommendations += "WARNING: [$($results.Domain)] Remove RC4 encryption from $($results.DomainControllers.RC4Configured) Domain Controller(s)"
     }
     
     if ($results.Trusts.RC4Risk -gt 0) {
         $warnings++
-        $results.Recommendations += "WARNING: $($results.Trusts.RC4Risk) trust(s) have RC4 enabled"
+        $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Trusts.RC4Risk) trust(s) have RC4 enabled"
     }
     
     if ($results.EventLogs -and $results.EventLogs.RC4Tickets -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: RC4 tickets detected in event logs - active usage detected"
+        $results.Recommendations += "CRITICAL: [$($results.Domain)] RC4 tickets detected in event logs - active usage detected"
     }
     
     # Check for KRBTGT and account issues
     if ($results.Accounts) {
         if ($results.Accounts.KRBTGT.Status -eq "CRITICAL") {
             $criticalIssues++
-            $results.Recommendations += "CRITICAL: KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - rotate immediately"
+            $results.Recommendations += "CRITICAL: [$($results.Domain)] KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - rotate immediately"
         }
         elseif ($results.Accounts.KRBTGT.Status -eq "WARNING") {
             $warnings++
-            $results.Recommendations += "WARNING: KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - consider rotation"
+            $results.Recommendations += "WARNING: [$($results.Domain)] KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - consider rotation"
         }
         
         if ($results.Accounts.TotalDESFlag -gt 0) {
             $criticalIssues++
-            $results.Recommendations += "CRITICAL: $($results.Accounts.TotalDESFlag) account(s) have USE_DES_KEY_ONLY flag - remove flag immediately"
+            $results.Recommendations += "CRITICAL: [$($results.Domain)] $($results.Accounts.TotalDESFlag) account(s) have USE_DES_KEY_ONLY flag - remove flag immediately"
         }
         
         if ($results.Accounts.TotalRC4OnlySvc -gt 0) {
             $criticalIssues++
-            $results.Recommendations += "CRITICAL: $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only encryption"
+            $results.Recommendations += "CRITICAL: [$($results.Domain)] $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only encryption"
         }
         
         if ($results.Accounts.TotalRC4OnlyMSA -gt 0) {
             $warnings++
-            $results.Recommendations += "WARNING: $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption"
+            $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption"
         }
         
         if ($results.Accounts.TotalStaleSvc -gt 0) {
             $warnings++
-            $results.Recommendations += "WARNING: $($results.Accounts.TotalStaleSvc) service account(s) have stale passwords (>365 days) with RC4 enabled"
+            $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Accounts.TotalStaleSvc) service account(s) have stale passwords (>365 days) with RC4 enabled"
         }
     }
     

@@ -351,7 +351,7 @@ Overall Security Assessment
 ❌ Critical security issues detected requiring immediate attention
 
   Recommendations:
-    • CRITICAL: RC4 tickets detected in event logs - active usage detected
+    • CRITICAL: [contoso.com] RC4 tickets detected in event logs - active usage detected
 
 Assessment Complete
 ================================================================================
@@ -458,7 +458,7 @@ Overall Security Assessment
 ❌ Critical security issues detected requiring immediate attention
 
   Recommendations:
-    • CRITICAL: RC4 tickets detected in event logs - active usage detected
+    • CRITICAL: [contoso.com] RC4 tickets detected in event logs - active usage detected
 
   ⚠️  Note: Event log data is incomplete due to 2 DC(s) being inaccessible
      Review the detailed troubleshooting guidance in the Event Log Analysis section above
@@ -546,7 +546,7 @@ Exporting Results
     "FailedDCs": []
   },
   "Recommendations": [
-    "CRITICAL: RC4 tickets detected in event logs - active usage detected"
+    "CRITICAL: [contoso.com] RC4 tickets detected in event logs - active usage detected"
   ]
 }
 ```
@@ -1641,8 +1641,8 @@ Overall Security Assessment
 ⚠️  Security warnings detected - remediation recommended
 
   Recommendations:
-    • WARNING: Remove RC4 encryption from 1 Domain Controller(s)
-    • WARNING: 1 trust(s) have RC4 enabled
+    • WARNING: [contoso.com] Remove RC4 encryption from 1 Domain Controller(s)
+    • WARNING: [contoso.com] 1 trust(s) have RC4 enabled
 
   Overall Status: WARNING
 ```
@@ -1656,9 +1656,9 @@ Overall Security Assessment
 ❌ Critical security issues detected requiring immediate attention
 
   Recommendations:
-    • CRITICAL: Remove DES encryption from 1 Domain Controller(s)
-    • CRITICAL: RC4 tickets detected in event logs - active usage detected
-    • WARNING: Remove RC4 encryption from 2 Domain Controller(s)
+    • CRITICAL: [contoso.com] Remove DES encryption from 1 Domain Controller(s)
+    • CRITICAL: [contoso.com] RC4 tickets detected in event logs - active usage detected
+    • WARNING: [contoso.com] Remove RC4 encryption from 2 Domain Controller(s)
 
   ⚠️  Note: Event log data is incomplete due to 2 DC(s) being inaccessible
      Review the detailed troubleshooting guidance in the Event Log Analysis section above
