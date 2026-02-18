@@ -1580,8 +1580,70 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) The KRBTGT password encrypts all TGTs in the domain
    $([char]0x2022) If never rotated since pre-AES era, only RC4/DES keys may exist
    $([char]0x2022) Microsoft recommends rotation at least every 180 days
-   $([char]0x2022) Always rotate TWICE (first rotation, wait for replication, second rotation)
+   $([char]0x2022) AD retains the CURRENT and PREVIOUS KRBTGT password (N and N-1)
+   $([char]0x2022) Rotate TWICE to flush out old keys entirely
+
+   $([char]0x26A0) KRBTGT Rotation Step-by-Step Procedure:
    
+   a) Pre-Rotation Checks:
+      $([char]0x2022) Confirm ALL Domain Controllers are online and replicating
+        PS> repadmin /replsummary
+        PS> Get-ADDomainController -Filter * | ForEach-Object {
+              Test-Connection `$_.HostName -Count 1 -Quiet }
+      $([char]0x2022) Note the current password age:
+        PS> Get-ADUser krbtgt -Properties PasswordLastSet |
+            Select-Object Name, PasswordLastSet
+
+   b) First Rotation:
+      PS> # Reset the KRBTGT password (generates new AES/RC4 keys)
+      PS> Reset-ADAccountPassword -Identity krbtgt -NewPassword `
+            (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset
+      $([char]0x2022) Alternative using AD Users & Computers:
+        Right-click krbtgt > Reset Password > enter random complex password
+      $([char]0x2022) After reset, AD still accepts tickets encrypted with the
+        PREVIOUS password (N-1), so existing TGTs remain valid.
+
+   c) Wait for Replication:
+      $([char]0x2022) Wait at LEAST 10-12 hours (or 2x the maximum TGT lifetime,
+        which defaults to 10 hours) so all outstanding TGTs expire.
+      $([char]0x2022) Verify the password change has replicated to ALL DCs:
+        PS> Get-ADDomainController -Filter * | ForEach-Object {
+              Get-ADUser krbtgt -Server `$_.HostName -Properties PasswordLastSet |
+              Select-Object @{N='DC';E={`$_.DistinguishedName.Split(',')[1]}},
+                            PasswordLastSet }
+      $([char]0x2022) Monitor for Kerberos errors (Event IDs 4768/4769 failures,
+        Event ID 4771 with failure code 0x18 = bad password).
+      $([char]0x2022) If you see widespread authentication failures, do NOT
+        proceed with the second rotation; investigate first.
+
+   d) Second Rotation:
+      PS> # Second reset flushes out the old N-1 password entirely
+      PS> Reset-ADAccountPassword -Identity krbtgt -NewPassword `
+            (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset
+      $([char]0x2022) After this, only the two newest passwords are valid.
+        Any tickets from the original (pre-rotation) key are now invalid.
+      $([char]0x2022) Wait for replication again and monitor for errors.
+
+   e) Post-Rotation Validation:
+      PS> # Verify the new password date
+      PS> Get-ADUser krbtgt -Properties PasswordLastSet, `
+            'msDS-SupportedEncryptionTypes' |
+            Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
+      PS> # Confirm no authentication errors in event logs
+      PS> Get-WinEvent -FilterHashtable @{LogName='Security';Id=4771;
+            StartTime=(Get-Date).AddHours(-2)} -ErrorAction SilentlyContinue |
+            Where-Object { `$_.Message -match 'krbtgt' }
+
+   $([char]0x26A0) Important Caveats:
+   $([char]0x2022) NEVER rotate KRBTGT more than twice in quick succession
+   $([char]0x2022) Golden Ticket attacks are invalidated by a double rotation
+   $([char]0x2022) Azure AD Connect / Entra Connect: rotation is safe as it
+     does not use Kerberos TGTs for cloud sync
+   $([char]0x2022) Read-Only DCs (RODCs) have their own krbtgt_XXXXX accounts;
+     these are rotated independently if needed
+   $([char]0x2022) Consider using Microsoft's official KRBTGT reset script:
+     https://github.com/microsoft/New-KrbtgtKeys.ps1
+
    Check KRBTGT:
    PS> Get-ADUser krbtgt -Properties PasswordLastSet, msDS-SupportedEncryptionTypes |
        Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
