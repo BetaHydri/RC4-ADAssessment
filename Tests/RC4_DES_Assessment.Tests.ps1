@@ -197,14 +197,14 @@ Describe 'Get-DomainControllerEncryption' {
             Mock Get-ADComputer {
                 @(
                     [PSCustomObject]@{
-                        Name                             = 'DC01'
-                        'msDS-SupportedEncryptionTypes'  = 24  # AES128 + AES256
-                        OperatingSystem                  = 'Windows Server 2022'
+                        Name                            = 'DC01'
+                        'msDS-SupportedEncryptionTypes' = 24  # AES128 + AES256
+                        OperatingSystem                 = 'Windows Server 2022'
                     },
                     [PSCustomObject]@{
-                        Name                             = 'DC02'
-                        'msDS-SupportedEncryptionTypes'  = 24
-                        OperatingSystem                  = 'Windows Server 2022'
+                        Name                            = 'DC02'
+                        'msDS-SupportedEncryptionTypes' = 24
+                        OperatingSystem                 = 'Windows Server 2022'
                     }
                 )
             }
@@ -240,14 +240,14 @@ Describe 'Get-DomainControllerEncryption' {
             Mock Get-ADComputer {
                 @(
                     [PSCustomObject]@{
-                        Name                             = 'DC01'
-                        'msDS-SupportedEncryptionTypes'  = 24  # AES
-                        OperatingSystem                  = 'Windows Server 2022'
+                        Name                            = 'DC01'
+                        'msDS-SupportedEncryptionTypes' = 24  # AES
+                        OperatingSystem                 = 'Windows Server 2022'
                     },
                     [PSCustomObject]@{
-                        Name                             = 'DC02'
-                        'msDS-SupportedEncryptionTypes'  = 4   # RC4 only
-                        OperatingSystem                  = 'Windows Server 2016'
+                        Name                            = 'DC02'
+                        'msDS-SupportedEncryptionTypes' = 4   # RC4 only
+                        OperatingSystem                 = 'Windows Server 2016'
                     }
                 )
             }
@@ -270,9 +270,9 @@ Describe 'Get-DomainControllerEncryption' {
         BeforeEach {
             Mock Get-ADComputer {
                 [PSCustomObject]@{
-                    Name                             = 'DC-LEGACY'
-                    'msDS-SupportedEncryptionTypes'  = 3  # DES-CBC-CRC + DES-CBC-MD5
-                    OperatingSystem                  = 'Windows Server 2008'
+                    Name                            = 'DC-LEGACY'
+                    'msDS-SupportedEncryptionTypes' = 3  # DES-CBC-CRC + DES-CBC-MD5
+                    OperatingSystem                 = 'Windows Server 2008'
                 }
             }
             Mock Get-GPInheritance { $null }
@@ -293,9 +293,9 @@ Describe 'Get-DomainControllerEncryption' {
         BeforeEach {
             Mock Get-ADComputer {
                 [PSCustomObject]@{
-                    Name                             = 'DC-MIXED'
-                    'msDS-SupportedEncryptionTypes'  = 31  # All bits set (0x1F)
-                    OperatingSystem                  = 'Windows Server 2019'
+                    Name                            = 'DC-MIXED'
+                    'msDS-SupportedEncryptionTypes' = 31  # All bits set (0x1F)
+                    OperatingSystem                 = 'Windows Server 2019'
                 }
             }
             Mock Get-GPInheritance { $null }
@@ -319,14 +319,14 @@ Describe 'Get-DomainControllerEncryption' {
             Mock Get-ADComputer {
                 @(
                     [PSCustomObject]@{
-                        Name                             = 'DC01'
-                        'msDS-SupportedEncryptionTypes'  = $null
-                        OperatingSystem                  = 'Windows Server 2022'
+                        Name                            = 'DC01'
+                        'msDS-SupportedEncryptionTypes' = $null
+                        OperatingSystem                 = 'Windows Server 2022'
                     },
                     [PSCustomObject]@{
-                        Name                             = 'DC02'
-                        'msDS-SupportedEncryptionTypes'  = 0
-                        OperatingSystem                  = 'Windows Server 2022'
+                        Name                            = 'DC02'
+                        'msDS-SupportedEncryptionTypes' = 0
+                        OperatingSystem                 = 'Windows Server 2022'
                     }
                 )
             }
@@ -343,9 +343,9 @@ Describe 'Get-DomainControllerEncryption' {
         BeforeEach {
             Mock Get-ADComputer {
                 [PSCustomObject]@{
-                    Name                             = 'DC01'
-                    'msDS-SupportedEncryptionTypes'  = $null
-                    OperatingSystem                  = 'Windows Server 2022'
+                    Name                            = 'DC01'
+                    'msDS-SupportedEncryptionTypes' = $null
+                    OperatingSystem                 = 'Windows Server 2022'
                 }
             }
             Mock Get-GPInheritance {
