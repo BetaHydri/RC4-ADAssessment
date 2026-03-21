@@ -262,6 +262,10 @@ Track remediation progress by comparing two exported JSON files:
 .\Compare-Assessments.ps1 -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
 ```
 
+**Example: Before and after setting `RC4DefaultDisablementPhase = 1`:**
+
+![Compare after RC4 Registry Phase 1](docs/Compare-AfterRC4_Reg_Phase1.png)
+
 Compares:
 - DC encryption changes (AES/RC4/DES counts)
 - Trust risk changes
