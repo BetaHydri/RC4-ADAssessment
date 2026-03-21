@@ -590,11 +590,13 @@ function Get-KdcRegistryAssessment {
                     try {
                         $val = Get-ItemProperty -Path $Path -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
                         if ($val) { $result.DefaultDomainSupportedEncTypes = $val.DefaultDomainSupportedEncTypes }
-                    } catch {}
+                    }
+                    catch {}
                     try {
                         $val = Get-ItemProperty -Path $Path -Name 'RC4DefaultDisablementPhase' -ErrorAction SilentlyContinue
                         if ($val) { $result.RC4DefaultDisablementPhase = $val.RC4DefaultDisablementPhase }
-                    } catch {}
+                    }
+                    catch {}
                     $result
                 } -ArgumentList $regPath -ErrorAction Stop
                 
@@ -602,7 +604,7 @@ function Get-KdcRegistryAssessment {
                 
                 $dcDetail = @{
                     Name                           = $dcName
-                    DefaultDomainSupportedEncTypes  = $regValues.DefaultDomainSupportedEncTypes
+                    DefaultDomainSupportedEncTypes = $regValues.DefaultDomainSupportedEncTypes
                     RC4DefaultDisablementPhase     = $regValues.RC4DefaultDisablementPhase
                 }
                 $assessment.Details += $dcDetail

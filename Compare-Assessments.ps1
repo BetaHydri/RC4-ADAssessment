@@ -32,12 +32,12 @@
 #>
 
 param(
-    [Parameter(Mandatory=$true)]
-    [ValidateScript({Test-Path $_ -PathType Leaf})]
+    [Parameter(Mandatory = $true)]
+    [ValidateScript({ Test-Path $_ -PathType Leaf })]
     [string]$BaselineFile,
     
-    [Parameter(Mandatory=$true)]
-    [ValidateScript({Test-Path $_ -PathType Leaf})]
+    [Parameter(Mandatory = $true)]
+    [ValidateScript({ Test-Path $_ -PathType Leaf })]
     [string]$CurrentFile,
     
     [switch]$ShowDetails
@@ -60,13 +60,13 @@ function Get-ChangeIndicator {
     param([int]$Old, [int]$New)
     
     if ($New -lt $Old) {
-        return @{Symbol = "$([char]0x2193)"; Color = "Green"; Status = "Improved"}  # ↓
+        return @{Symbol = "$([char]0x2193)"; Color = "Green"; Status = "Improved" }  # ↓
     }
     elseif ($New -gt $Old) {
-        return @{Symbol = "$([char]0x2191)"; Color = "Red"; Status = "Worsened"}  # ↑
+        return @{Symbol = "$([char]0x2191)"; Color = "Red"; Status = "Worsened" }  # ↑
     }
     else {
-        return @{Symbol = "$([char]0x2192)"; Color = "Gray"; Status = "Unchanged"}  # →
+        return @{Symbol = "$([char]0x2192)"; Color = "Gray"; Status = "Unchanged" }  # →
     }
 }
 
@@ -110,10 +110,11 @@ try {
     
     if ($baseline.OverallStatus -ne $current.OverallStatus) {
         $improved = ($baseline.OverallStatus -eq "CRITICAL" -and $current.OverallStatus -ne "CRITICAL") -or
-                    ($baseline.OverallStatus -eq "WARNING" -and $current.OverallStatus -eq "OK")
+        ($baseline.OverallStatus -eq "WARNING" -and $current.OverallStatus -eq "OK")
         if ($improved) {
             Write-Host "  $([char]0x2713) Status IMPROVED!" -ForegroundColor Green
-        } else {
+        }
+        else {
             Write-Host "  $([char]0x26A0) Status DEGRADED!" -ForegroundColor Red
         }
     }
@@ -122,7 +123,7 @@ try {
     Write-ComparisonSection "Domain Controller Changes"
     
     $dcChanges = @{
-        TotalDCs = Get-ChangeIndicator -Old $baseline.DomainControllers.TotalDCs -New $current.DomainControllers.TotalDCs
+        TotalDCs      = Get-ChangeIndicator -Old $baseline.DomainControllers.TotalDCs -New $current.DomainControllers.TotalDCs
         AESConfigured = Get-ChangeIndicator -Old $baseline.DomainControllers.AESConfigured -New $current.DomainControllers.AESConfigured
         RC4Configured = Get-ChangeIndicator -Old $baseline.DomainControllers.RC4Configured -New $current.DomainControllers.RC4Configured
         DESConfigured = Get-ChangeIndicator -Old $baseline.DomainControllers.DESConfigured -New $current.DomainControllers.DESConfigured
@@ -138,8 +139,8 @@ try {
     
     $trustChanges = @{
         TotalTrusts = Get-ChangeIndicator -Old $baseline.Trusts.TotalTrusts -New $current.Trusts.TotalTrusts
-        RC4Risk = Get-ChangeIndicator -Old $baseline.Trusts.RC4Risk -New $current.Trusts.RC4Risk
-        DESRisk = Get-ChangeIndicator -Old $baseline.Trusts.DESRisk -New $current.Trusts.DESRisk
+        RC4Risk     = Get-ChangeIndicator -Old $baseline.Trusts.RC4Risk -New $current.Trusts.RC4Risk
+        DESRisk     = Get-ChangeIndicator -Old $baseline.Trusts.DESRisk -New $current.Trusts.DESRisk
     }
     
     Write-Host "  Total Trusts:    $($baseline.Trusts.TotalTrusts) $($trustChanges.TotalTrusts.Symbol) $($current.Trusts.TotalTrusts)" -ForegroundColor $trustChanges.TotalTrusts.Color
