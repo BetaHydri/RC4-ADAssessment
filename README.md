@@ -194,14 +194,14 @@ Phase 1: Discovery                    Phase 2: Deep Analysis
          │                                -ExportResults
          ├── ✅ All OK → Monitor          
          └── ⚠ Issues → ─────────────────────┘
-                                               │
+                                              │
 Phase 3: Remediate                    Phase 4: Validate
 Follow inline fix commands            .\RC4_DES_Assessment.ps1 `
   • Set-ADComputer for DCs                -AnalyzeEventLogs -ExportResults
   • Set RC4DefaultDisablementPhase    .\Compare-Assessments.ps1 `
   • Reset service account passwords       -BaselineFile before.json `
   • klist purge after changes             -CurrentFile after.json -ShowDetails
-         │                                     │
+         │                                    │
          └─── Repeat until OK ────────────────┘
                     │
          Ready for July 2026 RC4 removal
