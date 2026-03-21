@@ -1,41 +1,41 @@
-# RC4_DES_Assessment.ps1 v2.1.0 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.3.0 - Quick Start Guide
 
-> **✨ New in v2.1.0:** WinRM-first event log queries, full forest DC enumeration, improved child domain support, specific DC-level error reporting, and comprehensive summary tables.
+> **✨ New in v2.3.0:** KDC registry assessment, Kerberos audit policy pre-check, missing AES keys detection, inline remediation commands with every finding, and July 2026 RC4 removal timeline guidance. See also v2.2.0: KRBTGT assessment, service account scan, USE_DES_KEY_ONLY detection, stale password detection.
 
 ## 🔐 Using with Active Directory
 
 ### Prerequisites
-- PowerShell 5.1 or later
+- PowerShell 5.1 or later (7+ for parallel forest assessment)
 - Active Directory PowerShell module (`RSAT-AD-PowerShell`)
 - Group Policy PowerShell module (`GPMC`)
 - Domain Admin or equivalent permissions
-- Network access to domain controllers
+- Network access to domain controllers (WinRM 5985 or RPC 135)
 
 ### Quick Scan (Fastest - No Event Logs)
 ```powershell
 .\RC4_DES_Assessment.ps1 -QuickScan
 ```
 **Runtime**: ~30 seconds  
-**Checks**: Domain Controllers, GPOs, Trusts
+**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry, DES flags, Missing AES keys
 
 ### Full Assessment (Recommended)
 ```powershell
 .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 24
 ```
 **Runtime**: 2-5 minutes  
-**Checks**: DCs, GPOs, Trusts + 24 hours of event logs for actual DES/RC4 usage
+**Checks**: All of the above + audit policy verification + 24 hours of event logs for actual DES/RC4 usage
 
 ### With Export
 ```powershell
 .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
 ```
-**Output**: JSON and CSV files with timestamp
+**Output**: JSON and CSV files with timestamp in `.\Exports\`
 
-### With Guidance
+### With Full Reference Manual
 ```powershell
 .\RC4_DES_Assessment.ps1 -IncludeGuidance
 ```
-**Shows**: Detailed manual validation steps, Splunk queries, monitoring setup
+**Shows**: Audit setup, SIEM/Splunk queries, KRBTGT rotation guidance, July 2026 timeline
 
 ### Specific Domain
 ```powershell
@@ -56,6 +56,12 @@
 **Runtime**: Varies (parallel mode processes multiple domains concurrently)  
 **Output**: Per-domain JSON exports + forest-wide summary
 
+### Compare Two Runs (Track Progress)
+```powershell
+.\Compare-Assessments.ps1 -BaselineFile before.json -CurrentFile after.json -ShowDetails
+```
+**Compares**: DC encryption, trusts, accounts (KRBTGT, service accounts, DES flags, missing AES keys), KDC registry, event log tickets
+
 ---
 
 ## 📊 Sample Output
@@ -63,16 +69,26 @@
 ### Successful Quick Scan
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.1
+DES/RC4 Kerberos Encryption Assessment v2.3.0
 ================================================================================
 
 Domain Controller Encryption Configuration
 ────────────────────────────────────────────────────────────────
-ℹ️  Analyzing domain: contoso.com
 ℹ️  Found 3 Domain Controller(s)
+✅ All Domain Controllers have AES encryption configured
 
-✅ Domain Controllers are configured for AES encryption via GPO
-ℹ️  3 DC(s) inherit AES settings from GPO (this is normal)
+KRBTGT & Service Account Encryption Assessment
+────────────────────────────────────────────────────────────────
+✅ KRBTGT password age: 21 days
+✅ No accounts with USE_DES_KEY_ONLY flag
+✅ No service accounts with RC4/DES-only encryption
+✅ No accounts found with potentially missing AES keys
+
+KDC Registry Configuration Assessment
+────────────────────────────────────────────────────────────────
+ℹ️  DefaultDomainSupportedEncTypes: Not set (uses OS defaults)
+⚠️  RC4DefaultDisablementPhase not set
+   Deploy January 2026+ security updates and set to 1 on all DCs
 
 Trust Encryption Assessment (Post-November 2022 Logic)
 ────────────────────────────────────────────────────────────────
@@ -81,30 +97,42 @@ Trust Encryption Assessment (Post-November 2022 Logic)
 
 Overall Security Assessment
 ────────────────────────────────────────────────────────────────
-✅ No DES/RC4 usage detected - environment is secure
+⚠️  Security warnings detected - remediation recommended
+
+  Recommendations & Remediation:
+    • WARNING: [contoso.com] RC4DefaultDisablementPhase not set
+      # Deploy January 2026+ security updates, then on each DC:
+      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+            -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
+
+  💡 Tip: Use -IncludeGuidance for the full reference manual
 ```
 
 ### Event Log Analysis with RC4 Detection
 ```
+Kerberos Audit Policy Verification
+────────────────────────────────────────────────────────────────
+✅ Kerberos auditing is enabled (Authentication Service + Ticket Operations)
+
 Event Log Analysis - Actual DES/RC4 Usage
 ────────────────────────────────────────────────────────────────
-ℹ️  Analyzing last 24 hours of Kerberos ticket events
 ℹ️  Querying event logs from 3 Domain Controller(s)...
-  • Querying DC01...
-  • Querying DC02...
-  • Querying DC03...
-
-ℹ️  Event Log Analysis Results:
-  • Events Analyzed: 15,432
-  • AES Tickets: 15,430
-  • RC4 Tickets: 2
-  • DES Tickets: 0
+  • DC01... ✅ 12,543 events
+  • DC02... ✅ 11,892 events
+  • DC03... ❌ RPC server unavailable
 
 ❌ RC4 tickets detected in active use!
-  Unique accounts using RC4: 2
-  RC4 accounts:
-    - LEGACY-APP$
-    - OLD-SERVER$
+  RC4 accounts: LEGACY-APP$, SQL2008-SRV$
+
+  Recommendations & Remediation:
+    • CRITICAL: [contoso.com] RC4 tickets detected (8 tickets,
+        accounts: LEGACY-APP$, SQL2008-SRV$)
+      # For each account using RC4, try AES first:
+      PS> Set-ADUser '<AccountName>' -Replace @{
+            'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+      # If AES fails, add explicit RC4 exception:
+      #   -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
 ```
 
 ### Event Log Access Failures (NEW in v2.0.1)
@@ -196,51 +224,80 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 ## 📊 Understanding the Results
 
 ### Overall Status
-- **🟢 OK** - No DES/RC4 usage detected, environment is secure
-- **🟡 WARNING** - RC4 detected, should be removed (especially for Server 2025)
+- **🟢 OK** - No DES/RC4 usage detected, environment is ready for July 2026
+- **🟡 WARNING** - RC4 detected, should be removed before July 2026 deadline
 - **🔴 CRITICAL** - DES detected or active RC4 usage in event logs
 
 ### Domain Controllers
 - **AES Configured** - DCs with AES encryption (good)
-- **RC4 Configured** - DCs allowing RC4 (warning)
+- **RC4 Configured** - DCs allowing RC4 (warning - inline fix command provided)
 - **DES Configured** - DCs allowing DES (critical - remove immediately)
 - **Not Configured (GPO Inherited)** - DCs getting settings from GPO (normal)
+
+### KRBTGT & Service Accounts (v2.2.0+)
+- **KRBTGT Password Age** - Should be rotated regularly (guidance provided)
+- **USE_DES_KEY_ONLY** - Accounts with this UAC flag need remediation
+- **RC4/DES-only SPN Accounts** - Service accounts missing AES (fix commands shown)
+- **gMSA/sMSA** - Managed service accounts reviewed for weak encryption
+- **Stale Passwords** - Service accounts >365 days old with RC4 enabled
+
+### KDC Registry (v2.3.0+)
+- **DefaultDomainSupportedEncTypes** - OS-level encryption defaults
+- **RC4DefaultDisablementPhase** - Should be set to 1 after January 2026 updates
+
+### Missing AES Keys (v2.3.0+)
+- Accounts with passwords set before Domain Functional Level was raised to 2008
+- These accounts have no AES keys generated — password reset required
 
 ### Trusts (Post-November 2022 Logic)
 - **AES Default (not set)** - Trusts with no msDS-SupportedEncryptionTypes (✓ secure)
 - **AES Explicit** - Trusts with AES explicitly configured (✓ secure)
-- **RC4 Risk** - Trusts with RC4 enabled (⚠ remove for Server 2025)
+- **RC4 Risk** - Trusts with RC4 enabled (⚠ remove before July 2026)
 - **DES Risk** - Trusts with DES enabled (🔴 critical)
 
 ### Event Logs (Most Important!)
+- **Audit Policy** - Script verifies Kerberos auditing is enabled before querying
 - **AES Tickets** - Kerberos tickets using AES (✓ expected)
 - **RC4 Tickets** - Active RC4 usage (⚠ investigate clients)
 - **DES Tickets** - Active DES usage (🔴 critical - legacy systems)
 
+### Inline Remediation Commands (v2.3.0+)
+Every finding includes copy-paste PowerShell commands to fix the issue, including `klist purge` for cache clearing.
+
 ---
 
-## 🚀 Migration Path
+## 🚀 Migration Path (Preparing for July 2026)
 
 ### Phase 1: Initial AD Scan
 ```powershell
 .\RC4_DES_Assessment.ps1 -QuickScan
 ```
-Get baseline configuration (DCs, GPOs, Trusts).
+Get baseline configuration (DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry).
 
 ### Phase 2: Usage Analysis
 ```powershell
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 ```
-Analyze 7 days of event logs to detect actual DES/RC4 usage.
+Analyze 7 days of event logs to detect actual DES/RC4 usage. Export for comparison.
 
-### Phase 3: Monitoring Setup
+### Phase 3: Remediate
+Follow the inline fix commands shown with every finding:
+- `Set-ADComputer` / `Set-ADUser` for encryption types
+- `Set-ItemProperty` for KDC registry keys (`RC4DefaultDisablementPhase`)
+- `Set-ADAccountPassword` + `klist purge` for accounts needing AES key generation
+
+### Phase 4: Validate & Track Progress
+```powershell
+.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+.\Compare-Assessments.ps1 -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
+```
+Compare assessments to verify remediation progress.
+
+### Phase 5: Monitoring Setup
 ```powershell
 .\RC4_DES_Assessment.ps1 -IncludeGuidance
 ```
-Get Splunk queries and continuous monitoring setup.
-
-### Phase 4: Remediation
-Follow recommendations from the assessment report.
+Get Splunk/SIEM queries, KRBTGT rotation guidance, and continuous monitoring setup.
 
 ---
 
@@ -310,59 +367,40 @@ Resolve-DnsName your-domain.com
 
 ## 📚 Additional Resources
 
-- **README.md** - Comprehensive documentation with sample outputs
+- **README.md** - Comprehensive documentation with full sample outputs and July 2026 timeline
+- **Compare-Assessments.ps1** - Track remediation progress between two assessment exports
 - **Test-EventLogFailureHandling.ps1** - Test script for error handling validation
 - **archive/README_v1_LEGACY.md** - Legacy v1.0 documentation (archived)
-- **Microsoft KB5021131** - Post-Nov 2022 Kerberos changes
-- **Windows Server 2025** - RC4 completely disabled by default
+- **[KB5021131](https://support.microsoft.com/kb/5021131)** - Managing Kerberos protocol changes
+- **[Detect and Remediate RC4](https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4)** - Microsoft guidance
+- **[Microsoft Kerberos-Crypto](https://github.com/microsoft/Kerberos-Crypto)** - Microsoft's Kerberos crypto scripts
 
 ---
 
-## 🎯 What's New in v2.1.0
+## 🎯 What's New
 
-### WinRM-First Event Log Queries (NEW!)
-- **Invoke-Command as primary method** - More reliable for child domains than RPC
-- **Automatic fallback to RPC** - Tries Get-WinEvent -ComputerName if WinRM fails
-- **Deserialized event handling** - Properly processes events from remote DCs
-- **Works across domain boundaries** - Successfully queries child domain DCs
+### v2.3.0 (March 2026) — Current
+- **KDC registry assessment** - `DefaultDomainSupportedEncTypes` and `RC4DefaultDisablementPhase` checked on all DCs
+- **Kerberos audit policy pre-check** - Verifies auditing is enabled before event log analysis
+- **Missing AES keys detection** - Accounts with passwords predating DFL 2008 raise (no AES keys)
+- **Inline remediation commands** - Every finding includes copy-paste PowerShell fix commands
+- **July 2026 RC4 removal timeline** - January 2026 and July 2026 milestone guidance
+- **Explicit RC4 exception workflow** - `0x1C` pattern for accounts that cannot use AES
+- **`klist purge`** - Included in all remediation steps for cache clearing
+- **Compare-Assessments.ps1** - Now compares account changes, registry keys, missing AES keys
 
-### Full Forest DC Enumeration (NEW!)
-- **Discovers ALL DCs per domain** - No longer limited to first 3 DCs
-- **Per-DC success/failure reporting** - Shows exactly which DC succeeded or failed
-- **Specific error messages** - "DC01.child.contoso.com: RPC server unavailable"
-- **Complete forest coverage** - Every DC in every domain assessed
+### v2.2.0 (February 2026)
+- **KRBTGT assessment** - Password age and encryption type checks with rotation guidance
+- **USE_DES_KEY_ONLY detection** - Accounts with this UserAccountControl flag
+- **Service account scan** - SPN accounts, gMSA/sMSA with RC4/DES-only encryption
+- **Stale password detection** - Service accounts >365 days old with RC4 enabled
 
-### Enhanced Child Domain Support (NEW!)
-- **Fixed Get-ADDomain calls** - Removed incorrect -Identity parameter usage
-- **ADPropertyValueCollection fix** - Proper HostName to string conversion
-- **Auto-discovery improvements** - Reliably finds DCs in child domains
-- **Cross-domain connectivity** - Works from root or child domain DCs
-
-### Forest-Wide Assessment (NEW!)
-- **Assess-ADForest.ps1** - New script for assessing all domains in an AD forest
-- **Automatic domain discovery** - Get-ADForest enumerates all domains
-- **Parallel processing** - Process multiple domains concurrently (PowerShell 7+)
-- **Consolidated reporting** - Forest-wide summary + per-domain exports
-- **Flexible deployment** - Quick scan or full event log analysis across entire forest
-
-### Remote Event Log Access Troubleshooting (v2.0.1)
-- **Automatic failure tracking** - Script now tracks which DCs couldn't be queried
-- **Comprehensive troubleshooting** - Detailed guidance for RPC/WinRM issues at end of assessment
-- **Four fix options** - WinRM setup, firewall configuration, local execution, or permission fixes
-- **Test script included** - Validate error handling without requiring actual failures
-
-### Enhanced Multi-Domain Support (v2.0.1)
-- **Child domain fixes** - Proper identity parameter handling for cross-domain queries
-- **Better error messages** - Clear guidance when querying child domains
-
-### PowerShell 5.1 Compatibility
-- **UTF-8 encoding** - Automatic console encoding configuration
-- **Unicode symbols** - Proper bullet points and status symbols in both PS 5.1 and 7
-
-### Event Log Query Improvements
-- **WinRM-first approach** - Tries PowerShell Remoting before falling back to RPC
-- **Connectivity testing** - Checks DC reachability before attempting queries
-- **Better error categorization** - Distinguishes between WinRM, RPC, permission, and network errors
+### v2.1.0 (December 2025)
+- WinRM-first event log queries with RPC fallback
+- Full forest DC enumeration per domain
+- Child domain support fixes
+- Comprehensive summary tables
+- Assess-ADForest.ps1 for forest-wide scanning
 
 ---
 
@@ -373,10 +411,12 @@ Resolve-DnsName your-domain.com
 # Single command for domain readiness
 .\RC4_DES_Assessment.ps1 -QuickScan
 
-# Expected output:
-# ✅ Domain Controllers are configured for AES encryption via GPO
+# Expected output includes:
+# ✅ All Domain Controllers have AES encryption configured
+# ✅ KRBTGT password age: 21 days
+# ✅ No service accounts with RC4/DES-only encryption
 # ✅ Trusts use AES by default
-# ✅ No DES/RC4 usage detected - environment is secure
+# ⚠️  RC4DefaultDisablementPhase not set (inline fix shown)
 ```
 
 ---
@@ -437,12 +477,13 @@ Resolve-DnsName your-domain.com
 1. **Start with QuickScan** - Get quick results, then add event log analysis
 2. **Use Forest Assessment for multi-domain environments** - `Assess-ADForest.ps1` automates domain enumeration
 3. **Enable parallel processing** - Use `-Parallel` with PowerShell 7+ for faster forest assessments
-4. **Monitor for 30 days** - Capture monthly/quarterly activities before Server 2025 upgrade
-5. **Check event logs regularly** - Weekly alerts for RC4/DES usage
-6. **Export results** - Keep historical data for compliance/auditing (saved to `.\Exports` folder)
-7. **Include guidance** - Get actionable steps for remediation and monitoring
-8. **Use -Server for child domains** - Specify a known DC when auto-discovery fails
-9. **Review per-DC results** - Script now shows which specific DCs succeeded or failed
+4. **Monitor for 7+ days** - Use `-EventLogHours 168` to capture weekly activity patterns
+5. **Track progress with Compare-Assessments** - Export baseline, remediate, export again, then compare
+6. **Deploy January 2026 updates** - Set `RC4DefaultDisablementPhase = 1` on all DCs
+7. **Export results** - Keep historical data for compliance/auditing (saved to `.\Exports` folder)
+8. **Include guidance** - `-IncludeGuidance` shows audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline
+9. **Use -Server for child domains** - Specify a known DC when auto-discovery fails
+10. **Copy-paste fix commands** - Every finding now includes inline remediation commands
 
 ---
 
@@ -452,6 +493,14 @@ When you have AD access:
 - [ ] Quick scan completes successfully
 - [ ] DCs detected and assessed
 - [ ] GPO encryption settings retrieved
+- [ ] KRBTGT password age and encryption assessed
+- [ ] Service accounts scanned for RC4/DES-only encryption
+- [ ] USE_DES_KEY_ONLY accounts detected
+- [ ] KDC registry keys checked on all DCs
+- [ ] Missing AES keys detection runs
 - [ ] Trusts enumerated correctly
+- [ ] Inline fix commands shown for any findings
+- [ ] Audit policy pre-check works (if using -AnalyzeEventLogs)
 - [ ] Event log analysis works (if using -AnalyzeEventLogs)
 - [ ] Export creates JSON/CSV files in `.\Exports` folder (if using -ExportResults)
+- [ ] Compare-Assessments tracks changes between two exports
