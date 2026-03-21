@@ -700,17 +700,18 @@ if ($forestResults.CriticalIssues -gt 0 -or $forestResults.Warnings -gt 0) {
     }
     
     if ($forestResults.Warnings -gt 0) {
-        Write-Host "  $([char]0x2022) WARNING: Plan RC4 removal before Windows Server 2025 migration" -ForegroundColor Yellow
+        Write-Host "  $([char]0x2022) WARNING: Plan RC4 removal before July 2026 deadline" -ForegroundColor Yellow
         Write-Host "  $([char]0x2022) Review each domain's event logs to identify RC4 usage patterns" -ForegroundColor Yellow
+        Write-Host "  $([char]0x2022) Deploy January 2026+ updates and set RC4DefaultDisablementPhase = 1 on all DCs" -ForegroundColor Yellow
     }
     
     Write-Host "`n  Next Steps:" -ForegroundColor Cyan
-    Write-Host "  1. Review individual domain JSON exports for detailed findings" -ForegroundColor Gray
+    Write-Host "  1. Review individual domain JSON exports for detailed findings and inline fix commands" -ForegroundColor Gray
     Write-Host "  2. Run 'Compare-Assessments.ps1' per domain to track remediation progress" -ForegroundColor Gray
     Write-Host "  3. Set up continuous monitoring with -AnalyzeEventLogs -EventLogHours 168" -ForegroundColor Gray
 }
 else {
-    Write-Host "`n$([char]0x2713) Forest is ready for Windows Server 2025!" -ForegroundColor Green
+    Write-Host "`n$([char]0x2713) Forest is ready for RC4 disablement (July 2026)!" -ForegroundColor Green
 }
 
 Write-Host "`n$("=" * 80)" -ForegroundColor Cyan

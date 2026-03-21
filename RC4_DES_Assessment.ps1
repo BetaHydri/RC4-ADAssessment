@@ -2249,69 +2249,182 @@ try {
     # Check for DES
     if ($results.DomainControllers.DESConfigured -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: [$($results.Domain)] Remove DES encryption from $($results.DomainControllers.DESConfigured) Domain Controller(s)"
+        $desDCs = ($results.DomainControllers.Details | Where-Object { $_.Status -match 'DES' }).Name -join ', '
+        $results.Recommendations += @{
+            Level   = "CRITICAL"
+            Message = "[$($results.Domain)] Remove DES encryption from $($results.DomainControllers.DESConfigured) Domain Controller(s): $desDCs"
+            Fix     = @(
+                "Set-ADComputer <DCName> -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# 24 = AES128 + AES256 only. Apply to: $desDCs"
+            )
+        }
     }
     
     if ($results.Trusts.DESRisk -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: [$($results.Domain)] Remove DES encryption from $($results.Trusts.DESRisk) trust(s)"
+        $desTrusts = ($results.Trusts.Details | Where-Object { $_.Status -match 'DES' }).Name -join ', '
+        $results.Recommendations += @{
+            Level   = "CRITICAL"
+            Message = "[$($results.Domain)] Remove DES encryption from $($results.Trusts.DESRisk) trust(s): $desTrusts"
+            Fix     = @(
+                "Set-ADObject (Get-ADTrust '<TrustName>').DistinguishedName -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# Or clear the attribute to use AES default: -Clear 'msDS-SupportedEncryptionTypes'"
+            )
+        }
     }
     
     if ($results.EventLogs -and $results.EventLogs.DESTickets -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: [$($results.Domain)] DES tickets detected in event logs - active usage detected"
+        $desAcctList = if ($results.EventLogs.DESAccounts.Count -gt 0) { ($results.EventLogs.DESAccounts | Select-Object -First 5) -join ', ' } else { 'unknown' }
+        $results.Recommendations += @{
+            Level   = "CRITICAL"
+            Message = "[$($results.Domain)] DES tickets detected in event logs ($($results.EventLogs.DESTickets) tickets, accounts: $desAcctList)"
+            Fix     = @(
+                "# Investigate each account and update to AES:"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+            )
+        }
     }
     
     # Check for RC4
     if ($results.DomainControllers.RC4Configured -gt 0) {
         $warnings++
-        $results.Recommendations += "WARNING: [$($results.Domain)] Remove RC4 encryption from $($results.DomainControllers.RC4Configured) Domain Controller(s)"
+        $rc4DCs = ($results.DomainControllers.Details | Where-Object { $_.Status -match 'RC4' }).Name -join ', '
+        $results.Recommendations += @{
+            Level   = "WARNING"
+            Message = "[$($results.Domain)] Remove RC4 encryption from $($results.DomainControllers.RC4Configured) Domain Controller(s): $rc4DCs"
+            Fix     = @(
+                "Set-ADComputer $rc4DCs -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# Or configure via GPO: 'Network security: Configure encryption types allowed for Kerberos' = AES128 + AES256"
+            )
+        }
     }
     
     if ($results.Trusts.RC4Risk -gt 0) {
         $warnings++
-        $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Trusts.RC4Risk) trust(s) have RC4 enabled"
+        $rc4Trusts = ($results.Trusts.Details | Where-Object { $_.Status -match 'RC4' }).Name -join ', '
+        $results.Recommendations += @{
+            Level   = "WARNING"
+            Message = "[$($results.Domain)] $($results.Trusts.RC4Risk) trust(s) have RC4 enabled: $rc4Trusts"
+            Fix     = @(
+                "# Remove explicit setting to use AES default (post-Nov 2022):"
+                "Set-ADObject (Get-ADTrust '<TrustName>').DistinguishedName -Clear 'msDS-SupportedEncryptionTypes'"
+                "# Or set to AES-only: -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+            )
+        }
     }
     
     if ($results.EventLogs -and $results.EventLogs.RC4Tickets -gt 0) {
         $criticalIssues++
-        $results.Recommendations += "CRITICAL: [$($results.Domain)] RC4 tickets detected in event logs - active usage detected"
+        $rc4AcctList = if ($results.EventLogs.RC4Accounts.Count -gt 0) { ($results.EventLogs.RC4Accounts | Select-Object -First 5) -join ', ' } else { 'unknown' }
+        $results.Recommendations += @{
+            Level   = "CRITICAL"
+            Message = "[$($results.Domain)] RC4 tickets detected in event logs ($($results.EventLogs.RC4Tickets) tickets, accounts: $rc4AcctList)"
+            Fix     = @(
+                "# For each account using RC4, try AES first:"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                "# If AES fails, add explicit RC4 exception: -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
+            )
+        }
     }
     
     # Check for KRBTGT and account issues
     if ($results.Accounts) {
         if ($results.Accounts.KRBTGT.Status -eq "CRITICAL") {
             $criticalIssues++
-            $results.Recommendations += "CRITICAL: [$($results.Domain)] KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - rotate immediately"
+            $results.Recommendations += @{
+                Level   = "CRITICAL"
+                Message = "[$($results.Domain)] KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - rotate immediately"
+                Fix     = @(
+                    "# Step 1: Verify all DCs are replicating: repadmin /replsummary"
+                    "# Step 2: First rotation:"
+                    "Reset-ADAccountPassword -Identity krbtgt -NewPassword (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset"
+                    "# Step 3: Wait 10-12 hours, then second rotation (same command)"
+                    "# See -IncludeGuidance for full KRBTGT rotation procedure"
+                )
+            }
         }
         elseif ($results.Accounts.KRBTGT.Status -eq "WARNING") {
             $warnings++
-            $results.Recommendations += "WARNING: [$($results.Domain)] KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - consider rotation"
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] KRBTGT password is $($results.Accounts.KRBTGT.PasswordAgeDays) days old - consider rotation"
+                Fix     = @(
+                    "# Rotate KRBTGT password (double rotation with 10-12h wait between):"
+                    "Reset-ADAccountPassword -Identity krbtgt -NewPassword (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset"
+                    "# See -IncludeGuidance for full procedure"
+                )
+            }
         }
         
         if ($results.Accounts.TotalDESFlag -gt 0) {
             $criticalIssues++
-            $results.Recommendations += "CRITICAL: [$($results.Domain)] $($results.Accounts.TotalDESFlag) account(s) have USE_DES_KEY_ONLY flag - remove flag immediately"
+            $desNames = ($results.Accounts.DESFlagAccounts | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "CRITICAL"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalDESFlag) account(s) have USE_DES_KEY_ONLY flag: $desNames"
+                Fix     = @(
+                    "Get-ADUser -Filter 'UserAccountControl -band 2097152' | ForEach-Object { Set-ADAccountControl `$_ -UseDESKeyOnly `$false }"
+                    "# Then reset password for each account to generate AES keys"
+                )
+            }
         }
         
         if ($results.Accounts.TotalRC4OnlySvc -gt 0) {
             $criticalIssues++
-            $results.Recommendations += "CRITICAL: [$($results.Domain)] $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only encryption"
+            $svcNames = ($results.Accounts.RC4OnlyServiceAccounts | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "CRITICAL"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only encryption: $svcNames"
+                Fix     = @(
+                    "# Update each service account to AES and reset password:"
+                    "Set-ADUser '<ServiceAccount>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADAccountPassword '<ServiceAccount>' -Reset; klist purge"
+                    "# Update the service with the new password, then test access"
+                )
+            }
         }
         
         if ($results.Accounts.TotalRC4OnlyMSA -gt 0) {
             $warnings++
-            $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption"
+            $msaNames = ($results.Accounts.RC4OnlyMSAs | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption: $msaNames"
+                Fix     = @(
+                    "Set-ADServiceAccount '<MSAName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                )
+            }
         }
         
         if ($results.Accounts.TotalStaleSvc -gt 0) {
             $warnings++
-            $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Accounts.TotalStaleSvc) service account(s) have stale passwords (>365 days) with RC4 enabled"
+            $staleNames = ($results.Accounts.StaleServiceAccounts | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalStaleSvc) service account(s) have stale passwords (>365 days) with RC4: $staleNames"
+                Fix     = @(
+                    "# Reset password to generate fresh AES keys:"
+                    "Set-ADAccountPassword '<ServiceAccount>' -Reset; klist purge"
+                    "# Update services running under this account with the new password"
+                )
+            }
         }
         
         if ($results.Accounts.TotalMissingAES -gt 0) {
             $warnings++
-            $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys - reset password twice to generate AES keys"
+            $missingNames = ($results.Accounts.MissingAESKeyAccounts | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys: $missingNames"
+                Fix     = @(
+                    "# Reset password TWICE to generate AES keys (use different or same password):"
+                    "Set-ADAccountPassword '<AccountName>' -Reset"
+                    "# Wait a few minutes, then reset again. Update services with new password."
+                )
+            }
         }
     }
     
@@ -2319,22 +2432,48 @@ try {
     if ($results.KdcRegistry) {
         if ($results.KdcRegistry.DefaultDomainSupportedEncTypes.Status -eq "CRITICAL") {
             $criticalIssues++
-            $results.Recommendations += "CRITICAL: [$($results.Domain)] DefaultDomainSupportedEncTypes does NOT include AES - update registry on DCs"
+            $results.Recommendations += @{
+                Level   = "CRITICAL"
+                Message = "[$($results.Domain)] DefaultDomainSupportedEncTypes does NOT include AES"
+                Fix     = @(
+                    "# On each DC, update the registry to include AES:"
+                    "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'DefaultDomainSupportedEncTypes' -Value 28 -Type DWord"
+                    "# 28 = 0x1C = RC4 + AES128 + AES256 (keep RC4 for explicit exceptions)"
+                )
+            }
         }
-        if ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -eq "NOT SET") {
+        if ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -in @("NOT SET", "WARNING")) {
             $warnings++
-            $results.Recommendations += "WARNING: [$($results.Domain)] RC4DefaultDisablementPhase not set - deploy Jan 2026+ updates and set to 1 on all DCs"
-        }
-        elseif ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -eq "WARNING") {
-            $warnings++
-            $results.Recommendations += "WARNING: [$($results.Domain)] RC4DefaultDisablementPhase = 0 - set to 1 to begin RC4 disablement"
+            $phaseMsg = if ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -eq "NOT SET") {
+                "RC4DefaultDisablementPhase not set"
+            }
+            else {
+                "RC4DefaultDisablementPhase = 0 (not active)"
+            }
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] $phaseMsg"
+                Fix     = @(
+                    "# Deploy January 2026+ security updates, then on each DC:"
+                    "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord"
+                    "# This disables RC4 for accounts without explicit RC4 in msDS-SupportedEncryptionTypes"
+                )
+            }
         }
     }
     
     # Check audit policy
     if ($results.AuditPolicy -and $results.AuditPolicy.Status -eq "CRITICAL") {
         $warnings++
-        $results.Recommendations += "WARNING: [$($results.Domain)] Kerberos auditing is NOT enabled - event log results may be incomplete"
+        $results.Recommendations += @{
+            Level   = "WARNING"
+            Message = "[$($results.Domain)] Kerberos auditing is NOT enabled - event log results may be incomplete"
+            Fix     = @(
+                "# Enable on each DC (or via GPO):"
+                "auditpol /set /subcategory:""Kerberos Authentication Service"" /success:enable /failure:enable"
+                "auditpol /set /subcategory:""Kerberos Service Ticket Operations"" /success:enable /failure:enable"
+            )
+        }
     }
     
     # Determine overall status
@@ -2351,11 +2490,23 @@ try {
         Write-Finding -Status "OK" -Message "No DES/RC4 usage detected - environment is secure"
     }
     
-    # Display recommendations
+    # Display recommendations with inline fix commands
     if ($results.Recommendations.Count -gt 0) {
-        Write-Host "`n  Recommendations:" -ForegroundColor Yellow
+        Write-Host "`n  Recommendations & Remediation:" -ForegroundColor Yellow
         foreach ($rec in $results.Recommendations) {
-            Write-Host "    $([char]0x2022) $rec" -ForegroundColor Yellow
+            $recColor = if ($rec.Level -eq "CRITICAL") { "Red" } else { "Yellow" }
+            Write-Host "    $([char]0x2022) $($rec.Level): $($rec.Message)" -ForegroundColor $recColor
+            if ($rec.Fix) {
+                foreach ($fixLine in $rec.Fix) {
+                    if ($fixLine -match '^#') {
+                        Write-Host "      $fixLine" -ForegroundColor Gray
+                    }
+                    else {
+                        Write-Host "      PS> $fixLine" -ForegroundColor Green
+                    }
+                }
+                Write-Host ""
+            }
         }
     }
     
@@ -2373,7 +2524,7 @@ try {
         Show-ManualValidationGuidance
     }
     else {
-        Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F4A1)) Tip: Use -IncludeGuidance to see detailed manual validation steps and monitoring setup." -ForegroundColor Cyan
+        Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F4A1)) Tip: Use -IncludeGuidance for the full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline)." -ForegroundColor Cyan
     }
     
     # 8. Export Results (if requested)
