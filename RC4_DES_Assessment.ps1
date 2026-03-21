@@ -1418,7 +1418,8 @@ function Get-AccountEncryptionAssessment {
                 # Find enabled user accounts with very old passwords that likely predate AES key generation
                 # We look for accounts with msDS-SupportedEncryptionTypes = 0 or not set, AND password > 5 years old
                 # These accounts may have been created before DFL was raised and never had password reset
-                $oldAccounts = Get-ADUser -Filter 'Enabled -eq $true -and PasswordLastSet -lt $((Get-Date).AddYears(-5).ToFileTime())' `
+                $fiveYearsAgo = (Get-Date).AddYears(-5)
+                $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
                     -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated @ServerParams -ErrorAction Stop
                 
                 if ($oldAccounts) {
