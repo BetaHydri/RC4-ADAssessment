@@ -25,7 +25,7 @@ BeforeAll {
 
     # Also extract the version variable
     $versionBlock = @'
-$script:Version = "2.2.0"
+$script:Version = "2.3.0"
 $script:AssessmentTimestamp = Get-Date
 '@
 
@@ -1442,5 +1442,449 @@ Describe 'Overall Assessment Scoring Logic' {
 
         $status = if ($criticalIssues -gt 0) { "CRITICAL" } elseif ($warnings -gt 0) { "WARNING" } else { "OK" }
         $status | Should -Be "WARNING"
+    }
+
+    It 'Returns WARNING when missing AES key accounts exist' {
+        $criticalIssues = 0
+        $warnings = 0
+        $accountResult = @{ TotalMissingAES = 5 }
+
+        if ($accountResult.TotalMissingAES -gt 0) { $warnings++ }
+
+        $status = if ($criticalIssues -gt 0) { "CRITICAL" } elseif ($warnings -gt 0) { "WARNING" } else { "OK" }
+        $status | Should -Be "WARNING"
+    }
+
+    It 'Returns WARNING when RC4DefaultDisablementPhase is not set' {
+        $criticalIssues = 0
+        $warnings = 0
+        $regResult = @{ RC4DefaultDisablementPhase = @{ Status = 'NOT SET' } }
+
+        if ($regResult.RC4DefaultDisablementPhase.Status -eq 'NOT SET') { $warnings++ }
+
+        $status = if ($criticalIssues -gt 0) { "CRITICAL" } elseif ($warnings -gt 0) { "WARNING" } else { "OK" }
+        $status | Should -Be "WARNING"
+    }
+
+    It 'Returns CRITICAL when DefaultDomainSupportedEncTypes lacks AES' {
+        $criticalIssues = 0
+        $regResult = @{ DefaultDomainSupportedEncTypes = @{ Status = 'CRITICAL' } }
+
+        if ($regResult.DefaultDomainSupportedEncTypes.Status -eq 'CRITICAL') { $criticalIssues++ }
+
+        $status = if ($criticalIssues -gt 0) { "CRITICAL" } else { "OK" }
+        $status | Should -Be "CRITICAL"
+    }
+}
+
+# ============================================================
+# Get-KdcRegistryAssessment
+# ============================================================
+
+Describe 'Get-KdcRegistryAssessment' {
+    BeforeEach {
+        Mock Get-ADDomain {
+            [PSCustomObject]@{
+                DNSRoot           = 'contoso.com'
+                DistinguishedName = 'DC=contoso,DC=com'
+            }
+        }
+        Mock Write-Host {}
+    }
+
+    Context 'When no DCs are found' {
+        BeforeEach {
+            Mock Get-ADComputer { $null }
+        }
+
+        It 'Returns empty assessment' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.QueriedDCs | Should -HaveCount 0
+            $result.DefaultDomainSupportedEncTypes.Configured | Should -BeFalse
+            $result.RC4DefaultDisablementPhase.Configured | Should -BeFalse
+        }
+    }
+
+    Context 'When RC4DefaultDisablementPhase is set to 1' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = $null
+                    RC4DefaultDisablementPhase     = 1
+                }
+            }
+        }
+
+        It 'Reports RC4DefaultDisablementPhase as OK' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.RC4DefaultDisablementPhase.Configured | Should -BeTrue
+            $result.RC4DefaultDisablementPhase.Value | Should -Be 1
+            $result.RC4DefaultDisablementPhase.Status | Should -Be 'OK'
+        }
+
+        It 'Tracks queried DC' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
+        }
+    }
+
+    Context 'When RC4DefaultDisablementPhase is set to 0' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = $null
+                    RC4DefaultDisablementPhase     = 0
+                }
+            }
+        }
+
+        It 'Reports RC4DefaultDisablementPhase as WARNING' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.RC4DefaultDisablementPhase.Status | Should -Be 'WARNING'
+        }
+    }
+
+    Context 'When DefaultDomainSupportedEncTypes is AES-only' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = 24  # AES128 + AES256
+                    RC4DefaultDisablementPhase     = $null
+                }
+            }
+        }
+
+        It 'Reports AES-only status as OK' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.DefaultDomainSupportedEncTypes.Configured | Should -BeTrue
+            $result.DefaultDomainSupportedEncTypes.IncludesAES | Should -BeTrue
+            $result.DefaultDomainSupportedEncTypes.IncludesRC4 | Should -BeFalse
+            $result.DefaultDomainSupportedEncTypes.Status | Should -Be 'OK'
+        }
+    }
+
+    Context 'When DefaultDomainSupportedEncTypes includes RC4 and AES' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = 28  # RC4 + AES128 + AES256
+                    RC4DefaultDisablementPhase     = 1
+                }
+            }
+        }
+
+        It 'Reports RC4 included for exceptions' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.DefaultDomainSupportedEncTypes.IncludesRC4 | Should -BeTrue
+            $result.DefaultDomainSupportedEncTypes.IncludesAES | Should -BeTrue
+        }
+    }
+
+    Context 'When DefaultDomainSupportedEncTypes has no AES' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = 4  # RC4 only
+                    RC4DefaultDisablementPhase     = $null
+                }
+            }
+        }
+
+        It 'Reports CRITICAL when no AES in DefaultDomainSupportedEncTypes' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.DefaultDomainSupportedEncTypes.Status | Should -Be 'CRITICAL'
+            $result.DefaultDomainSupportedEncTypes.IncludesAES | Should -BeFalse
+        }
+    }
+
+    Context 'When WinRM fails on a DC' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command { throw "WinRM connection failed" }
+        }
+
+        It 'Adds DC to FailedDCs list' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.FailedDCs | Should -HaveCount 1
+            $result.FailedDCs[0].Name | Should -Be 'dc01.contoso.com'
+        }
+    }
+
+    Context 'When neither registry key is set' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = $null
+                    RC4DefaultDisablementPhase     = $null
+                }
+            }
+        }
+
+        It 'Reports both as NOT SET' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.DefaultDomainSupportedEncTypes.Status | Should -Be 'NOT SET'
+            $result.RC4DefaultDisablementPhase.Status | Should -Be 'NOT SET'
+        }
+    }
+}
+
+# ============================================================
+# Get-AuditPolicyCheck
+# ============================================================
+
+Describe 'Get-AuditPolicyCheck' {
+    BeforeEach {
+        Mock Get-ADDomain {
+            [PSCustomObject]@{
+                DNSRoot           = 'contoso.com'
+                DistinguishedName = 'DC=contoso,DC=com'
+            }
+        }
+        Mock Write-Host {}
+    }
+
+    Context 'When no DC is found' {
+        BeforeEach {
+            Mock Get-ADComputer { $null }
+        }
+
+        It 'Returns unknown status' {
+            $result = Get-AuditPolicyCheck -ServerParams @{}
+            $result.Status | Should -Be 'Unknown'
+        }
+    }
+
+    Context 'When both audit policies are enabled' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    AuthService = "Kerberos Authentication Service  Success and Failure"
+                    TicketOps   = "Kerberos Service Ticket Operations  Success and Failure"
+                }
+            }
+        }
+
+        It 'Reports OK status' {
+            $result = Get-AuditPolicyCheck -ServerParams @{}
+            $result.Status | Should -Be 'OK'
+            $result.KerberosAuthServiceEnabled | Should -BeTrue
+            $result.KerberosTicketOpsEnabled | Should -BeTrue
+        }
+
+        It 'Records queried DC' {
+            $result = Get-AuditPolicyCheck -ServerParams @{}
+            $result.QueriedDC | Should -Be 'dc01.contoso.com'
+        }
+    }
+
+    Context 'When no audit policies are enabled' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    AuthService = "Kerberos Authentication Service  No Auditing"
+                    TicketOps   = "Kerberos Service Ticket Operations  No Auditing"
+                }
+            }
+        }
+
+        It 'Reports CRITICAL status' {
+            $result = Get-AuditPolicyCheck -ServerParams @{}
+            $result.Status | Should -Be 'CRITICAL'
+            $result.KerberosAuthServiceEnabled | Should -BeFalse
+            $result.KerberosTicketOpsEnabled | Should -BeFalse
+        }
+    }
+
+    Context 'When only one audit policy is enabled' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    AuthService = "Kerberos Authentication Service  Success"
+                    TicketOps   = "Kerberos Service Ticket Operations  No Auditing"
+                }
+            }
+        }
+
+        It 'Reports WARNING status' {
+            $result = Get-AuditPolicyCheck -ServerParams @{}
+            $result.Status | Should -Be 'WARNING'
+            $result.KerberosAuthServiceEnabled | Should -BeTrue
+            $result.KerberosTicketOpsEnabled | Should -BeFalse
+        }
+    }
+
+    Context 'When WinRM fails' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command { throw "WinRM connection failed" }
+        }
+
+        It 'Reports UNKNOWN status' {
+            $result = Get-AuditPolicyCheck -ServerParams @{}
+            $result.Status | Should -Be 'UNKNOWN'
+        }
+    }
+}
+
+# ============================================================
+# Get-AccountEncryptionAssessment - Missing AES Keys
+# ============================================================
+
+Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
+    BeforeEach {
+        Mock Get-ADDomain {
+            [PSCustomObject]@{
+                DNSRoot           = 'contoso.com'
+                DistinguishedName = 'DC=contoso,DC=com'
+                DomainMode        = 'Windows2016Domain'
+            }
+        }
+        Mock Write-Host {}
+    }
+
+    Context 'When accounts with very old passwords exist' {
+        BeforeEach {
+            Mock Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = $null
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                if ($Filter -and "$Filter" -match 'PasswordLastSet') {
+                    return @(
+                        [PSCustomObject]@{
+                            SamAccountName                  = 'old_user1'
+                            DistinguishedName               = 'CN=old_user1,OU=Users,DC=contoso,DC=com'
+                            Enabled                         = $true
+                            PasswordLastSet                 = (Get-Date).AddDays(-2000)
+                            'msDS-SupportedEncryptionTypes' = $null
+                            ServicePrincipalName            = $null
+                            WhenCreated                     = (Get-Date).AddDays(-3000)
+                        },
+                        [PSCustomObject]@{
+                            SamAccountName                  = 'old_svc'
+                            DistinguishedName               = 'CN=old_svc,OU=Service,DC=contoso,DC=com'
+                            Enabled                         = $true
+                            PasswordLastSet                 = (Get-Date).AddDays(-2500)
+                            'msDS-SupportedEncryptionTypes' = 0
+                            ServicePrincipalName            = @('HTTP/old.contoso.com')
+                            WhenCreated                     = (Get-Date).AddDays(-3000)
+                        }
+                    )
+                }
+                return $null
+            }
+            Mock Get-ADServiceAccount { $null }
+        }
+
+        It 'Detects accounts missing AES keys' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalMissingAES | Should -Be 2
+        }
+
+        It 'Populates MissingAESKeyAccounts details' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.MissingAESKeyAccounts | Should -HaveCount 2
+            $result.MissingAESKeyAccounts[0].Name | Should -Be 'old_user1'
+            $result.MissingAESKeyAccounts[0].Type | Should -Be 'Missing AES Keys'
+        }
+
+        It 'Tracks SPN status for missing AES accounts' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.MissingAESKeyAccounts[0].HasSPN | Should -BeFalse
+            $result.MissingAESKeyAccounts[1].HasSPN | Should -BeTrue
+        }
+    }
+
+    Context 'When no old accounts exist' {
+        BeforeEach {
+            Mock Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = $null
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                return $null
+            }
+            Mock Get-ADServiceAccount { $null }
+        }
+
+        It 'Returns zero missing AES accounts' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalMissingAES | Should -Be 0
+            $result.MissingAESKeyAccounts | Should -HaveCount 0
+        }
     }
 }

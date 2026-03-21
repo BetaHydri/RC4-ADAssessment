@@ -6,12 +6,14 @@
   This script compares two exported JSON assessment files to identify changes in:
   - Domain Controller encryption configuration
   - Trust encryption settings
+  - KDC registry configuration (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase)
+  - Account encryption status (KRBTGT, service accounts, DES flags, missing AES keys)
   - Event log ticket usage patterns
   - Overall security posture
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.1.0
+  Version: 2.3.0
 
 .PARAMETER BaselineFile
   Path to the baseline (older) assessment JSON file.
@@ -143,6 +145,50 @@ try {
     Write-Host "  Total Trusts:    $($baseline.Trusts.TotalTrusts) $($trustChanges.TotalTrusts.Symbol) $($current.Trusts.TotalTrusts)" -ForegroundColor $trustChanges.TotalTrusts.Color
     Write-Host "  RC4 Risk:        $($baseline.Trusts.RC4Risk) $($trustChanges.RC4Risk.Symbol) $($current.Trusts.RC4Risk)" -ForegroundColor $(if ($trustChanges.RC4Risk.Status -eq "Improved") { "Green" } else { $trustChanges.RC4Risk.Color })
     Write-Host "  DES Risk:        $($baseline.Trusts.DESRisk) $($trustChanges.DESRisk.Symbol) $($current.Trusts.DESRisk)" -ForegroundColor $(if ($trustChanges.DESRisk.Status -eq "Improved") { "Green" } else { $trustChanges.DESRisk.Color })
+    
+    # Account Comparison (v2.2.0+ data)
+    if ($baseline.Accounts -and $current.Accounts) {
+        Write-ComparisonSection "Account Changes"
+        
+        # KRBTGT
+        Write-Host "  KRBTGT Status:   $($baseline.Accounts.KRBTGT.Status) $([char]0x2192) $($current.Accounts.KRBTGT.Status)" -ForegroundColor $(if ($current.Accounts.KRBTGT.Status -eq 'OK') { 'Green' } elseif ($current.Accounts.KRBTGT.Status -eq 'WARNING') { 'Yellow' } else { 'Red' })
+        Write-Host "  KRBTGT Pwd Age:  $($baseline.Accounts.KRBTGT.PasswordAgeDays)d $([char]0x2192) $($current.Accounts.KRBTGT.PasswordAgeDays)d" -ForegroundColor Gray
+        
+        $desFlagChange = Get-ChangeIndicator -Old ([int]$baseline.Accounts.TotalDESFlag) -New ([int]$current.Accounts.TotalDESFlag)
+        $rc4SvcChange = Get-ChangeIndicator -Old ([int]$baseline.Accounts.TotalRC4OnlySvc) -New ([int]$current.Accounts.TotalRC4OnlySvc)
+        $staleSvcChange = Get-ChangeIndicator -Old ([int]$baseline.Accounts.TotalStaleSvc) -New ([int]$current.Accounts.TotalStaleSvc)
+        
+        Write-Host "  DES Flag Accts:  $($baseline.Accounts.TotalDESFlag) $($desFlagChange.Symbol) $($current.Accounts.TotalDESFlag)" -ForegroundColor $(if ($desFlagChange.Status -eq "Improved") { "Green" } else { $desFlagChange.Color })
+        Write-Host "  RC4-Only SvcAcc: $($baseline.Accounts.TotalRC4OnlySvc) $($rc4SvcChange.Symbol) $($current.Accounts.TotalRC4OnlySvc)" -ForegroundColor $(if ($rc4SvcChange.Status -eq "Improved") { "Green" } else { $rc4SvcChange.Color })
+        Write-Host "  Stale Svc(RC4):  $($baseline.Accounts.TotalStaleSvc) $($staleSvcChange.Symbol) $($current.Accounts.TotalStaleSvc)" -ForegroundColor $(if ($staleSvcChange.Status -eq "Improved") { "Green" } else { $staleSvcChange.Color })
+        
+        # Missing AES keys (v2.3.0+)
+        if ($null -ne $baseline.Accounts.TotalMissingAES -or $null -ne $current.Accounts.TotalMissingAES) {
+            $missingAESChange = Get-ChangeIndicator -Old ([int]$baseline.Accounts.TotalMissingAES) -New ([int]$current.Accounts.TotalMissingAES)
+            Write-Host "  Missing AES:     $([int]$baseline.Accounts.TotalMissingAES) $($missingAESChange.Symbol) $([int]$current.Accounts.TotalMissingAES)" -ForegroundColor $(if ($missingAESChange.Status -eq "Improved") { "Green" } else { $missingAESChange.Color })
+        }
+        
+        # Count account improvements/degradations
+        if ($desFlagChange.Status -eq "Improved") { $improvements++ }
+        if ($desFlagChange.Status -eq "Worsened") { $degradations++ }
+        if ($rc4SvcChange.Status -eq "Improved") { $improvements++ }
+        if ($rc4SvcChange.Status -eq "Worsened") { $degradations++ }
+        if ($staleSvcChange.Status -eq "Improved") { $improvements++ }
+        if ($staleSvcChange.Status -eq "Worsened") { $degradations++ }
+    }
+    
+    # KDC Registry Comparison (v2.3.0+ data)
+    if ($baseline.KdcRegistry -and $current.KdcRegistry) {
+        Write-ComparisonSection "KDC Registry Changes"
+        
+        $baseRC4Phase = if ($baseline.KdcRegistry.RC4DefaultDisablementPhase.Configured) { $baseline.KdcRegistry.RC4DefaultDisablementPhase.Value } else { "Not Set" }
+        $currRC4Phase = if ($current.KdcRegistry.RC4DefaultDisablementPhase.Configured) { $current.KdcRegistry.RC4DefaultDisablementPhase.Value } else { "Not Set" }
+        Write-Host "  RC4Disablement:  $baseRC4Phase $([char]0x2192) $currRC4Phase" -ForegroundColor $(if ($currRC4Phase -eq 1) { 'Green' } elseif ($currRC4Phase -eq 'Not Set') { 'Yellow' } else { 'Gray' })
+        
+        $baseEncTypes = if ($baseline.KdcRegistry.DefaultDomainSupportedEncTypes.Configured) { $baseline.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
+        $currEncTypes = if ($current.KdcRegistry.DefaultDomainSupportedEncTypes.Configured) { $current.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
+        Write-Host "  DefaultEncTypes: $baseEncTypes $([char]0x2192) $currEncTypes" -ForegroundColor Gray
+    }
     
     # Event Log Comparison (if available)
     if ($baseline.EventLogs -and $current.EventLogs) {

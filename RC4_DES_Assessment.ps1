@@ -10,11 +10,15 @@
   - Fast DC-level assessment (no full computer object enumeration)
   - Event log analysis for actual DES/RC4 ticket usage (Event IDs 4768/4769)
   - Post-Nov 2022 logic: Trusts default to AES when msDS-SupportedEncryptionTypes is unset
+  - KDC registry key assessment (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase)
+  - Kerberos audit policy pre-check before event log analysis
   - KRBTGT account password age and encryption type assessment
   - Service account (SPN) and gMSA/sMSA RC4/DES encryption detection
   - Accounts with USE_DES_KEY_ONLY UserAccountControl flag detection
+  - Accounts missing AES keys (password set before DFL raised to 2008)
   - Realistic computer object assessment: Only flags actual RC4 fallback scenarios
   - Actionable guidance for manual validation and monitoring setup
+  - July 2026 RC4 removal timeline and explicit RC4 exception workflow
   - Performance optimized for large forests (<5 minutes vs 5+ hours)
   
   Post-November 2022 Update Logic:
@@ -63,7 +67,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.2.0
+  Version: 2.3.0
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -74,7 +78,9 @@
   Based on Microsoft guidance:
   - November 2022 OOB Updates (CVE-2022-37966, CVE-2022-37967)
   - KB5021131: Managing Kerberos protocol changes
-  - Windows Server 2025 RC4 deprecation roadmap
+  - January 2026 security updates (RC4 disablement Phase 1)
+  - July 2026 RC4 full removal from KDC path
+  - Microsoft Kerberos-Crypto scripts: https://github.com/microsoft/Kerberos-Crypto
 
 .LINK
   https://techcommunity.microsoft.com/blog/askds/what-happened-to-kerberos-authentication-after-installing-the-november-2022oob-u/3696351
@@ -125,7 +131,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.2.0"
+$script:Version = "2.3.0"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -520,6 +526,273 @@ function Get-TrustEncryptionAssessment {
     return $assessment
 }
 
+function Get-KdcRegistryAssessment {
+    param(
+        [hashtable]$ServerParams
+    )
+    
+    Write-Section "KDC Registry Configuration Assessment"
+    
+    $assessment = @{
+        DefaultDomainSupportedEncTypes = @{
+            Configured  = $false
+            Value       = $null
+            Types       = ""
+            IncludesRC4 = $false
+            IncludesAES = $false
+            Status      = "Unknown"
+        }
+        RC4DefaultDisablementPhase     = @{
+            Configured = $false
+            Value      = $null
+            Status     = "Unknown"
+        }
+        QueriedDCs                     = @()
+        FailedDCs                      = @()
+        Details                        = @()
+    }
+    
+    try {
+        # Get domain info
+        if ($ServerParams.ContainsKey('Server')) {
+            try {
+                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
+            }
+            catch {
+                throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
+            }
+        }
+        else {
+            $domainInfo = Get-ADDomain
+        }
+        
+        # Get all DCs
+        $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
+        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
+        
+        if (-not $dcs) {
+            Write-Finding -Status "WARNING" -Message "No Domain Controllers found for registry assessment"
+            return $assessment
+        }
+        
+        Write-Finding -Status "INFO" -Message "Checking KDC registry keys on $(@($dcs).Count) Domain Controller(s)"
+        
+        $regPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc'
+        
+        foreach ($dc in @($dcs)) {
+            $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+            Write-Host "  $([char]0x2022) Querying $dcName..." -ForegroundColor Cyan
+            
+            try {
+                $regValues = Invoke-Command -ComputerName $dcName -ScriptBlock {
+                    param($Path)
+                    $result = @{ DefaultDomainSupportedEncTypes = $null; RC4DefaultDisablementPhase = $null }
+                    try {
+                        $val = Get-ItemProperty -Path $Path -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
+                        if ($val) { $result.DefaultDomainSupportedEncTypes = $val.DefaultDomainSupportedEncTypes }
+                    } catch {}
+                    try {
+                        $val = Get-ItemProperty -Path $Path -Name 'RC4DefaultDisablementPhase' -ErrorAction SilentlyContinue
+                        if ($val) { $result.RC4DefaultDisablementPhase = $val.RC4DefaultDisablementPhase }
+                    } catch {}
+                    $result
+                } -ArgumentList $regPath -ErrorAction Stop
+                
+                $assessment.QueriedDCs += $dcName
+                
+                $dcDetail = @{
+                    Name                           = $dcName
+                    DefaultDomainSupportedEncTypes  = $regValues.DefaultDomainSupportedEncTypes
+                    RC4DefaultDisablementPhase     = $regValues.RC4DefaultDisablementPhase
+                }
+                $assessment.Details += $dcDetail
+                
+                # Process DefaultDomainSupportedEncTypes
+                if ($null -ne $regValues.DefaultDomainSupportedEncTypes) {
+                    $encVal = [int]$regValues.DefaultDomainSupportedEncTypes
+                    $assessment.DefaultDomainSupportedEncTypes.Configured = $true
+                    $assessment.DefaultDomainSupportedEncTypes.Value = $encVal
+                    $assessment.DefaultDomainSupportedEncTypes.Types = Get-EncryptionTypeString -Value $encVal
+                    $assessment.DefaultDomainSupportedEncTypes.IncludesRC4 = [bool]($encVal -band 0x4)
+                    $assessment.DefaultDomainSupportedEncTypes.IncludesAES = [bool]($encVal -band 0x18)
+                    
+                    Write-Host "    DefaultDomainSupportedEncTypes: $encVal ($(Get-EncryptionTypeString -Value $encVal))" -ForegroundColor Gray
+                }
+                
+                # Process RC4DefaultDisablementPhase
+                if ($null -ne $regValues.RC4DefaultDisablementPhase) {
+                    $assessment.RC4DefaultDisablementPhase.Configured = $true
+                    $assessment.RC4DefaultDisablementPhase.Value = [int]$regValues.RC4DefaultDisablementPhase
+                    
+                    Write-Host "    RC4DefaultDisablementPhase: $($regValues.RC4DefaultDisablementPhase)" -ForegroundColor Gray
+                }
+            }
+            catch {
+                $assessment.FailedDCs += @{ Name = $dcName; Error = $_.Exception.Message }
+                Write-Host "    $([char]0x26A0) Could not query registry on $dcName" -ForegroundColor Yellow
+            }
+        }
+        
+        # Assess DefaultDomainSupportedEncTypes
+        if ($assessment.DefaultDomainSupportedEncTypes.Configured) {
+            if (-not $assessment.DefaultDomainSupportedEncTypes.IncludesAES) {
+                $assessment.DefaultDomainSupportedEncTypes.Status = "CRITICAL"
+                Write-Finding -Status "CRITICAL" -Message "DefaultDomainSupportedEncTypes does NOT include AES" `
+                    -Detail "Value: $($assessment.DefaultDomainSupportedEncTypes.Value) ($($assessment.DefaultDomainSupportedEncTypes.Types))"
+            }
+            elseif ($assessment.DefaultDomainSupportedEncTypes.IncludesRC4) {
+                $assessment.DefaultDomainSupportedEncTypes.Status = "OK"
+                Write-Finding -Status "INFO" -Message "DefaultDomainSupportedEncTypes includes RC4 (needed for explicit RC4 exceptions post-July 2026)" `
+                    -Detail "Value: $($assessment.DefaultDomainSupportedEncTypes.Value) ($($assessment.DefaultDomainSupportedEncTypes.Types))"
+            }
+            else {
+                $assessment.DefaultDomainSupportedEncTypes.Status = "OK"
+                Write-Finding -Status "OK" -Message "DefaultDomainSupportedEncTypes is AES-only" `
+                    -Detail "Value: $($assessment.DefaultDomainSupportedEncTypes.Value) ($($assessment.DefaultDomainSupportedEncTypes.Types))"
+            }
+        }
+        else {
+            $assessment.DefaultDomainSupportedEncTypes.Status = "NOT SET"
+            Write-Finding -Status "INFO" -Message "DefaultDomainSupportedEncTypes registry key is not set (uses OS defaults)"
+        }
+        
+        # Assess RC4DefaultDisablementPhase
+        if ($assessment.RC4DefaultDisablementPhase.Configured) {
+            $phase = $assessment.RC4DefaultDisablementPhase.Value
+            switch ($phase) {
+                0 {
+                    $assessment.RC4DefaultDisablementPhase.Status = "WARNING"
+                    Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase = 0 (RC4 disablement NOT active)" `
+                        -Detail "Set to 1 to begin RC4 disablement on this DC"
+                }
+                1 {
+                    $assessment.RC4DefaultDisablementPhase.Status = "OK"
+                    Write-Finding -Status "OK" -Message "RC4DefaultDisablementPhase = 1 (RC4 disablement active)" `
+                        -Detail "RC4 is disabled for accounts without explicit RC4 in msDS-SupportedEncryptionTypes"
+                }
+                default {
+                    $assessment.RC4DefaultDisablementPhase.Status = "INFO"
+                    Write-Finding -Status "INFO" -Message "RC4DefaultDisablementPhase = $phase" `
+                        -Detail "Unexpected value - check Microsoft documentation for current phase definitions"
+                }
+            }
+        }
+        else {
+            $assessment.RC4DefaultDisablementPhase.Status = "NOT SET"
+            Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase registry key is not set" `
+                -Detail "Deploy January 2026+ security updates and set RC4DefaultDisablementPhase = 1 on all DCs"
+        }
+        
+        if ($assessment.FailedDCs.Count -gt 0) {
+            Write-Host "`n  $([char]0x26A0) Could not query registry on $($assessment.FailedDCs.Count) DC(s) - WinRM may not be enabled" -ForegroundColor Yellow
+        }
+    }
+    catch {
+        $errorMsg = $_.Exception.Message
+        if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
+            Write-Finding -Status "CRITICAL" -Message $errorMsg
+        }
+        else {
+            Write-Finding -Status "WARNING" -Message "Error checking KDC registry: $errorMsg"
+        }
+    }
+    
+    return $assessment
+}
+
+function Get-AuditPolicyCheck {
+    param(
+        [hashtable]$ServerParams
+    )
+    
+    Write-Section "Kerberos Audit Policy Verification"
+    
+    $assessment = @{
+        KerberosAuthServiceEnabled = $null    # $true, $false, or $null if unknown
+        KerberosTicketOpsEnabled   = $null
+        Status                     = "Unknown"
+        QueriedDC                  = $null
+    }
+    
+    try {
+        # Get domain info
+        if ($ServerParams.ContainsKey('Server')) {
+            try {
+                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
+            }
+            catch {
+                throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
+            }
+        }
+        else {
+            $domainInfo = Get-ADDomain
+        }
+        
+        # Query first available DC
+        $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
+        $dc = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams | Select-Object -First 1
+        
+        if (-not $dc) {
+            Write-Finding -Status "WARNING" -Message "No Domain Controller found for audit policy check"
+            return $assessment
+        }
+        
+        $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+        $assessment.QueriedDC = $dcName
+        
+        Write-Finding -Status "INFO" -Message "Checking Kerberos audit policy on $dcName"
+        
+        try {
+            $auditResult = Invoke-Command -ComputerName $dcName -ScriptBlock {
+                $output = auditpol /get /subcategory:"Kerberos Authentication Service" 2>&1
+                $authService = $output | Out-String
+                $output2 = auditpol /get /subcategory:"Kerberos Service Ticket Operations" 2>&1
+                $ticketOps = $output2 | Out-String
+                @{
+                    AuthService = $authService
+                    TicketOps   = $ticketOps
+                }
+            } -ErrorAction Stop
+            
+            # Parse audit policy results
+            $assessment.KerberosAuthServiceEnabled = $auditResult.AuthService -match 'Success and Failure|Success|Failure'
+            $assessment.KerberosTicketOpsEnabled = $auditResult.TicketOps -match 'Success and Failure|Success|Failure'
+            
+            if ($assessment.KerberosAuthServiceEnabled -and $assessment.KerberosTicketOpsEnabled) {
+                $assessment.Status = "OK"
+                Write-Finding -Status "OK" -Message "Kerberos auditing is enabled (Authentication Service + Ticket Operations)"
+            }
+            elseif (-not $assessment.KerberosAuthServiceEnabled -and -not $assessment.KerberosTicketOpsEnabled) {
+                $assessment.Status = "CRITICAL"
+                Write-Finding -Status "CRITICAL" -Message "Kerberos auditing is NOT enabled - event log analysis will return no results" `
+                    -Detail "Enable via: auditpol /set /subcategory:""Kerberos Authentication Service"" /success:enable /failure:enable"
+                Write-Host "    Also run: auditpol /set /subcategory:""Kerberos Service Ticket Operations"" /success:enable /failure:enable" -ForegroundColor Gray
+            }
+            else {
+                $assessment.Status = "WARNING"
+                if (-not $assessment.KerberosAuthServiceEnabled) {
+                    Write-Finding -Status "WARNING" -Message "Kerberos Authentication Service auditing is NOT enabled"
+                }
+                if (-not $assessment.KerberosTicketOpsEnabled) {
+                    Write-Finding -Status "WARNING" -Message "Kerberos Service Ticket Operations auditing is NOT enabled"
+                }
+            }
+        }
+        catch {
+            $assessment.Status = "UNKNOWN"
+            Write-Finding -Status "WARNING" -Message "Could not check audit policy on $dcName`: $($_.Exception.Message)" `
+                -Detail "Verify manually: auditpol /get /subcategory:""Kerberos Authentication Service"""
+        }
+    }
+    catch {
+        $errorMsg = $_.Exception.Message
+        $assessment.Status = "UNKNOWN"
+        Write-Finding -Status "WARNING" -Message "Error checking audit policy: $errorMsg"
+    }
+    
+    return $assessment
+}
+
 function Get-EventLogEncryptionAnalysis {
     param(
         [hashtable]$ServerParams,
@@ -834,10 +1107,12 @@ function Get-AccountEncryptionAssessment {
         RC4OnlyServiceAccounts = @()
         RC4OnlyMSAs            = @()
         StaleServiceAccounts   = @()
+        MissingAESKeyAccounts  = @()
         TotalDESFlag           = 0
         TotalRC4OnlySvc        = 0
         TotalRC4OnlyMSA        = 0
         TotalStaleSvc          = 0
+        TotalMissingAES        = 0
         Details                = @()
     }
     
@@ -1127,6 +1402,79 @@ function Get-AccountEncryptionAssessment {
         }
         
         # ────────────────────────────────────────────────
+        # 5. Accounts missing AES keys (password set before DFL 2008)
+        # ────────────────────────────────────────────────
+        Write-Host "`n  Checking for accounts missing AES keys..." -ForegroundColor Cyan
+        
+        try {
+            # Determine when DFL was raised to 2008 (DFL >= Windows2008Domain means AES keys are generated on password set)
+            # Accounts whose password was last set BEFORE the DFL was raised to 2008 won't have AES keys
+            $dfl = $domainInfo.DomainMode
+            $dflSupportsAES = $dfl -match '2008|2012|2016|Windows2008|Windows2012|Windows2016|2025'
+            
+            if ($dflSupportsAES) {
+                # Find enabled user accounts with very old passwords that likely predate AES key generation
+                # We look for accounts with msDS-SupportedEncryptionTypes = 0 or not set, AND password > 5 years old
+                # These accounts may have been created before DFL was raised and never had password reset
+                $oldAccounts = Get-ADUser -Filter 'Enabled -eq $true -and PasswordLastSet -lt $((Get-Date).AddYears(-5).ToFileTime())' `
+                    -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated @ServerParams -ErrorAction Stop
+                
+                if ($oldAccounts) {
+                    $oldList = @($oldAccounts)
+                    
+                    foreach ($acct in $oldList) {
+                        $encValue = $acct.'msDS-SupportedEncryptionTypes'
+                        $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
+                        
+                        # Flag accounts where password hasn't been reset since before AES was available
+                        # AND msDS-SupportedEncryptionTypes is not set (meaning no explicit AES bits)
+                        if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
+                            $acctInfo = @{
+                                Name            = $acct.SamAccountName
+                                DN              = $acct.DistinguishedName
+                                PasswordLastSet = $acct.PasswordLastSet
+                                PasswordAgeDays = $pwdAge
+                                WhenCreated     = $acct.WhenCreated
+                                HasSPN          = [bool]$acct.ServicePrincipalName
+                                Type            = "Missing AES Keys"
+                            }
+                            $assessment.MissingAESKeyAccounts += $acctInfo
+                        }
+                    }
+                    
+                    $assessment.TotalMissingAES = $assessment.MissingAESKeyAccounts.Count
+                    
+                    if ($assessment.MissingAESKeyAccounts.Count -gt 0) {
+                        Write-Finding -Status "WARNING" -Message "$($assessment.MissingAESKeyAccounts.Count) account(s) may be missing AES keys (password not reset since DFL raised to 2008+)" `
+                            -Detail "Reset password twice for these accounts to generate AES keys"
+                        
+                        $displayCount = [Math]::Min($assessment.MissingAESKeyAccounts.Count, 10)
+                        foreach ($acct in $assessment.MissingAESKeyAccounts | Select-Object -First $displayCount) {
+                            $spnStr = if ($acct.HasSPN) { " [HAS SPN]" } else { "" }
+                            Write-Host "    $([char]0x2022) $($acct.Name) - Password age: $($acct.PasswordAgeDays) days$spnStr" -ForegroundColor Yellow
+                        }
+                        if ($assessment.MissingAESKeyAccounts.Count -gt 10) {
+                            Write-Host "    ... and $($assessment.MissingAESKeyAccounts.Count - 10) more" -ForegroundColor Yellow
+                        }
+                    }
+                    else {
+                        Write-Finding -Status "OK" -Message "No accounts found with potentially missing AES keys"
+                    }
+                }
+                else {
+                    Write-Finding -Status "OK" -Message "No accounts found with passwords older than 5 years"
+                }
+            }
+            else {
+                Write-Finding -Status "WARNING" -Message "Domain functional level ($dfl) may not support AES key generation" `
+                    -Detail "Raise DFL to Windows Server 2008 or higher to enable AES Kerberos keys"
+            }
+        }
+        catch {
+            Write-Finding -Status "WARNING" -Message "Could not check for accounts missing AES keys: $($_.Exception.Message)"
+        }
+        
+        # ────────────────────────────────────────────────
         # Summary
         # ────────────────────────────────────────────────
         Write-Host ""
@@ -1143,6 +1491,7 @@ function Get-AccountEncryptionAssessment {
         Write-Host "  $([char]0x2022) RC4/DES-Only Service Accounts: $($assessment.TotalRC4OnlySvc)" -ForegroundColor $(if ($assessment.TotalRC4OnlySvc -gt 0) { "Red" } else { "Green" })
         Write-Host "  $([char]0x2022) RC4-Only Managed Service Accounts: $($assessment.TotalRC4OnlyMSA)" -ForegroundColor $(if ($assessment.TotalRC4OnlyMSA -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
+        Write-Host "  $([char]0x2022) Accounts Missing AES Keys (pwd >5yr): $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
     }
     catch {
         $errorMsg = $_.Exception.Message
@@ -1662,21 +2011,111 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Update service accounts to AES:
    PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=24}
    # Then reset the password to generate new AES keys
+   # IMPORTANT: After changing encryption types, purge cached tickets:
+   # CMD> klist purge
+   # Then test access to the application
 
-7. Windows Server 2025 Preparation
+7. RC4 Disablement Timeline & Registry Keys
    $([string]([char]0x2500) * 60)
    
-   Windows Server 2025 disables RC4 fallback entirely.
+   $([char]0x26A0) CRITICAL TIMELINE:
+   $([char]0x2022) January 2026: Security updates add RC4DefaultDisablementPhase
+     registry key. Set to 1 on all DCs to begin RC4 disablement.
+   $([char]0x2022) July 2026: RC4 completely removed from Kerberos KDC path,
+     EXCEPT for accounts with explicit RC4 in msDS-SupportedEncryptionTypes.
    
-   Prepare by:
-   $([char]0x2713) Monitoring event logs for 30+ days to detect RC4 usage
-   $([char]0x2713) Identifying and upgrading systems that can't handle AES
-   $([char]0x2713) Ensuring all trusts and service accounts use AES
-   $([char]0x2713) Rotating KRBTGT password to generate current AES keys
-   $([char]0x2713) Removing USE_DES_KEY_ONLY flag from all accounts
-   $([char]0x2713) Testing in lab environment before production deployment
+   Registry Keys to Configure:
+   $([char]0x2022) HKLM\SYSTEM\CurrentControlSet\Services\Kdc
+   
+   a) RC4DefaultDisablementPhase (DWORD):
+      $([char]0x2022) Value = 1: Disables RC4 for accounts without explicit RC4
+      $([char]0x2022) Deploy to ALL Domain Controllers after January 2026 updates
+      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+            -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
+   
+   b) DefaultDomainSupportedEncTypes (DWORD):
+      $([char]0x2022) Controls default encryption types for the domain
+      $([char]0x2022) If set, MUST include RC4 (0x4) if you need explicit RC4
+        exceptions post-July 2026
+      $([char]0x2022) Usually NOT set (uses OS defaults) - verify before changing
+      PS> # Check current value:
+      PS> Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+            -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
+   
+   $([char]0x2022) GPO Preference path for DefaultDomainSupportedEncTypes:
+     Computer Configuration > Preferences > Windows Settings > Registry
+     > DefaultDomainSupportedEncTypes
 
-8. Recommended Monitoring Schedule
+8. Explicit RC4 Exception Workflow (Post-July 2026)
+   $([string]([char]0x2500) * 60)
+   
+   After July 2026, RC4 is blocked UNLESS explicitly configured on the account's
+   msDS-SupportedEncryptionTypes attribute. Use this workflow:
+   
+   a) Step 1: Try AES First
+      PS> # Set account to AES-only
+      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> # Reset password to generate AES keys
+      PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
+      CMD> klist purge
+      $([char]0x2022) Test application access
+   
+   b) Step 2: If AES Fails, Add Explicit RC4 Exception
+      For USER/SERVICE accounts:
+      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      # 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)
+      PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
+      CMD> klist purge
+      $([char]0x2022) Test application access
+   
+      For COMPUTER accounts (rare but possible):
+      PS> Set-ADComputer "LEGACYHOST" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      CMD> klist purge
+      $([char]0x2022) Test application access
+   
+   c) Step 3: Document and Plan
+      $([char]0x2022) Document all accounts with explicit RC4 exceptions
+      $([char]0x2022) Engage vendors for AES support on third-party systems
+      $([char]0x2022) Plan upgrades or replacements for legacy systems
+      $([char]0x2022) Set review dates to revisit each exception
+   
+   $([char]0x26A0) Ensure DefaultDomainSupportedEncTypes on DCs still
+   includes RC4 (0x4) if you have any explicit RC4 exceptions.
+
+9. Accounts Missing AES Keys
+   $([string]([char]0x2500) * 60)
+   
+   Accounts whose password was last set BEFORE the Domain Functional Level
+   was raised to Windows Server 2008 will NOT have AES keys generated.
+   
+   To remediate:
+   $([char]0x2022) Reset password TWICE (use different or same password)
+   $([char]0x2022) Update services running under these accounts with new password
+   $([char]0x2022) After reset, AES keys are automatically generated
+   
+   Find affected accounts:
+   PS> Get-ADUser -Filter 'Enabled -eq `$true' -Properties PasswordLastSet, `
+       'msDS-SupportedEncryptionTypes' |
+       Where-Object { `$_.PasswordLastSet -lt (Get-Date).AddYears(-5) -and
+                       (-not `$_.'msDS-SupportedEncryptionTypes' -or
+                        `$_.'msDS-SupportedEncryptionTypes' -eq 0) } |
+       Select-Object Name, PasswordLastSet
+   
+   $([char]0x26A0) For service accounts, coordinate password reset with
+   application teams to avoid service disruptions.
+
+10. Microsoft Kerberos-Crypto Tools
+   $([string]([char]0x2500) * 60)
+   
+   Microsoft provides complementary scripts for RC4 detection:
+   $([char]0x2022) Get-KerbEncryptionUsage.ps1 - Detects RC4 usage from events 4768/4769
+   $([char]0x2022) List-AccountKeys.ps1 - Lists account encryption key types
+   
+   Download from: https://github.com/microsoft/Kerberos-Crypto
+   
+   More info: https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4
+
+11. Recommended Monitoring Schedule
    $([string]([char]0x2500) * 60)
    
    $([char]0x2022) Weekly: Check for RC4/DES events (automated alert)
@@ -1690,6 +2129,8 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
     Write-Host "  $([char]0x2022) KB5021131: Managing Kerberos protocol changes post-November 2022" -ForegroundColor Gray
     Write-Host "  $([char]0x2022) https://techcommunity.microsoft.com/blog/askds/what-happened-to-kerberos-authentication-after-installing-the-november-2022oob-u/3696351" -ForegroundColor Gray
     Write-Host "  $([char]0x2022) https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797" -ForegroundColor Gray
+    Write-Host "  $([char]0x2022) https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4" -ForegroundColor Gray
+    Write-Host "  $([char]0x2022) https://github.com/microsoft/Kerberos-Crypto" -ForegroundColor Gray
 }
 
 #endregion
@@ -1761,6 +2202,8 @@ $results = @{
     DomainControllers = $null
     Trusts            = $null
     Accounts          = $null
+    KdcRegistry       = $null
+    AuditPolicy       = $null
     EventLogs         = $null
     OverallStatus     = "Unknown"
     Recommendations   = @()
@@ -1776,8 +2219,15 @@ try {
     # 3. KRBTGT & Account Assessment
     $results.Accounts = Get-AccountEncryptionAssessment -ServerParams $serverParams
     
-    # 4. Event Log Analysis (if requested)
+    # 4. KDC Registry Assessment
+    $results.KdcRegistry = Get-KdcRegistryAssessment -ServerParams $serverParams
+    
+    # 5. Event Log Analysis (if requested)
     if ($AnalyzeEventLogs) {
+        # 5a. Check audit policy first
+        $results.AuditPolicy = Get-AuditPolicyCheck -ServerParams $serverParams
+        
+        # 5b. Analyze event logs
         $results.EventLogs = Get-EventLogEncryptionAnalysis -ServerParams $serverParams -Hours $EventLogHours
     }
     elseif (-not $QuickScan) {
@@ -1855,6 +2305,33 @@ try {
             $warnings++
             $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Accounts.TotalStaleSvc) service account(s) have stale passwords (>365 days) with RC4 enabled"
         }
+        
+        if ($results.Accounts.TotalMissingAES -gt 0) {
+            $warnings++
+            $results.Recommendations += "WARNING: [$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys - reset password twice to generate AES keys"
+        }
+    }
+    
+    # Check KDC registry
+    if ($results.KdcRegistry) {
+        if ($results.KdcRegistry.DefaultDomainSupportedEncTypes.Status -eq "CRITICAL") {
+            $criticalIssues++
+            $results.Recommendations += "CRITICAL: [$($results.Domain)] DefaultDomainSupportedEncTypes does NOT include AES - update registry on DCs"
+        }
+        if ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -eq "NOT SET") {
+            $warnings++
+            $results.Recommendations += "WARNING: [$($results.Domain)] RC4DefaultDisablementPhase not set - deploy Jan 2026+ updates and set to 1 on all DCs"
+        }
+        elseif ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -eq "WARNING") {
+            $warnings++
+            $results.Recommendations += "WARNING: [$($results.Domain)] RC4DefaultDisablementPhase = 0 - set to 1 to begin RC4 disablement"
+        }
+    }
+    
+    # Check audit policy
+    if ($results.AuditPolicy -and $results.AuditPolicy.Status -eq "CRITICAL") {
+        $warnings++
+        $results.Recommendations += "WARNING: [$($results.Domain)] Kerberos auditing is NOT enabled - event log results may be incomplete"
     }
     
     # Determine overall status
@@ -1982,6 +2459,35 @@ try {
                     EncryptionTypes = $msa.EncryptionTypes
                     EncryptionValue = $msa.EncryptionValue
                 }
+            }
+            
+            # Add accounts missing AES keys
+            foreach ($acct in $results.Accounts.MissingAESKeyAccounts) {
+                $csvData += [PSCustomObject]@{
+                    Type            = "Missing AES Keys"
+                    Name            = $acct.Name
+                    Status          = "Password age: $($acct.PasswordAgeDays) days"
+                    EncryptionTypes = "Not Set"
+                    EncryptionValue = $null
+                }
+            }
+        }
+        
+        # Add KDC registry data
+        if ($results.KdcRegistry) {
+            $csvData += [PSCustomObject]@{
+                Type            = "KDC Registry"
+                Name            = "DefaultDomainSupportedEncTypes"
+                Status          = $results.KdcRegistry.DefaultDomainSupportedEncTypes.Status
+                EncryptionTypes = if ($results.KdcRegistry.DefaultDomainSupportedEncTypes.Types) { $results.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
+                EncryptionValue = $results.KdcRegistry.DefaultDomainSupportedEncTypes.Value
+            }
+            $csvData += [PSCustomObject]@{
+                Type            = "KDC Registry"
+                Name            = "RC4DefaultDisablementPhase"
+                Status          = $results.KdcRegistry.RC4DefaultDisablementPhase.Status
+                EncryptionTypes = "N/A"
+                EncryptionValue = $results.KdcRegistry.RC4DefaultDisablementPhase.Value
             }
         }
         

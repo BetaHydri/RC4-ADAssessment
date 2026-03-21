@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.2.0-orange)
+![Version](https://img.shields.io/badge/version-2.3.0-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -14,6 +14,21 @@ A powerful and efficient PowerShell toolkit for assessing DES and RC4 Kerberos e
 ## Overview
 
 A completely redesigned tool for assessing DES and RC4 encryption usage in Active Directory environments, addressing critical limitations discovered in v1.0 and incorporating post-November 2022 Microsoft Kerberos security updates.
+
+## What's New in v2.3.0
+
+### RC4 Disablement Readiness & July 2026 Timeline
+
+🎯 **KDC Registry Assessment** - Checks `DefaultDomainSupportedEncTypes` and `RC4DefaultDisablementPhase` registry keys on all DCs  
+🎯 **Audit Policy Pre-Check** - Verifies Kerberos auditing is enabled before event log analysis  
+🎯 **Missing AES Keys Detection** - Finds accounts with passwords predating DFL 2008 raise (no AES keys generated)  
+🎯 **July 2026 RC4 Removal Timeline** - Guidance updated with January 2026 and July 2026 milestones  
+🎯 **Explicit RC4 Exception Workflow** - Step-by-step for user AND computer account RC4 exceptions post-July 2026  
+🎯 **`klist purge` Remediation Step** - Added ticket cache purge guidance after encryption type changes  
+🎯 **Microsoft Kerberos-Crypto References** - Links to `Get-KerbEncryptionUsage.ps1` and `List-AccountKeys.ps1`  
+🎯 **Enhanced Compare-Assessments** - Now compares account changes, registry keys, and missing AES keys
+
+### Previous Versions
 
 ## What's New in v2.2.0
 
@@ -42,6 +57,17 @@ A completely redesigned tool for assessing DES and RC4 encryption usage in Activ
 🎯 **Summary Tables** - Comprehensive summary tables showing all DC findings at end of assessment
 
 ### Version History
+
+**v2.3.0** (March 2026)
+- KDC registry key assessment (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase)
+- Kerberos audit policy pre-check before event log analysis
+- Accounts missing AES keys detection (password set before DFL raised to 2008)
+- July 2026 RC4 removal timeline and January 2026 update guidance
+- Explicit RC4 exception workflow for user and computer accounts
+- `klist purge` step added to all remediation guidance
+- Microsoft Kerberos-Crypto tools references (Get-KerbEncryptionUsage.ps1, List-AccountKeys.ps1)
+- Compare-Assessments.ps1 now compares account changes, registry keys, and missing AES keys
+- CSV/JSON export includes registry and missing AES data
 
 **v2.2.0** (February 2026)
 - KRBTGT account password age and encryption type assessment
@@ -167,9 +193,9 @@ Get-ADDomain
 
 ### Core Scripts
 
-1. **RC4_DES_Assessment.ps1** - Main assessment tool (v2.2.0)
+1. **RC4_DES_Assessment.ps1** - Main assessment tool (v2.3.0)
 2. **Assess-ADForest.ps1** - Forest-wide assessment wrapper (v2.1.0)
-3. **Compare-Assessments.ps1** - Compare assessment results over time
+3. **Compare-Assessments.ps1** - Compare assessment results over time (v2.3.0)
 4. **Test-EventLogFailureHandling.ps1** - Test script for event log error handling validation
 5. **Tests/** - Pester unit tests for all scripts (139 tests)
 
@@ -177,15 +203,18 @@ Get-ADDomain
 - Domain Controller encryption configuration
 - GPO Kerberos policy analysis
 - Trust encryption assessment (post-Nov 2022 logic)
+- KDC registry key assessment (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase)
 - KRBTGT account password age and encryption types
 - Service account (SPN) RC4/DES encryption detection
 - USE_DES_KEY_ONLY flag detection
 - gMSA/sMSA encryption configuration
+- Accounts missing AES keys (password predating DFL 2008)
 - Overall security posture
 - **Runtime:** < 2 minutes
 
 ### Full Assessment (With Event Log Analysis)
 - Everything in Quick Scan, plus:
+- Kerberos audit policy verification before event log queries
 - Event log analysis for actual DES/RC4 ticket usage
 - Detection of accounts actively using weak encryption
 - Real-world vs theoretical risk assessment
@@ -200,7 +229,11 @@ Get-ADDomain
 - **KRBTGT rotation step-by-step procedure** (pre-checks, double rotation, replication wait, post-validation)
 - Service account remediation (RC4/DES removal, AES migration)
 - USE_DES_KEY_ONLY flag cleanup
-- Windows Server 2025 preparation
+- **July 2026 RC4 removal timeline** and registry key configuration
+- **Explicit RC4 exception workflow** for user and computer accounts
+- **`klist purge`** after encryption type changes
+- Accounts missing AES keys remediation (double password reset)
+- Microsoft Kerberos-Crypto tools references
 
 ## Sample Output
 
@@ -2142,7 +2175,18 @@ Overall Security Assessment
 
 ## Version History
 
-### v2.2.0 (Current - February 2026)
+### v2.3.0 (Current - March 2026)
+- **NEW:** KDC registry key assessment (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase) on all DCs
+- **NEW:** Kerberos audit policy pre-check (verifies auditing enabled before event log analysis)
+- **NEW:** Accounts missing AES keys detection (password set before DFL raised to 2008)
+- **NEW:** July 2026 RC4 removal timeline guidance and January 2026 security update references
+- **NEW:** Explicit RC4 exception workflow for user and computer accounts post-July 2026
+- **NEW:** `klist purge` step in all remediation guidance to flush cached tickets
+- **NEW:** Microsoft Kerberos-Crypto tools references (Get-KerbEncryptionUsage.ps1, List-AccountKeys.ps1)
+- **IMPROVED:** Compare-Assessments.ps1 now compares account changes, registry keys, and missing AES keys
+- **IMPROVED:** CSV/JSON export includes registry assessment and missing AES key data
+
+### v2.2.0 (February 2026)
 - **NEW:** KRBTGT account password age and encryption type assessment
 - **NEW:** USE_DES_KEY_ONLY UserAccountControl flag detection
 - **NEW:** Service account (SPN) RC4/DES-only encryption detection
