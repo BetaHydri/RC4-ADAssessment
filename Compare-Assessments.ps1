@@ -147,6 +147,10 @@ try {
     Write-Host "  RC4 Risk:        $($baseline.Trusts.RC4Risk) $($trustChanges.RC4Risk.Symbol) $($current.Trusts.RC4Risk)" -ForegroundColor $(if ($trustChanges.RC4Risk.Status -eq "Improved") { "Green" } else { $trustChanges.RC4Risk.Color })
     Write-Host "  DES Risk:        $($baseline.Trusts.DESRisk) $($trustChanges.DESRisk.Symbol) $($current.Trusts.DESRisk)" -ForegroundColor $(if ($trustChanges.DESRisk.Status -eq "Improved") { "Green" } else { $trustChanges.DESRisk.Color })
     
+    # Initialize change counters early so all sections can contribute
+    $improvements = 0
+    $degradations = 0
+
     # Account Comparison (v2.2.0+ data)
     if ($baseline.Accounts -and $current.Accounts) {
         Write-ComparisonSection "Account Changes"
@@ -189,6 +193,26 @@ try {
         $baseEncTypes = if ($baseline.KdcRegistry.DefaultDomainSupportedEncTypes.Configured) { $baseline.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
         $currEncTypes = if ($current.KdcRegistry.DefaultDomainSupportedEncTypes.Configured) { $current.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
         Write-Host "  DefaultEncTypes: $baseEncTypes $([char]0x2192) $currEncTypes" -ForegroundColor Gray
+
+        # Count KDC registry improvements/degradations
+        # RC4Disablement: becoming configured (value 1) is an improvement; becoming unconfigured is a degradation
+        if ($baseRC4Phase -ne $currRC4Phase) {
+            if ($currRC4Phase -ne 'Not Set' -and ($baseRC4Phase -eq 'Not Set' -or [int]$currRC4Phase -gt [int]$baseRC4Phase)) {
+                $improvements++
+            }
+            elseif ($currRC4Phase -eq 'Not Set' -or ($baseRC4Phase -ne 'Not Set' -and [int]$currRC4Phase -lt [int]$baseRC4Phase)) {
+                $degradations++
+            }
+        }
+        # DefaultEncTypes: changing from Not Set to a configured value or removing weak enc types
+        if ("$baseEncTypes" -ne "$currEncTypes") {
+            if ($baseEncTypes -eq 'Not Set' -and $currEncTypes -ne 'Not Set') {
+                $improvements++
+            }
+            elseif ($baseEncTypes -ne 'Not Set' -and $currEncTypes -eq 'Not Set') {
+                $degradations++
+            }
+        }
     }
     
     # Event Log Comparison (if available)
@@ -255,10 +279,7 @@ try {
     # Summary
     Write-ComparisonSection "Change Summary"
     
-    $improvements = 0
-    $degradations = 0
-    
-    # Count improvements/degradations
+    # Count DC and Trust improvements/degradations
     if ($dcChanges.AESConfigured.Status -eq "Improved") { $improvements++ }
     if ($dcChanges.AESConfigured.Status -eq "Worsened") { $degradations++ }
     if ($dcChanges.RC4Configured.Status -eq "Improved") { $improvements++ }

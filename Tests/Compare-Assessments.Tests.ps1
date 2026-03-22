@@ -301,6 +301,98 @@ Describe 'Assessment Comparison Logic' {
         }
     }
 
+    Context 'KDC Registry comparison' {
+        It 'Counts RC4Disablement Not Set to 1 as improvement' {
+            $baseRC4Phase = 'Not Set'
+            $currRC4Phase = 1
+            $improvements = 0
+            $degradations = 0
+
+            if ($baseRC4Phase -ne $currRC4Phase) {
+                if ($currRC4Phase -ne 'Not Set' -and ($baseRC4Phase -eq 'Not Set' -or [int]$currRC4Phase -gt [int]$baseRC4Phase)) {
+                    $improvements++
+                }
+                elseif ($currRC4Phase -eq 'Not Set' -or ($baseRC4Phase -ne 'Not Set' -and [int]$currRC4Phase -lt [int]$baseRC4Phase)) {
+                    $degradations++
+                }
+            }
+            $improvements | Should -Be 1
+            $degradations | Should -Be 0
+        }
+
+        It 'Counts RC4Disablement 1 to Not Set as degradation' {
+            $baseRC4Phase = 1
+            $currRC4Phase = 'Not Set'
+            $improvements = 0
+            $degradations = 0
+
+            if ($baseRC4Phase -ne $currRC4Phase) {
+                if ($currRC4Phase -ne 'Not Set' -and ($baseRC4Phase -eq 'Not Set' -or [int]$currRC4Phase -gt [int]$baseRC4Phase)) {
+                    $improvements++
+                }
+                elseif ($currRC4Phase -eq 'Not Set' -or ($baseRC4Phase -ne 'Not Set' -and [int]$currRC4Phase -lt [int]$baseRC4Phase)) {
+                    $degradations++
+                }
+            }
+            $improvements | Should -Be 0
+            $degradations | Should -Be 1
+        }
+
+        It 'No change when both Not Set' {
+            $baseRC4Phase = 'Not Set'
+            $currRC4Phase = 'Not Set'
+            $improvements = 0
+            $degradations = 0
+
+            if ($baseRC4Phase -ne $currRC4Phase) {
+                if ($currRC4Phase -ne 'Not Set' -and ($baseRC4Phase -eq 'Not Set' -or [int]$currRC4Phase -gt [int]$baseRC4Phase)) {
+                    $improvements++
+                }
+                elseif ($currRC4Phase -eq 'Not Set' -or ($baseRC4Phase -ne 'Not Set' -and [int]$currRC4Phase -lt [int]$baseRC4Phase)) {
+                    $degradations++
+                }
+            }
+            $improvements | Should -Be 0
+            $degradations | Should -Be 0
+        }
+
+        It 'Counts DefaultEncTypes Not Set to configured as improvement' {
+            $baseEncTypes = 'Not Set'
+            $currEncTypes = 'AES128-HMAC, AES256-HMAC'
+            $improvements = 0
+            $degradations = 0
+
+            if ("$baseEncTypes" -ne "$currEncTypes") {
+                if ($baseEncTypes -eq 'Not Set' -and $currEncTypes -ne 'Not Set') {
+                    $improvements++
+                }
+                elseif ($baseEncTypes -ne 'Not Set' -and $currEncTypes -eq 'Not Set') {
+                    $degradations++
+                }
+            }
+            $improvements | Should -Be 1
+            $degradations | Should -Be 0
+        }
+
+        It 'Counts DefaultEncTypes configured to Not Set as degradation' {
+            $baseEncTypes = 'AES128-HMAC, AES256-HMAC'
+            $currEncTypes = 'Not Set'
+            $improvements = 0
+            $degradations = 0
+
+            if ("$baseEncTypes" -ne "$currEncTypes") {
+                if ($baseEncTypes -eq 'Not Set' -and $currEncTypes -ne 'Not Set') {
+                    $improvements++
+                }
+                elseif ($baseEncTypes -ne 'Not Set' -and $currEncTypes -eq 'Not Set') {
+                    $degradations++
+                }
+            }
+            $improvements | Should -Be 0
+            $degradations | Should -Be 1
+        }
+    }
+
     Context 'Worsening scenario' {
         BeforeAll {
             $worsenedData = @{
