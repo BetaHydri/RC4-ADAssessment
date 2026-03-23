@@ -107,9 +107,12 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 ## Sample Output
 
-## Sample Output
+<details>
+<summary>Click to expand assessment output screenshot</summary>
 
 ![Assessment Output](docs/AssessmentOutput.png)
+
+</details>
 
 ### Quick Scan — Warnings with Inline Fixes
 
@@ -408,12 +411,26 @@ Track remediation progress by comparing two exported JSON files:
 
 **Example: Before and after setting `RC4DefaultDisablementPhase = 1`:**
 
+<details>
+<summary>Click to expand comparison screenshot</summary>
+
 ![Compare after RC4 Registry Phase 1](docs/Compare-AfterRC4_Reg_Phase1.png)
+
+</details>
+
+**Example: Before and after remediating DES encryption on a gMSA:**
+
+<details>
+<summary>Click to expand comparison screenshot</summary>
+
+![Compare DES gMSA remediation](docs/Compare-DES-gmsa-remediation.png)
+
+</details>
 
 Compares:
 - DC encryption changes (AES/RC4/DES counts)
 - Trust risk changes
-- Account changes (KRBTGT status, DES flags, RC4-only service accounts, missing AES keys)
+- Account changes (KRBTGT status, DES flags, RC4-only service accounts, DES-enabled accounts, missing AES keys)
 - KDC registry changes (`RC4DefaultDisablementPhase` value)
 - KDCSVC System event changes (CVE-2026-20833, events 201-209)
 - Event log ticket changes (RC4/DES ticket counts)
