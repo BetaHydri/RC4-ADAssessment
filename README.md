@@ -334,6 +334,50 @@ RC4 fallback only occurs when **both** conditions are true:
 ### Trusts
 When `msDS-SupportedEncryptionTypes` is 0 or empty on trusts, they **default to AES**. No action needed for these trusts.
 
+## Missing AES Keys Detection
+
+The "Missing AES Keys" check identifies accounts that may never have had AES Kerberos keys generated. AES keys are only created when a password is set **while the Domain Functional Level (DFL) is 2008 or higher**. Accounts whose passwords were last set before the DFL was raised will only have RC4/DES keys — even if the DFL is now 2016 or higher.
+
+### Detection Criteria
+
+An account is flagged only when **both** conditions are true:
+
+1. `msDS-SupportedEncryptionTypes` is **not set (null) or equals 0**
+2. `PasswordLastSet` is **older than 5 years** (1825 days)
+
+### When an Account is NOT Flagged
+
+If `msDS-SupportedEncryptionTypes` has a non-zero value (e.g. `0x27`, `0x18`, `0x24`), the account is **not** flagged — regardless of password age. The reasoning: a non-zero value means the attribute was explicitly configured, which typically happens alongside a password reset that would generate AES keys.
+
+### Example: Old Password but Explicit Encryption Types
+
+| Attribute | Value |
+|-----------|-------|
+| `PasswordLastSet` | 2300 days ago |
+| `msDS-SupportedEncryptionTypes` | `0x27` (DES-CBC-CRC + DES-CBC-MD5 + RC4 + AES256) |
+| Event 4768 Available Keys | AES-SHA1, RC4 |
+| **Flagged?** | **No** — `0x27` is non-zero, so the check is skipped |
+
+This account has AES keys available (confirmed by the event log). The old password is not a concern because the DFL was already 2008+ when the password was last set, so AES keys were generated at that time.
+
+> **Tip:** If you see an account with `msDS-SupportedEncryptionTypes = 0x27` and want to prepare for July 2026, remove the DES and RC4 bits:
+> ```powershell
+> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+> ```
+> `24` = `0x18` = AES128 + AES256 (AES-only).
+
+### When to Investigate
+
+Accounts that **are** flagged (attribute not set + password > 5 years) should have their passwords reset to generate AES keys:
+
+```powershell
+# Reset password twice to ensure AES key generation:
+Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+```
+
+After the password reset, AES keys will be generated automatically (assuming DFL ≥ 2008).
+
 ## Compare-Assessments
 
 Track remediation progress by comparing two exported JSON files:
