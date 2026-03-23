@@ -130,7 +130,7 @@ KDC Registry Configuration Assessment
 ────────────────────────────────────────────────────────────────
 ℹ️  DefaultDomainSupportedEncTypes: Not set (uses OS defaults)
 ⚠️  RC4DefaultDisablementPhase not set
-   Deploy January 2026+ security updates and set to 1 on all DCs
+   Deploy January 2026+ security updates, then set to 1 to enable KDCSVC audit events
 
 Overall Security Assessment
 ────────────────────────────────────────────────────────────────
@@ -143,11 +143,12 @@ Overall Security Assessment
       PS> Set-ADComputer DC01 -Replace @{'msDS-SupportedEncryptionTypes'=24}
 
     • WARNING: [contoso.com] RC4DefaultDisablementPhase not set
-      # Deploy January 2026+ security updates, then on each DC:
+      # Step 1: Deploy January 2026+ security updates on all DCs
+      # Step 2: Enable KDCSVC audit events (System log events 201-209):
       PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
             -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
-      # This disables RC4 for accounts without explicit RC4 in
-      #   msDS-SupportedEncryptionTypes
+      # Step 3: Monitor KDCSVC events and remediate any RC4 dependencies
+      # Step 4: When audit events are clear, enable Enforcement mode (value 2)
 
   💡 Tip: Use -IncludeGuidance for the full reference manual
      (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline).
