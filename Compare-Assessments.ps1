@@ -179,6 +179,14 @@ try {
             Write-Host "  Missing AES:     $([int]$baseline.Accounts.TotalMissingAES) $($missingAESChange.Symbol) $([int]$current.Accounts.TotalMissingAES)" -ForegroundColor $(if ($missingAESChange.Status -eq "Improved") { "Green" } else { $missingAESChange.Color })
         }
         
+        # DES-enabled accounts (v2.5.1+)
+        if ($null -ne $baseline.Accounts.TotalDESEnabled -or $null -ne $current.Accounts.TotalDESEnabled) {
+            $desEnabledChange = Get-ChangeIndicator -Old ([int]$baseline.Accounts.TotalDESEnabled) -New ([int]$current.Accounts.TotalDESEnabled)
+            Write-Host "  DES-Enabled:     $([int]$baseline.Accounts.TotalDESEnabled) $($desEnabledChange.Symbol) $([int]$current.Accounts.TotalDESEnabled)" -ForegroundColor $(if ($desEnabledChange.Status -eq "Improved") { "Green" } else { $desEnabledChange.Color })
+            if ($desEnabledChange.Status -eq "Improved") { $improvements++ }
+            if ($desEnabledChange.Status -eq "Worsened") { $degradations++ }
+        }
+        
         # Count account improvements/degradations
         if ($desFlagChange.Status -eq "Improved") { $improvements++ }
         if ($desFlagChange.Status -eq "Worsened") { $degradations++ }

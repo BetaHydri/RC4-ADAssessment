@@ -14,7 +14,7 @@
   - KDC registry key assessment (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase)
   - Kerberos audit policy pre-check before event log analysis
   - KRBTGT account password age and encryption type assessment
-  - Service account (SPN) and gMSA/sMSA RC4/DES encryption detection
+  - Service account (SPN) and gMSA/sMSA/dMSA RC4/DES encryption detection
   - Accounts with USE_DES_KEY_ONLY UserAccountControl flag detection
   - Accounts missing AES keys (password set before DFL raised to 2008)
   - AzureADKerberos (Entra Kerberos) object detection and exclusion from DC assessment
@@ -1322,11 +1322,13 @@ function Get-AccountEncryptionAssessment {
         DESFlagAccounts        = @()
         RC4OnlyServiceAccounts = @()
         RC4OnlyMSAs            = @()
+        DESEnabledAccounts     = @()
         StaleServiceAccounts   = @()
         MissingAESKeyAccounts  = @()
         TotalDESFlag           = 0
         TotalRC4OnlySvc        = 0
         TotalRC4OnlyMSA        = 0
+        TotalDESEnabled        = 0
         TotalStaleSvc          = 0
         TotalMissingAES        = 0
         Details                = @()
@@ -1510,6 +1512,24 @@ function Get-AccountEncryptionAssessment {
                         }
                     }
                     
+                    # Check for DES bits enabled (has DES bits, even alongside AES - DES is removed in Server 2025)
+                    if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
+                        $desInfo = @{
+                            Name            = $svc.SamAccountName
+                            DN              = $svc.DistinguishedName
+                            Enabled         = $svc.Enabled
+                            PasswordLastSet = $svc.PasswordLastSet
+                            PasswordAgeDays = $pwdAge
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            AccountType     = "Service Account (SPN)"
+                        }
+                        if ($svc.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
+                            $assessment.DESEnabledAccounts += $desInfo
+                        }
+                    }
+                    
                     # Check for stale password with RC4 enabled (>365 days old, RC4 bit set, account enabled)
                     if ($pwdAge -gt 365 -and $encValue -and ($encValue -band 0x4) -and $svc.Enabled) {
                         $svcInfo = @{
@@ -1561,9 +1581,9 @@ function Get-AccountEncryptionAssessment {
         }
         
         # ────────────────────────────────────────────────
-        # 4. Managed Service Accounts (gMSA/sMSA)
+        # 4. Managed Service Accounts (gMSA/sMSA/dMSA)
         # ────────────────────────────────────────────────
-        Write-Host "`n  Checking Managed Service Accounts (gMSA/sMSA)..." -ForegroundColor Cyan
+        Write-Host "`n  Checking Managed Service Accounts (gMSA/sMSA/dMSA)..." -ForegroundColor Cyan
         
         try {
             $msaAccounts = Get-ADServiceAccount -Filter * `
@@ -1586,9 +1606,26 @@ function Get-AccountEncryptionAssessment {
                             EncryptionValue = $encValue
                             EncryptionTypes = Get-EncryptionTypeString -Value $encValue
                             ObjectClass     = $msa.ObjectClass
-                            Type            = if ($msa.ObjectClass -eq 'msDS-GroupManagedServiceAccount') { "gMSA" } else { "sMSA" }
+                            Type            = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
                         }
                         $assessment.RC4OnlyMSAs += $msaInfo
+                    }
+                }
+                
+                    # Check for DES bits enabled on MSA (has DES bits, even alongside AES)
+                    if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
+                        $desInfo = @{
+                            Name            = $msa.SamAccountName
+                            DN              = $msa.DistinguishedName
+                            Enabled         = $msa.Enabled
+                            PasswordLastSet = $msa.PasswordLastSet
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
+                        }
+                        if ($msa.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
+                            $assessment.DESEnabledAccounts += $desInfo
+                        }
                     }
                 }
                 
@@ -1614,6 +1651,15 @@ function Get-AccountEncryptionAssessment {
             }
             else {
                 Write-Finding -Status "WARNING" -Message "Could not query Managed Service Accounts: $($_.Exception.Message)"
+            }
+        }
+        
+        # Update DES-enabled totals and display
+        $assessment.TotalDESEnabled = $assessment.DESEnabledAccounts.Count
+        if ($assessment.TotalDESEnabled -gt 0) {
+            Write-Finding -Status "WARNING" -Message "$($assessment.TotalDESEnabled) account(s) have DES encryption bits enabled (DES is removed in Server 2025)"
+            foreach ($des in $assessment.DESEnabledAccounts) {
+                Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)" -ForegroundColor Yellow
             }
         }
         
@@ -1707,6 +1753,7 @@ function Get-AccountEncryptionAssessment {
         Write-Host "  $([char]0x2022) USE_DES_KEY_ONLY Accounts: $($assessment.TotalDESFlag)" -ForegroundColor $(if ($assessment.TotalDESFlag -gt 0) { "Red" } else { "Green" })
         Write-Host "  $([char]0x2022) RC4/DES-Only Service Accounts: $($assessment.TotalRC4OnlySvc)" -ForegroundColor $(if ($assessment.TotalRC4OnlySvc -gt 0) { "Red" } else { "Green" })
         Write-Host "  $([char]0x2022) RC4-Only Managed Service Accounts: $($assessment.TotalRC4OnlyMSA)" -ForegroundColor $(if ($assessment.TotalRC4OnlyMSA -gt 0) { "Yellow" } else { "Green" })
+        Write-Host "  $([char]0x2022) DES-Enabled Accounts (insecure): $($assessment.TotalDESEnabled)" -ForegroundColor $(if ($assessment.TotalDESEnabled -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Accounts Missing AES Keys (pwd >5yr): $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
     }
@@ -2021,6 +2068,17 @@ function Show-AssessmentSummary {
             }
         }
         
+        # DES-enabled accounts
+        foreach ($des in $Results.Accounts.DESEnabledAccounts) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $des.Name
+                'Type'             = "DES-Enabled $($des.AccountType)"
+                'Status'           = 'WARNING'
+                'Password Age'     = if ($des.PasswordAgeDays) { "$($des.PasswordAgeDays) days" } elseif ($des.PasswordLastSet) { "$([int]((Get-Date) - $des.PasswordLastSet).TotalDays) days" } else { "Auto-managed" }
+                'Encryption Types' = $des.EncryptionTypes
+            }
+        }
+        
         # Display table with color coding
         $krbtgtTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
             if ($_ -match "CRITICAL") {
@@ -2053,6 +2111,9 @@ function Show-AssessmentSummary {
         }
         if ($Results.Accounts.TotalRC4OnlyMSA -gt 0) {
             Write-Host "    RC4-Only MSAs: $($Results.Accounts.TotalRC4OnlyMSA)" -ForegroundColor Yellow
+        }
+        if ($Results.Accounts.TotalDESEnabled -gt 0) {
+            Write-Host "    DES-Enabled Accounts: $($Results.Accounts.TotalDESEnabled)" -ForegroundColor Yellow
         }
         if ($Results.Accounts.TotalStaleSvc -gt 0) {
             Write-Host "    Stale Password Service Accounts: $($Results.Accounts.TotalStaleSvc)" -ForegroundColor Yellow
@@ -2658,6 +2719,21 @@ try {
             }
         }
         
+        if ($results.Accounts.TotalDESEnabled -gt 0) {
+            $warnings++
+            $desNames = ($results.Accounts.DESEnabledAccounts | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalDESEnabled) account(s) have DES encryption bits enabled (insecure, removed in Server 2025): $desNames"
+                Fix     = @(
+                    "# Remove DES bits and keep only AES:"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "# Or for RC4 exception: Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=28}"
+                    "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                )
+            }
+        }
+        
         if ($results.Accounts.TotalStaleSvc -gt 0) {
             $warnings++
             $staleNames = ($results.Accounts.StaleServiceAccounts | Select-Object -First 5).Name -join ', '
@@ -2909,6 +2985,17 @@ try {
                     Status          = "RC4-Only"
                     EncryptionTypes = $msa.EncryptionTypes
                     EncryptionValue = $msa.EncryptionValue
+                }
+            }
+            
+            # Add DES-enabled accounts
+            foreach ($des in $results.Accounts.DESEnabledAccounts) {
+                $csvData += [PSCustomObject]@{
+                    Type            = "DES-Enabled $($des.AccountType)"
+                    Name            = $des.Name
+                    Status          = "DES bits enabled (insecure)"
+                    EncryptionTypes = $des.EncryptionTypes
+                    EncryptionValue = $des.EncryptionValue
                 }
             }
             

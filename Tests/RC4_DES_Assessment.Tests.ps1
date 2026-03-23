@@ -1059,6 +1059,105 @@ Describe 'Get-AccountEncryptionAssessment' {
         }
     }
 
+    Context 'DES-enabled accounts detection (DES bits alongside AES)' {
+        BeforeEach {
+            Mock Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = $null
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                # SPN service account with DES+AES (value 31 = 0x1F)
+                return @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'svc_legacy'
+                        DistinguishedName               = 'CN=svc_legacy,OU=ServiceAccounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-60)
+                        'msDS-SupportedEncryptionTypes' = 31
+                        ServicePrincipalName            = @('HTTP/legacy.contoso.com')
+                        DisplayName                     = 'Legacy Service'
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'svc_clean'
+                        DistinguishedName               = 'CN=svc_clean,OU=ServiceAccounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        'msDS-SupportedEncryptionTypes' = 24
+                        ServicePrincipalName            = @('HTTP/clean.contoso.com')
+                        DisplayName                     = 'Clean Service'
+                    }
+                )
+            }
+            Mock Get-ADServiceAccount {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'gmsa_des$'
+                        DistinguishedName               = 'CN=gmsa_des,CN=Managed Service Accounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-10)
+                        'msDS-SupportedEncryptionTypes' = 27
+                        ServicePrincipalName            = @('HTTP/des.contoso.com')
+                        ObjectClass                     = 'msDS-GroupManagedServiceAccount'
+                    }
+                )
+            }
+        }
+
+        It 'Detects DES bits on SPN service accounts with AES' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalDESEnabled | Should -Be 2
+        }
+
+        It 'Does not flag accounts without DES bits' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.DESEnabledAccounts | Where-Object { $_.Name -eq 'svc_clean' } | Should -BeNullOrEmpty
+        }
+
+        It 'Includes DES-enabled SPN account in list' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.DESEnabledAccounts | Where-Object { $_.Name -eq 'svc_legacy' } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Includes DES-enabled gMSA in list' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.DESEnabledAccounts | Where-Object { $_.Name -eq 'gmsa_des$' } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Does not flag DES-only accounts (no AES) as DES-enabled' {
+            # DES-only accounts are caught by the RC4OnlyServiceAccounts check instead
+            Mock Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = $null
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                return @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'svc_desonly'
+                        DistinguishedName               = 'CN=svc_desonly,OU=ServiceAccounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-60)
+                        'msDS-SupportedEncryptionTypes' = 3
+                        ServicePrincipalName            = @('HTTP/desonly.contoso.com')
+                        DisplayName                     = 'DES Only Service'
+                    }
+                )
+            }
+            Mock Get-ADServiceAccount { return $null }
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalDESEnabled | Should -Be 0
+        }
+    }
+
     Context 'Clean environment (no issues)' {
         BeforeEach {
             Mock Get-ADUser {

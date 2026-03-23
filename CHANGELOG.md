@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## v2.5.1 (March 2026) — Current
 - **AzureADKerberos exclusion refinement**: Explicit filtering of AzureADKerberos from DC list in KDC registry and KDCSVC event log queries
+- **DES-enabled account detection**: Accounts with DES encryption bits set alongside AES are now flagged as WARNING (DES removed in Server 2025)
+  - Detects DES bits on SPN user accounts (`Get-ADUser` with SPN filter) and gMSA/sMSA/dMSA (`Get-ADServiceAccount`)\n- **dMSA support**: Delegated Managed Service Accounts (Windows Server 2025, `msDS-DelegatedManagedServiceAccount`) are now correctly identified as \"dMSA\" instead of \"sMSA\"
+  - Summary line, summary table row, recommendation with fix commands, CSV/JSON export, and Compare-Assessments comparison
+  - 5 new Pester tests for DES-enabled detection scenarios
+- **Fixed**: Explicit RC4 exception value corrected from `0x24` to `0x1C` (RC4 + AES128 + AES256) — `0x20` is compound identity/FAST armor, not AES256
+- `msDS-SupportedEncryptionTypes` reference table added to README with hex/decimal values and source link
+- Dead AskDS blog link replaced with live [Decrypting Kerberos Encryption Types](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797) reference
+- Version history moved to [CHANGELOG.md](CHANGELOG.md) to reduce README size
 
 ## v2.5.0 (March 2026)
 - **AzureADKerberos detection**: `AzureADKerberos` (Entra Kerberos proxy) object in DC OU is now automatically detected and excluded from all DC encryption counts
