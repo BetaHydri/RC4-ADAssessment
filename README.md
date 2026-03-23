@@ -106,6 +106,10 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 ## Sample Output
 
+## Sample Output
+
+![Assessment Output](docs/AssessmentOutput.png)
+
 ### Quick Scan — Warnings with Inline Fixes
 
 ```
