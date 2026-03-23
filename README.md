@@ -251,6 +251,26 @@ klist purge
 
 Document all exceptions and plan vendor upgrades.
 
+### CVE-2026-20833 Toolkit Coverage
+
+This toolkit implements the full [CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc):
+
+| KB Article Requirement | Toolkit Coverage |
+|---|---|
+| **KDCSVC events 201-209** (System log) | `Get-KdcSvcEventAssessment` scans all DCs, reports per-event breakdown with descriptions |
+| **RC4DefaultDisablementPhase = 0** (not active) | Detected as WARNING with phased remediation steps |
+| **RC4DefaultDisablementPhase = 1** (Audit mode) | Detected as OK — correct intermediate step, no false alarm |
+| **RC4DefaultDisablementPhase = 2** (Enforcement) | Detected as OK — fully protected |
+| **RC4DefaultDisablementPhase not set** | WARNING with Step 1–4 phased workflow |
+| **January 2026 Initial Deployment** | Timeline in guidance + recommendations |
+| **April 2026 Enforcement Phase** | Timeline + `DefaultDomainSupportedEncTypes` defaults to AES-only (0x18) |
+| **July 2026 Full Enforcement** | Timeline + `RC4DefaultDisablementPhase` removed |
+| **Explicit RC4 exception (`0x24`)** | All fix commands use `0x24` per Microsoft guidance |
+| **Domain-wide fallback (`0x24` on DCs)** | Documented as last resort with CVE-2026-20833 vulnerability warning |
+| **Event 205** (insecure `DefaultDomainSupportedEncTypes`) | Registry check detects RC4 in `DefaultDomainSupportedEncTypes` |
+| **Events 206-208** (Enforcement blocking) | Detected with note about accounts needing `0x24` exception or AES migration |
+| **Installing updates alone doesn't fix CVE** | Recommendations explicitly guide to enable Enforcement (value 2) |
+
 ## Post-November 2022 Logic
 
 ### Computer Objects
