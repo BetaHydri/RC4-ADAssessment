@@ -70,7 +70,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.5.1
+  Version: 2.6.0
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -136,7 +136,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.5.1"
+$script:Version = "2.6.0"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -883,7 +883,7 @@ function Get-KdcSvcEventAssessment {
             $blockingEvents = ($assessment.EventCounts.Keys | Where-Object { [int]$_ -ge 206 -and [int]$_ -le 208 })
             if ($blockingEvents) {
                 Write-Host "`n  $([char]0x26A0) Enforcement mode is actively blocking RC4 requests" -ForegroundColor Red
-                Write-Host "  Affected accounts need explicit RC4 exception (0x1C) or migration to AES" -ForegroundColor Yellow
+                Write-Host "  Affected accounts need migration to AES (0x18) or explicit RC4 exception (0x1C) as last resort" -ForegroundColor Yellow
             }
         }
         else {
@@ -1312,26 +1312,28 @@ function Get-AccountEncryptionAssessment {
     Write-Section "KRBTGT & Service Account Encryption Assessment"
     
     $assessment = @{
-        KRBTGT                 = @{
+        KRBTGT                  = @{
             PasswordAgeDays = 0
             PasswordLastSet = $null
             EncryptionValue = $null
             EncryptionTypes = ""
             Status          = "Unknown"
         }
-        DESFlagAccounts        = @()
-        RC4OnlyServiceAccounts = @()
-        RC4OnlyMSAs            = @()
-        DESEnabledAccounts     = @()
-        StaleServiceAccounts   = @()
-        MissingAESKeyAccounts  = @()
-        TotalDESFlag           = 0
-        TotalRC4OnlySvc        = 0
-        TotalRC4OnlyMSA        = 0
-        TotalDESEnabled        = 0
-        TotalStaleSvc          = 0
-        TotalMissingAES        = 0
-        Details                = @()
+        DESFlagAccounts         = @()
+        RC4OnlyServiceAccounts  = @()
+        RC4OnlyMSAs             = @()
+        RC4ExceptionAccounts    = @()
+        DESEnabledAccounts      = @()
+        StaleServiceAccounts    = @()
+        MissingAESKeyAccounts   = @()
+        TotalDESFlag            = 0
+        TotalRC4OnlySvc         = 0
+        TotalRC4OnlyMSA         = 0
+        TotalRC4Exception       = 0
+        TotalDESEnabled         = 0
+        TotalStaleSvc           = 0
+        TotalMissingAES         = 0
+        Details                 = @()
     }
     
     try {
@@ -1530,6 +1532,24 @@ function Get-AccountEncryptionAssessment {
                         }
                     }
                     
+                    # Check for explicit RC4 exception (has RC4 + AES = 0x1C or similar)
+                    if ($encValue -and ($encValue -band 0x4) -and ($encValue -band 0x18)) {
+                        $excInfo = @{
+                            Name            = $svc.SamAccountName
+                            DN              = $svc.DistinguishedName
+                            Enabled         = $svc.Enabled
+                            PasswordLastSet = $svc.PasswordLastSet
+                            PasswordAgeDays = $pwdAge
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            AccountType     = "Service Account (SPN)"
+                        }
+                        if ($svc.SamAccountName -notin $assessment.RC4ExceptionAccounts.Name) {
+                            $assessment.RC4ExceptionAccounts += $excInfo
+                        }
+                    }
+
                     # Check for stale password with RC4 enabled (>365 days old, RC4 bit set, account enabled)
                     if ($pwdAge -gt 365 -and $encValue -and ($encValue -band 0x4) -and $svc.Enabled) {
                         $svcInfo = @{
@@ -1611,6 +1631,22 @@ function Get-AccountEncryptionAssessment {
                         $assessment.RC4OnlyMSAs += $msaInfo
                     }
                     
+                    # Check for explicit RC4 exception on MSA (has RC4 + AES = 0x1C or similar)
+                    if ($encValue -and ($encValue -band 0x4) -and ($encValue -band 0x18)) {
+                        $excInfo = @{
+                            Name            = $msa.SamAccountName
+                            DN              = $msa.DistinguishedName
+                            Enabled         = $msa.Enabled
+                            PasswordLastSet = $msa.PasswordLastSet
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
+                        }
+                        if ($msa.SamAccountName -notin $assessment.RC4ExceptionAccounts.Name) {
+                            $assessment.RC4ExceptionAccounts += $excInfo
+                        }
+                    }
+
                     # Check for DES bits enabled on MSA (has DES bits, even alongside AES)
                     if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
                         $desInfo = @{
@@ -1659,6 +1695,16 @@ function Get-AccountEncryptionAssessment {
             Write-Finding -Status "WARNING" -Message "$($assessment.TotalDESEnabled) account(s) have DES encryption bits enabled (DES is removed in Server 2025)"
             foreach ($des in $assessment.DESEnabledAccounts) {
                 Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)" -ForegroundColor Yellow
+            }
+        }
+        
+        # Update RC4 exception totals and display
+        $assessment.TotalRC4Exception = $assessment.RC4ExceptionAccounts.Count
+        if ($assessment.TotalRC4Exception -gt 0) {
+            Write-Finding -Status "WARNING" -Message "$($assessment.TotalRC4Exception) account(s) have explicit RC4 exception (RC4 + AES) - review and remove RC4 when possible"
+            foreach ($exc in $assessment.RC4ExceptionAccounts) {
+                $excType = if ($exc.AccountType) { $exc.AccountType } else { 'Service Account' }
+                Write-Host "    $([char]0x2022) $($exc.Name) ($excType) - $($exc.EncryptionTypes)" -ForegroundColor Yellow
             }
         }
         
@@ -1753,6 +1799,7 @@ function Get-AccountEncryptionAssessment {
         Write-Host "  $([char]0x2022) RC4/DES-Only Service Accounts: $($assessment.TotalRC4OnlySvc)" -ForegroundColor $(if ($assessment.TotalRC4OnlySvc -gt 0) { "Red" } else { "Green" })
         Write-Host "  $([char]0x2022) RC4-Only Managed Service Accounts: $($assessment.TotalRC4OnlyMSA)" -ForegroundColor $(if ($assessment.TotalRC4OnlyMSA -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) DES-Enabled Accounts (insecure): $($assessment.TotalDESEnabled)" -ForegroundColor $(if ($assessment.TotalDESEnabled -gt 0) { "Yellow" } else { "Green" })
+        Write-Host "  $([char]0x2022) RC4 Exception Accounts (RC4+AES): $($assessment.TotalRC4Exception)" -ForegroundColor $(if ($assessment.TotalRC4Exception -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Accounts Missing AES Keys (pwd >5yr): $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
     }
@@ -2078,6 +2125,18 @@ function Show-AssessmentSummary {
             }
         }
         
+        # RC4 exception accounts (RC4 + AES)
+        foreach ($exc in $Results.Accounts.RC4ExceptionAccounts) {
+            $excType = if ($exc.AccountType) { "RC4 Exception $($exc.AccountType)" } else { 'RC4 Exception' }
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $exc.Name
+                'Type'             = $excType
+                'Status'           = 'WARNING'
+                'Password Age'     = if ($exc.PasswordAgeDays -and $exc.PasswordAgeDays -ge 0) { "$($exc.PasswordAgeDays) days" } elseif ($exc.PasswordLastSet) { "$([int]((Get-Date) - $exc.PasswordLastSet).TotalDays) days" } else { "Auto-managed" }
+                'Encryption Types' = $exc.EncryptionTypes
+            }
+        }
+        
         # Display table with color coding
         $krbtgtTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
             if ($_ -match "CRITICAL") {
@@ -2113,6 +2172,9 @@ function Show-AssessmentSummary {
         }
         if ($Results.Accounts.TotalDESEnabled -gt 0) {
             Write-Host "    DES-Enabled Accounts: $($Results.Accounts.TotalDESEnabled)" -ForegroundColor Yellow
+        }
+        if ($Results.Accounts.TotalRC4Exception -gt 0) {
+            Write-Host "    RC4 Exception Accounts: $($Results.Accounts.TotalRC4Exception)" -ForegroundColor Yellow
         }
         if ($Results.Accounts.TotalStaleSvc -gt 0) {
             Write-Host "    Stale Password Service Accounts: $($Results.Accounts.TotalStaleSvc)" -ForegroundColor Yellow
@@ -2209,8 +2271,9 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    PS> Get-ADTrust -Filter * | Select-Object Name, msDS-SupportedEncryptionTypes
    
    If msDS-SupportedEncryptionTypes is 0 or empty: Uses AES (secure)
-   If set to 0x18 or 0x1C: Explicitly configured for AES (secure)
-   If includes 0x4: RC4 enabled (investigate)
+   If set to 0x18: Explicitly configured for AES-only (secure, recommended)
+   If set to 0x1C: Explicit RC4 exception with AES (review - remove RC4 when possible)
+   If includes 0x4 without AES: RC4-only (critical - investigate)
 
 6. KRBTGT Account & Service Account Hygiene
    $([string]([char]0x2500) * 60)
@@ -2332,9 +2395,10 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    b) DefaultDomainSupportedEncTypes (DWORD):
       $([char]0x2022) Controls default encryption types for the domain
       $([char]0x2022) After April 2026 updates, defaults to 0x18 (AES-only)
-      $([char]0x2022) If explicit RC4 exceptions needed, set to 0x1C
-        (RC4 + AES128 + AES256) - but this leaves all accounts
-        vulnerable to CVE-2026-20833
+      $([char]0x2022) Should be set to 0x18 (24) for AES-only (recommended)
+      $([char]0x2022) Do NOT set to 0x1C domain-wide unless absolutely necessary
+        - this leaves ALL accounts vulnerable to CVE-2026-20833
+        - use per-account msDS-SupportedEncryptionTypes = 0x1C instead
       PS> # Check current value:
       PS> Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
             -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
@@ -2718,6 +2782,23 @@ try {
             }
         }
         
+        if ($results.Accounts.TotalRC4Exception -gt 0) {
+            $warnings++
+            $excNames = ($results.Accounts.RC4ExceptionAccounts | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalRC4Exception) account(s) have explicit RC4 exception (0x1C) - review and remove RC4 when possible: $excNames"
+                Fix     = @(
+                    "# These accounts explicitly allow RC4 (msDS-SupportedEncryptionTypes includes 0x4 + AES)"
+                    "# After July 2026 they will be the only accounts still able to obtain RC4 tickets"
+                    "# To harden: remove RC4 and set AES-only:"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                    "# Test application access - if it breaks, re-add RC4 exception and plan vendor upgrade"
+                )
+            }
+        }
+        
         if ($results.Accounts.TotalDESEnabled -gt 0) {
             $warnings++
             $desNames = ($results.Accounts.DESEnabledAccounts | Select-Object -First 5).Name -join ', '
@@ -2725,9 +2806,9 @@ try {
                 Level   = "WARNING"
                 Message = "[$($results.Domain)] $($results.Accounts.TotalDESEnabled) account(s) have DES encryption bits enabled (insecure, removed in Server 2025): $desNames"
                 Fix     = @(
-                    "# Remove DES bits and keep only AES:"
+                    "# Remove DES bits and set AES-only:"
                     "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
-                    "# Or for RC4 exception: Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=28}"
+                    "# 24 = 0x18 = AES128 + AES256 (recommended)"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
             }
@@ -2773,7 +2854,7 @@ try {
                     "# On each DC, update the registry to include AES:"
                     "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'DefaultDomainSupportedEncTypes' -Value 24 -Type DWord"
                     "# 24 = 0x18 = AES128 + AES256 (AES-only, recommended)"
-                    "# If explicit RC4 exceptions needed: use value 28 (0x1C = RC4 + AES128 + AES256)"
+                    "# For per-account RC4 exceptions: set msDS-SupportedEncryptionTypes=0x1C on the account, NOT domain-wide"
                 )
             }
         }
@@ -2813,10 +2894,12 @@ try {
             Message = "[$($results.Domain)] KDCSVC events detected - RC4 risks exist (CVE-2026-20833): $eventSummary"
             Fix     = @(
                 "# Review KDCSVC events 201-209 in System event log on each DC"
-                "# For accounts triggering events 201-203 (audit), add explicit AES or RC4 exception:"
-                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
-                "# 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)"
+                "# For accounts triggering events 201-203 (audit), set AES-only first:"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# 24 = 0x18 = AES128 + AES256 (recommended)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                "# If AES breaks the application, fall back to explicit RC4 exception:"
+                "# Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
                 "# Then set RC4DefaultDisablementPhase = 2 when no more audit events appear"
             )
         }
@@ -2995,6 +3078,18 @@ try {
                     Status          = "DES bits enabled (insecure)"
                     EncryptionTypes = $des.EncryptionTypes
                     EncryptionValue = $des.EncryptionValue
+                }
+            }
+            
+            # Add RC4 exception accounts
+            foreach ($exc in $results.Accounts.RC4ExceptionAccounts) {
+                $excType = if ($exc.AccountType) { "RC4 Exception $($exc.AccountType)" } else { 'RC4 Exception' }
+                $csvData += [PSCustomObject]@{
+                    Type            = $excType
+                    Name            = $exc.Name
+                    Status          = "Explicit RC4 exception (review and remove RC4 when possible)"
+                    EncryptionTypes = $exc.EncryptionTypes
+                    EncryptionValue = $exc.EncryptionValue
                 }
             }
             

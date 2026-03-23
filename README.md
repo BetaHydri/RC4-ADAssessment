@@ -309,10 +309,11 @@ This toolkit implements the full [CVE-2026-20833 deployment guidance](https://su
 | **January 2026 Initial Deployment** | Timeline in guidance + recommendations |
 | **April 2026 Enforcement Phase** | Timeline + `DefaultDomainSupportedEncTypes` defaults to AES-only (0x18) |
 | **July 2026 Full Enforcement** | Timeline + `RC4DefaultDisablementPhase` removed |
-| **Explicit RC4 exception (`0x1C`)** | All fix commands use `0x1C` (RC4 + AES128 + AES256) |
+| **Explicit RC4 exception (`0x1C`)** | Default fix commands use `0x18` (AES-only); `0x1C` only as documented fallback for legacy apps |
+| **RC4 exception accounts detected** | Accounts with explicit RC4+AES (`0x1C`) flagged as WARNING with recommendation to remove RC4 |
 | **Domain-wide fallback (`0x1C` on DCs)** | Documented as last resort with CVE-2026-20833 vulnerability warning |
 | **Event 205** (insecure `DefaultDomainSupportedEncTypes`) | Registry check detects RC4 in `DefaultDomainSupportedEncTypes` |
-| **Events 206-208** (Enforcement blocking) | Detected with note about accounts needing `0x1C` exception or AES migration |
+| **Events 206-208** (Enforcement blocking) | Detected with recommendation to migrate to AES (0x18) or add per-account `0x1C` exception as last resort |
 | **Installing updates alone doesn't fix CVE** | Recommendations explicitly guide to enable Enforcement (value 2) |
 
 ## AzureADKerberos (Entra Kerberos Proxy)

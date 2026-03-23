@@ -14,7 +14,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.5.1
+  Version: 2.6.0
 
 .PARAMETER BaselineFile
   Path to the baseline (older) assessment JSON file.
@@ -185,6 +185,14 @@ try {
             Write-Host "  DES-Enabled:     $([int]$baseline.Accounts.TotalDESEnabled) $($desEnabledChange.Symbol) $([int]$current.Accounts.TotalDESEnabled)" -ForegroundColor $(if ($desEnabledChange.Status -eq "Improved") { "Green" } else { $desEnabledChange.Color })
             if ($desEnabledChange.Status -eq "Improved") { $improvements++ }
             if ($desEnabledChange.Status -eq "Worsened") { $degradations++ }
+        }
+        
+        # RC4 exception accounts (v2.6.0+)
+        if ($null -ne $baseline.Accounts.TotalRC4Exception -or $null -ne $current.Accounts.TotalRC4Exception) {
+            $rc4ExcChange = Get-ChangeIndicator -Old ([int]$baseline.Accounts.TotalRC4Exception) -New ([int]$current.Accounts.TotalRC4Exception)
+            Write-Host "  RC4 Exceptions:  $([int]$baseline.Accounts.TotalRC4Exception) $($rc4ExcChange.Symbol) $([int]$current.Accounts.TotalRC4Exception)" -ForegroundColor $(if ($rc4ExcChange.Status -eq "Improved") { "Green" } else { $rc4ExcChange.Color })
+            if ($rc4ExcChange.Status -eq "Improved") { $improvements++ }
+            if ($rc4ExcChange.Status -eq "Worsened") { $degradations++ }
         }
         
         # Count account improvements/degradations

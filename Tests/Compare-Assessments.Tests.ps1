@@ -393,6 +393,23 @@ Describe 'Assessment Comparison Logic' {
         }
     }
 
+    Context 'RC4 exception account comparison (v2.6.0+)' {
+        It 'Counts RC4 exception reduction as improvement' {
+            $rc4ExcChange = Get-ChangeIndicator -Old 5 -New 2
+            $rc4ExcChange.Status | Should -Be 'Improved'
+        }
+
+        It 'Counts RC4 exception increase as worsened' {
+            $rc4ExcChange = Get-ChangeIndicator -Old 2 -New 5
+            $rc4ExcChange.Status | Should -Be 'Worsened'
+        }
+
+        It 'No change when both zero' {
+            $rc4ExcChange = Get-ChangeIndicator -Old 0 -New 0
+            $rc4ExcChange.Status | Should -Be 'Unchanged'
+        }
+    }
+
     Context 'Worsening scenario' {
         BeforeAll {
             $worsenedData = @{

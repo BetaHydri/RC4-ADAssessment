@@ -25,7 +25,7 @@ BeforeAll {
 
     # Also extract the version variable
     $versionBlock = @'
-$script:Version = "2.5.1"
+$script:Version = "2.6.0"
 $script:AssessmentTimestamp = Get-Date
 '@
 
@@ -1181,7 +1181,98 @@ Describe 'Get-AccountEncryptionAssessment' {
             $result.TotalDESFlag | Should -Be 0
             $result.TotalRC4OnlySvc | Should -Be 0
             $result.TotalRC4OnlyMSA | Should -Be 0
+            $result.TotalRC4Exception | Should -Be 0
             $result.TotalStaleSvc | Should -Be 0
+        }
+    }
+
+    Context 'RC4 exception accounts detection (RC4 + AES = 0x1C)' {
+        BeforeEach {
+            Mock Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = $null
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                # SPN service accounts with various encryption configs
+                return @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'svc_legacy'
+                        DistinguishedName               = 'CN=svc_legacy,OU=ServiceAccounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-60)
+                        'msDS-SupportedEncryptionTypes' = 28  # 0x1C = RC4 + AES128 + AES256
+                        ServicePrincipalName            = @('HTTP/legacy.contoso.com')
+                        DisplayName                     = 'Legacy Service'
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'svc_clean'
+                        DistinguishedName               = 'CN=svc_clean,OU=ServiceAccounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        'msDS-SupportedEncryptionTypes' = 24  # AES-only
+                        ServicePrincipalName            = @('HTTP/clean.contoso.com')
+                        DisplayName                     = 'Clean Service'
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'svc_rc4only'
+                        DistinguishedName               = 'CN=svc_rc4only,OU=ServiceAccounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        'msDS-SupportedEncryptionTypes' = 4  # RC4-only
+                        ServicePrincipalName            = @('HTTP/rc4only.contoso.com')
+                        DisplayName                     = 'RC4 Only Service'
+                    }
+                )
+            }
+            Mock Get-ADServiceAccount {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'gmsa_exc$'
+                        DistinguishedName               = 'CN=gmsa_exc,CN=Managed Service Accounts,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-10)
+                        'msDS-SupportedEncryptionTypes' = 28  # 0x1C = RC4 + AES128 + AES256
+                        ServicePrincipalName            = @('HTTP/exc.contoso.com')
+                        ObjectClass                     = 'msDS-GroupManagedServiceAccount'
+                    }
+                )
+            }
+        }
+
+        It 'Detects RC4 exception accounts (RC4 + AES)' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalRC4Exception | Should -Be 2
+        }
+
+        It 'Includes SPN service account with 0x1C in RC4 exception list' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.RC4ExceptionAccounts | Where-Object { $_.Name -eq 'svc_legacy' } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Includes gMSA with 0x1C in RC4 exception list' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.RC4ExceptionAccounts | Where-Object { $_.Name -eq 'gmsa_exc$' } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Does not flag AES-only accounts as RC4 exception' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.RC4ExceptionAccounts | Where-Object { $_.Name -eq 'svc_clean' } | Should -BeNullOrEmpty
+        }
+
+        It 'Does not flag RC4-only accounts as RC4 exception (no AES bits)' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.RC4ExceptionAccounts | Where-Object { $_.Name -eq 'svc_rc4only' } | Should -BeNullOrEmpty
+        }
+
+        It 'Still detects RC4-only accounts correctly' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalRC4OnlySvc | Should -Be 1
+            $result.RC4OnlyServiceAccounts[0].Name | Should -Be 'svc_rc4only'
         }
     }
 }
@@ -1668,6 +1759,17 @@ Describe 'Overall Assessment Scoring Logic' {
         $regResult = @{ RC4DefaultDisablementPhase = @{ Status = 'NOT SET' } }
 
         if ($regResult.RC4DefaultDisablementPhase.Status -eq 'NOT SET') { $warnings++ }
+
+        $status = if ($criticalIssues -gt 0) { "CRITICAL" } elseif ($warnings -gt 0) { "WARNING" } else { "OK" }
+        $status | Should -Be "WARNING"
+    }
+
+    It 'Returns WARNING when RC4 exception accounts exist (0x1C)' {
+        $criticalIssues = 0
+        $warnings = 0
+        $accountResult = @{ TotalRC4Exception = 3 }
+
+        if ($accountResult.TotalRC4Exception -gt 0) { $warnings++ }
 
         $status = if ($criticalIssues -gt 0) { "CRITICAL" } elseif ($warnings -gt 0) { "WARNING" } else { "OK" }
         $status | Should -Be "WARNING"

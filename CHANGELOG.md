@@ -2,7 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.5.1 (March 2026) — Current
+## v2.6.0 (March 2026) — Current
+- **AES-first hardening**: All default fix commands now use `0x18` (AES-only) instead of `0x1C`
+  - `0x1C` (RC4 + AES) is now only recommended as a documented fallback when AES breaks an application
+  - Aligns with July 2026 enforcement: only accounts with explicit RC4 in `msDS-SupportedEncryptionTypes` can still use RC4
+- **RC4 exception account detection**: Accounts with explicit RC4 + AES (`0x1C` or any value with both RC4 and AES bits) are now flagged as WARNING
+  - Detected across SPN service accounts (`Get-ADUser`) and gMSA/sMSA/dMSA (`Get-ADServiceAccount`)
+  - New properties: `RC4ExceptionAccounts`, `TotalRC4Exception` in assessment output
+  - Summary line, summary table row, recommendation with hardening commands, CSV/JSON export
+  - Compare-Assessments.ps1: tracks RC4 exception count changes between assessments
+- **Updated guidance**: Section 8 (RC4 Exception Workflow) restructured with AES-first approach and clear "last resort" language for RC4 exceptions
+- **DefaultDomainSupportedEncTypes**: Fix commands now recommend per-account `0x1C` exceptions instead of domain-wide `0x1C` (which leaves all accounts vulnerable to CVE-2026-20833)
+- 8 new Pester tests for RC4 exception detection and comparison logic
+
+## v2.5.1 (March 2026)
 - **AzureADKerberos exclusion refinement**: Explicit filtering of AzureADKerberos from DC list in KDC registry and KDCSVC event log queries
 - **DES-enabled account detection**: Accounts with DES encryption bits set alongside AES are now flagged as WARNING (DES removed in Server 2025)
   - Detects DES bits on SPN user accounts (`Get-ADUser` with SPN filter) and gMSA/sMSA/dMSA (`Get-ADServiceAccount`)\n- **dMSA support**: Delegated Managed Service Accounts (Windows Server 2025, `msDS-DelegatedManagedServiceAccount`) are now correctly identified as \"dMSA\" instead of \"sMSA\"
