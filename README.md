@@ -110,7 +110,7 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.3.0
+DES/RC4 Kerberos Encryption Assessment v2.4.0
 ================================================================================
 
 Domain Controller Encryption Configuration
