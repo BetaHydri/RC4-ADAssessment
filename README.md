@@ -30,7 +30,7 @@ This toolkit helps you:
 | **Audit Policy Verification** | Checks if Kerberos auditing (4768/4769) is enabled before event log analysis |
 | **Event Log Analysis** | Queries events 4768/4769 from all DCs to find actual RC4/DES ticket usage |
 | **KRBTGT Assessment** | Password age, encryption types, rotation guidance |
-| **Service Account Scan** | SPN accounts, gMSA/sMSA with RC4/DES-only encryption |
+| **Service Account Scan** | SPN accounts, gMSA/sMSA, and delegated Managed Service Accounts (dMSA) with RC4/DES-only encryption |
 | **USE_DES_KEY_ONLY Detection** | Accounts with the UserAccountControl flag forcing DES |
 | **Missing AES Keys** | Accounts with passwords predating DFL 2008 raise (no AES keys generated) |
 | **AzureADKerberos Detection** | Entra Kerberos proxy object excluded from DC counts (Cloud Kerberos Trust) |
