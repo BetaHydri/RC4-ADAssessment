@@ -1612,165 +1612,165 @@ function Get-AccountEncryptionAssessment {
                     }
                 }
                 
-                    # Check for DES bits enabled on MSA (has DES bits, even alongside AES)
-                    if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
-                        $desInfo = @{
-                            Name            = $msa.SamAccountName
-                            DN              = $msa.DistinguishedName
-                            Enabled         = $msa.Enabled
-                            PasswordLastSet = $msa.PasswordLastSet
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
-                        }
-                        if ($msa.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
-                            $assessment.DESEnabledAccounts += $desInfo
-                        }
+                # Check for DES bits enabled on MSA (has DES bits, even alongside AES)
+                if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
+                    $desInfo = @{
+                        Name            = $msa.SamAccountName
+                        DN              = $msa.DistinguishedName
+                        Enabled         = $msa.Enabled
+                        PasswordLastSet = $msa.PasswordLastSet
+                        EncryptionValue = $encValue
+                        EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                        AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
+                    }
+                    if ($msa.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
+                        $assessment.DESEnabledAccounts += $desInfo
                     }
                 }
+            }
                 
-                $assessment.TotalRC4OnlyMSA = $assessment.RC4OnlyMSAs.Count
+            $assessment.TotalRC4OnlyMSA = $assessment.RC4OnlyMSAs.Count
                 
-                if ($assessment.RC4OnlyMSAs.Count -gt 0) {
-                    Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
-                    foreach ($msa in $assessment.RC4OnlyMSAs) {
-                        Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)" -ForegroundColor Yellow
-                    }
-                }
-                else {
-                    Write-Finding -Status "OK" -Message "All Managed Service Accounts use AES or default encryption"
+            if ($assessment.RC4OnlyMSAs.Count -gt 0) {
+                Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
+                foreach ($msa in $assessment.RC4OnlyMSAs) {
+                    Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)" -ForegroundColor Yellow
                 }
             }
             else {
-                Write-Finding -Status "INFO" -Message "No Managed Service Accounts found"
+                Write-Finding -Status "OK" -Message "All Managed Service Accounts use AES or default encryption"
             }
-        }
-        catch {
-            if ($_.Exception.Message -match "cmdlet.*not recognized|not loaded|is not recognized") {
-                Write-Finding -Status "INFO" -Message "Get-ADServiceAccount not available - skipping MSA check"
-            }
-            else {
-                Write-Finding -Status "WARNING" -Message "Could not query Managed Service Accounts: $($_.Exception.Message)"
-            }
-        }
-        
-        # Update DES-enabled totals and display
-        $assessment.TotalDESEnabled = $assessment.DESEnabledAccounts.Count
-        if ($assessment.TotalDESEnabled -gt 0) {
-            Write-Finding -Status "WARNING" -Message "$($assessment.TotalDESEnabled) account(s) have DES encryption bits enabled (DES is removed in Server 2025)"
-            foreach ($des in $assessment.DESEnabledAccounts) {
-                Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)" -ForegroundColor Yellow
-            }
-        }
-        
-        # ────────────────────────────────────────────────
-        # 5. Accounts missing AES keys (password set before DFL 2008)
-        # ────────────────────────────────────────────────
-        Write-Host "`n  Checking for accounts missing AES keys..." -ForegroundColor Cyan
-        
-        try {
-            # Determine when DFL was raised to 2008 (DFL >= Windows2008Domain means AES keys are generated on password set)
-            # Accounts whose password was last set BEFORE the DFL was raised to 2008 won't have AES keys
-            $dfl = $domainInfo.DomainMode
-            $dflSupportsAES = $dfl -match '2008|2012|2016|Windows2008|Windows2012|Windows2016|2025'
-            
-            if ($dflSupportsAES) {
-                # Find enabled user accounts with very old passwords that likely predate AES key generation
-                # We look for accounts with msDS-SupportedEncryptionTypes = 0 or not set, AND password > 5 years old
-                # These accounts may have been created before DFL was raised and never had password reset
-                $fiveYearsAgo = (Get-Date).AddYears(-5)
-                $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
-                    -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated @ServerParams -ErrorAction Stop
-                
-                if ($oldAccounts) {
-                    $oldList = @($oldAccounts)
-                    
-                    foreach ($acct in $oldList) {
-                        $encValue = $acct.'msDS-SupportedEncryptionTypes'
-                        $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
-                        
-                        # Flag accounts where password hasn't been reset since before AES was available
-                        # AND msDS-SupportedEncryptionTypes is not set (meaning no explicit AES bits)
-                        if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
-                            $acctInfo = @{
-                                Name            = $acct.SamAccountName
-                                DN              = $acct.DistinguishedName
-                                PasswordLastSet = $acct.PasswordLastSet
-                                PasswordAgeDays = $pwdAge
-                                WhenCreated     = $acct.WhenCreated
-                                HasSPN          = [bool]$acct.ServicePrincipalName
-                                Type            = "Missing AES Keys"
-                            }
-                            $assessment.MissingAESKeyAccounts += $acctInfo
-                        }
-                    }
-                    
-                    $assessment.TotalMissingAES = $assessment.MissingAESKeyAccounts.Count
-                    
-                    if ($assessment.MissingAESKeyAccounts.Count -gt 0) {
-                        Write-Finding -Status "WARNING" -Message "$($assessment.MissingAESKeyAccounts.Count) account(s) may be missing AES keys (password not reset since DFL raised to 2008+)" `
-                            -Detail "Reset password twice for these accounts to generate AES keys"
-                        
-                        $displayCount = [Math]::Min($assessment.MissingAESKeyAccounts.Count, 10)
-                        foreach ($acct in $assessment.MissingAESKeyAccounts | Select-Object -First $displayCount) {
-                            $spnStr = if ($acct.HasSPN) { " [HAS SPN]" } else { "" }
-                            Write-Host "    $([char]0x2022) $($acct.Name) - Password age: $($acct.PasswordAgeDays) days$spnStr" -ForegroundColor Yellow
-                        }
-                        if ($assessment.MissingAESKeyAccounts.Count -gt 10) {
-                            Write-Host "    ... and $($assessment.MissingAESKeyAccounts.Count - 10) more" -ForegroundColor Yellow
-                        }
-                    }
-                    else {
-                        Write-Finding -Status "OK" -Message "No accounts found with potentially missing AES keys"
-                    }
-                }
-                else {
-                    Write-Finding -Status "OK" -Message "No accounts found with passwords older than 5 years"
-                }
-            }
-            else {
-                Write-Finding -Status "WARNING" -Message "Domain functional level ($dfl) may not support AES key generation" `
-                    -Detail "Raise DFL to Windows Server 2008 or higher to enable AES Kerberos keys"
-            }
-        }
-        catch {
-            Write-Finding -Status "WARNING" -Message "Could not check for accounts missing AES keys: $($_.Exception.Message)"
-        }
-        
-        # ────────────────────────────────────────────────
-        # Summary
-        # ────────────────────────────────────────────────
-        Write-Host ""
-        Write-Finding -Status "INFO" -Message "Account Encryption Assessment Summary:"
-        
-        $krbtgtColor = switch ($assessment.KRBTGT.Status) {
-            "OK" { "Green" }
-            "WARNING" { "Yellow" }
-            "CRITICAL" { "Red" }
-            default { "Gray" }
-        }
-        Write-Host "  $([char]0x2022) KRBTGT Password Age: $($assessment.KRBTGT.PasswordAgeDays) days" -ForegroundColor $krbtgtColor
-        Write-Host "  $([char]0x2022) USE_DES_KEY_ONLY Accounts: $($assessment.TotalDESFlag)" -ForegroundColor $(if ($assessment.TotalDESFlag -gt 0) { "Red" } else { "Green" })
-        Write-Host "  $([char]0x2022) RC4/DES-Only Service Accounts: $($assessment.TotalRC4OnlySvc)" -ForegroundColor $(if ($assessment.TotalRC4OnlySvc -gt 0) { "Red" } else { "Green" })
-        Write-Host "  $([char]0x2022) RC4-Only Managed Service Accounts: $($assessment.TotalRC4OnlyMSA)" -ForegroundColor $(if ($assessment.TotalRC4OnlyMSA -gt 0) { "Yellow" } else { "Green" })
-        Write-Host "  $([char]0x2022) DES-Enabled Accounts (insecure): $($assessment.TotalDESEnabled)" -ForegroundColor $(if ($assessment.TotalDESEnabled -gt 0) { "Yellow" } else { "Green" })
-        Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
-        Write-Host "  $([char]0x2022) Accounts Missing AES Keys (pwd >5yr): $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
-    }
-    catch {
-        $errorMsg = $_.Exception.Message
-        if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
-            Write-Finding -Status "CRITICAL" -Message $errorMsg
-        }
-        elseif ($ServerParams.ContainsKey('Server')) {
-            Write-Finding -Status "CRITICAL" -Message "Error analyzing accounts (Attempted DC: $($ServerParams['Server'])): $errorMsg"
         }
         else {
-            Write-Finding -Status "CRITICAL" -Message "Error analyzing accounts: $errorMsg"
+            Write-Finding -Status "INFO" -Message "No Managed Service Accounts found"
         }
     }
+    catch {
+        if ($_.Exception.Message -match "cmdlet.*not recognized|not loaded|is not recognized") {
+            Write-Finding -Status "INFO" -Message "Get-ADServiceAccount not available - skipping MSA check"
+        }
+        else {
+            Write-Finding -Status "WARNING" -Message "Could not query Managed Service Accounts: $($_.Exception.Message)"
+        }
+    }
+        
+    # Update DES-enabled totals and display
+    $assessment.TotalDESEnabled = $assessment.DESEnabledAccounts.Count
+    if ($assessment.TotalDESEnabled -gt 0) {
+        Write-Finding -Status "WARNING" -Message "$($assessment.TotalDESEnabled) account(s) have DES encryption bits enabled (DES is removed in Server 2025)"
+        foreach ($des in $assessment.DESEnabledAccounts) {
+            Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)" -ForegroundColor Yellow
+        }
+    }
+        
+    # ────────────────────────────────────────────────
+    # 5. Accounts missing AES keys (password set before DFL 2008)
+    # ────────────────────────────────────────────────
+    Write-Host "`n  Checking for accounts missing AES keys..." -ForegroundColor Cyan
+        
+    try {
+        # Determine when DFL was raised to 2008 (DFL >= Windows2008Domain means AES keys are generated on password set)
+        # Accounts whose password was last set BEFORE the DFL was raised to 2008 won't have AES keys
+        $dfl = $domainInfo.DomainMode
+        $dflSupportsAES = $dfl -match '2008|2012|2016|Windows2008|Windows2012|Windows2016|2025'
+            
+        if ($dflSupportsAES) {
+            # Find enabled user accounts with very old passwords that likely predate AES key generation
+            # We look for accounts with msDS-SupportedEncryptionTypes = 0 or not set, AND password > 5 years old
+            # These accounts may have been created before DFL was raised and never had password reset
+            $fiveYearsAgo = (Get-Date).AddYears(-5)
+            $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
+                -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated @ServerParams -ErrorAction Stop
+                
+            if ($oldAccounts) {
+                $oldList = @($oldAccounts)
+                    
+                foreach ($acct in $oldList) {
+                    $encValue = $acct.'msDS-SupportedEncryptionTypes'
+                    $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
+                        
+                    # Flag accounts where password hasn't been reset since before AES was available
+                    # AND msDS-SupportedEncryptionTypes is not set (meaning no explicit AES bits)
+                    if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
+                        $acctInfo = @{
+                            Name            = $acct.SamAccountName
+                            DN              = $acct.DistinguishedName
+                            PasswordLastSet = $acct.PasswordLastSet
+                            PasswordAgeDays = $pwdAge
+                            WhenCreated     = $acct.WhenCreated
+                            HasSPN          = [bool]$acct.ServicePrincipalName
+                            Type            = "Missing AES Keys"
+                        }
+                        $assessment.MissingAESKeyAccounts += $acctInfo
+                    }
+                }
+                    
+                $assessment.TotalMissingAES = $assessment.MissingAESKeyAccounts.Count
+                    
+                if ($assessment.MissingAESKeyAccounts.Count -gt 0) {
+                    Write-Finding -Status "WARNING" -Message "$($assessment.MissingAESKeyAccounts.Count) account(s) may be missing AES keys (password not reset since DFL raised to 2008+)" `
+                        -Detail "Reset password twice for these accounts to generate AES keys"
+                        
+                    $displayCount = [Math]::Min($assessment.MissingAESKeyAccounts.Count, 10)
+                    foreach ($acct in $assessment.MissingAESKeyAccounts | Select-Object -First $displayCount) {
+                        $spnStr = if ($acct.HasSPN) { " [HAS SPN]" } else { "" }
+                        Write-Host "    $([char]0x2022) $($acct.Name) - Password age: $($acct.PasswordAgeDays) days$spnStr" -ForegroundColor Yellow
+                    }
+                    if ($assessment.MissingAESKeyAccounts.Count -gt 10) {
+                        Write-Host "    ... and $($assessment.MissingAESKeyAccounts.Count - 10) more" -ForegroundColor Yellow
+                    }
+                }
+                else {
+                    Write-Finding -Status "OK" -Message "No accounts found with potentially missing AES keys"
+                }
+            }
+            else {
+                Write-Finding -Status "OK" -Message "No accounts found with passwords older than 5 years"
+            }
+        }
+        else {
+            Write-Finding -Status "WARNING" -Message "Domain functional level ($dfl) may not support AES key generation" `
+                -Detail "Raise DFL to Windows Server 2008 or higher to enable AES Kerberos keys"
+        }
+    }
+    catch {
+        Write-Finding -Status "WARNING" -Message "Could not check for accounts missing AES keys: $($_.Exception.Message)"
+    }
+        
+    # ────────────────────────────────────────────────
+    # Summary
+    # ────────────────────────────────────────────────
+    Write-Host ""
+    Write-Finding -Status "INFO" -Message "Account Encryption Assessment Summary:"
+        
+    $krbtgtColor = switch ($assessment.KRBTGT.Status) {
+        "OK" { "Green" }
+        "WARNING" { "Yellow" }
+        "CRITICAL" { "Red" }
+        default { "Gray" }
+    }
+    Write-Host "  $([char]0x2022) KRBTGT Password Age: $($assessment.KRBTGT.PasswordAgeDays) days" -ForegroundColor $krbtgtColor
+    Write-Host "  $([char]0x2022) USE_DES_KEY_ONLY Accounts: $($assessment.TotalDESFlag)" -ForegroundColor $(if ($assessment.TotalDESFlag -gt 0) { "Red" } else { "Green" })
+    Write-Host "  $([char]0x2022) RC4/DES-Only Service Accounts: $($assessment.TotalRC4OnlySvc)" -ForegroundColor $(if ($assessment.TotalRC4OnlySvc -gt 0) { "Red" } else { "Green" })
+    Write-Host "  $([char]0x2022) RC4-Only Managed Service Accounts: $($assessment.TotalRC4OnlyMSA)" -ForegroundColor $(if ($assessment.TotalRC4OnlyMSA -gt 0) { "Yellow" } else { "Green" })
+    Write-Host "  $([char]0x2022) DES-Enabled Accounts (insecure): $($assessment.TotalDESEnabled)" -ForegroundColor $(if ($assessment.TotalDESEnabled -gt 0) { "Yellow" } else { "Green" })
+    Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
+    Write-Host "  $([char]0x2022) Accounts Missing AES Keys (pwd >5yr): $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
+}
+catch {
+    $errorMsg = $_.Exception.Message
+    if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
+        Write-Finding -Status "CRITICAL" -Message $errorMsg
+    }
+    elseif ($ServerParams.ContainsKey('Server')) {
+        Write-Finding -Status "CRITICAL" -Message "Error analyzing accounts (Attempted DC: $($ServerParams['Server'])): $errorMsg"
+    }
+    else {
+        Write-Finding -Status "CRITICAL" -Message "Error analyzing accounts: $errorMsg"
+    }
+}
     
-    return $assessment
+return $assessment
 }
 
 function Show-AssessmentSummary {
