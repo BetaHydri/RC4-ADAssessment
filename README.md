@@ -252,6 +252,20 @@ klist purge
 
 Document all exceptions and plan vendor upgrades.
 
+> **FAQ: Does the KDC also need RC4 enabled to issue RC4 tickets for excepted accounts?**
+>
+> **No.** The RC4 code path is **not removed** from the KDC after July 2026 — it remains fully functional.
+> The enforcement is a _policy_ decision, not a code removal. When the KDC processes a ticket request,
+> it checks the target account's `msDS-SupportedEncryptionTypes`:
+>
+> - **Explicit RC4 flag (e.g. `0x24`)** → KDC honors it and issues RC4 tickets for that account
+> - **No value set (0 or empty)** → KDC uses `DefaultDomainSupportedEncTypes` (AES-only after April 2026) → RC4 blocked
+>
+> You do **not** need to set `DefaultDomainSupportedEncTypes` to include RC4 on the DCs for
+> per-account exceptions to work. Setting `msDS-SupportedEncryptionTypes = 0x24` on the service
+> account is sufficient — the KDC will issue RC4 tickets for that specific account only, while
+> all other accounts remain AES-only.
+
 ### CVE-2026-20833 Toolkit Coverage
 
 This toolkit implements the full [CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc):
