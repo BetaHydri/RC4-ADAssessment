@@ -943,7 +943,7 @@ function Get-AuditPolicyCheck {
         # Query first available real DC (exclude AzureADKerberos proxy)
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
         $dc = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams |
-            Where-Object { $_.Name -ne 'AzureADKerberos' } | Select-Object -First 1
+        Where-Object { $_.Name -ne 'AzureADKerberos' } | Select-Object -First 1
         
         if (-not $dc) {
             Write-Finding -Status "WARNING" -Message "No Domain Controller found for audit policy check"
