@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.3.0-orange)
+![Version](https://img.shields.io/badge/version-2.4.0-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -26,6 +26,7 @@ This toolkit helps you:
 | **DC Encryption Check** | Scans all DCs for `msDS-SupportedEncryptionTypes` and GPO Kerberos policy |
 | **Trust Assessment** | Post-Nov 2022 logic: trusts default to AES when attribute is not set |
 | **KDC Registry Check** | Reads `DefaultDomainSupportedEncTypes` and `RC4DefaultDisablementPhase` from all DCs |
+| **KDCSVC Event Scan** | Queries System log events 201-209 for RC4 risks (CVE-2026-20833) |
 | **Audit Policy Verification** | Checks if Kerberos auditing (4768/4769) is enabled before event log analysis |
 | **Event Log Analysis** | Queries events 4768/4769 from all DCs to find actual RC4/DES ticket usage |
 | **KRBTGT Assessment** | Password age, encryption types, rotation guidance |
@@ -72,11 +73,11 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 | Script | Purpose |
 |--------|---------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.3.0) |
+| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.4.0) |
 | `Assess-ADForest.ps1` | Forest-wide wrapper — runs assessment per domain |
-| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.3.0) |
+| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.4.0) |
 | `Test-EventLogFailureHandling.ps1` | Test script for event log error handling |
-| `Tests/` | 161 Pester unit tests |
+| `Tests/` | 173 Pester unit tests |
 
 ## Parameters
 
@@ -212,8 +213,9 @@ Follow inline fix commands            .\RC4_DES_Assessment.ps1 `
 | Date | Milestone | Action |
 |------|-----------|--------|
 | **Nov 2022** | Post-OOB updates change trust/computer defaults to AES | Trusts with unset `msDS-SupportedEncryptionTypes` now default to AES |
-| **Jan 2026** | Security updates add `RC4DefaultDisablementPhase` registry key | Set to `1` on all DCs to begin RC4 disablement |
-| **Jul 2026** | RC4 completely removed from KDC path | Only accounts with _explicit_ RC4 in `msDS-SupportedEncryptionTypes` will work |
+| **Jan 2026** | Security updates add `RC4DefaultDisablementPhase` registry key (CVE-2026-20833) | Set to `1` to enable KDCSVC audit events 201-209, monitor, then set to `2` for Enforcement |
+| **Apr 2026** | Enforcement phase — `DefaultDomainSupportedEncTypes` defaults to AES-only (0x18) | Manual rollback still possible; `RC4DefaultDisablementPhase` can be set to disable enforcement |
+| **Jul 2026** | Full enforcement — `RC4DefaultDisablementPhase` registry key removed | Only accounts with _explicit_ RC4 in `msDS-SupportedEncryptionTypes` will work |
 
 ### What Happens After July 2026
 
@@ -224,20 +226,22 @@ Follow inline fix commands            .\RC4_DES_Assessment.ps1 `
 
 ### Explicit RC4 Exception (Last Resort)
 
-If a service absolutely cannot use AES after July 2026:
+If a service absolutely cannot use AES after April/July 2026 (per [CVE-2026-20833 guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)):
 
 ```powershell
-# User/service account:
-Set-ADUser 'svc_LegacyApp' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
-# 0x1C = RC4 + AES128 + AES256
+# Per-account exception (recommended):
+Set-ADUser 'svc_LegacyApp' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
+# 0x24 = RC4 (0x4) + AES256 session keys (0x20)
 Set-ADAccountPassword 'svc_LegacyApp' -Reset; klist purge
 
 # Computer account (rare):
-Set-ADComputer 'LEGACYHOST' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+Set-ADComputer 'LEGACYHOST' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
 klist purge
 
-# Ensure DCs still allow explicit RC4:
-# DefaultDomainSupportedEncTypes must include 0x4 (RC4) if you have any exceptions
+# Domain-wide fallback (INSECURE - leaves all accounts vulnerable to CVE-2026-20833):
+# Only as last resort if per-account exceptions are not feasible:
+# Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+#   -Name 'DefaultDomainSupportedEncTypes' -Value 0x24 -Type DWord
 ```
 
 Document all exceptions and plan vendor upgrades.
@@ -271,6 +275,7 @@ Compares:
 - Trust risk changes
 - Account changes (KRBTGT status, DES flags, RC4-only service accounts, missing AES keys)
 - KDC registry changes (`RC4DefaultDisablementPhase` value)
+- KDCSVC System event changes (CVE-2026-20833, events 201-209)
 - Event log ticket changes (RC4/DES ticket counts)
 
 ## Export Format
@@ -284,7 +289,7 @@ Results are exported to `.\Exports\` as JSON (full data) and CSV (summary table)
 #   Exports\DES_RC4_Assessment_contoso_com_20260321_143015.csv
 ```
 
-The JSON export includes all assessment data: DCs, trusts, accounts (KRBTGT, service accounts, DES flags, missing AES keys), KDC registry, event logs, and recommendations with fix commands.
+The JSON export includes all assessment data: DCs, trusts, accounts (KRBTGT, service accounts, DES flags, missing AES keys), KDC registry, KDCSVC events (CVE-2026-20833), event logs, and recommendations with fix commands.
 
 ## Troubleshooting
 
@@ -311,6 +316,7 @@ auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 ## Reference Documentation
 
 - [KB5021131: Managing Kerberos protocol changes](https://support.microsoft.com/kb/5021131)
+- [CVE-2026-20833: RC4 KDC service ticket issuance (KB5073381)](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
 - [What happened to Kerberos after November 2022 updates](https://techcommunity.microsoft.com/blog/askds/what-happened-to-kerberos-authentication-after-installing-the-november-2022oob-u/3696351)
 - [Decrypting Kerberos Encryption Types Selection](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797)
 - [Detect and Remediate RC4 Usage in Kerberos](https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4)
@@ -318,7 +324,18 @@ auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 
 ## Version History
 
-### v2.3.0 (March 2026) — Current
+### v2.4.0 (March 2026) — Current
+- **CVE-2026-20833** support: KDCSVC System event scanning (events 201-209)
+- `RC4DefaultDisablementPhase` value 2 (Enforcement mode) recognition
+- Phased recommendation workflow: value 1 (Audit) → monitor KDCSVC events → value 2 (Enforce)
+- April 2026 Enforcement phase added to timeline
+- Explicit RC4 exception value changed from `0x1C` to `0x24` (RC4 + AES256 session keys) per Microsoft guidance
+- Domain-wide `DefaultDomainSupportedEncTypes` fallback warning (leaves accounts vulnerable to CVE-2026-20833)
+- Compare-Assessments.ps1: KDCSVC event comparison across assessments
+- CVE-2026-20833 KB5073381 reference documentation added
+- 173 Pester unit tests (12 new for KDCSVC events and Enforcement mode)
+
+### v2.3.0 (March 2026)
 - KDC registry assessment (`DefaultDomainSupportedEncTypes`, `RC4DefaultDisablementPhase`)
 - Kerberos audit policy pre-check before event log analysis
 - Missing AES keys detection (accounts with passwords predating DFL 2008)
