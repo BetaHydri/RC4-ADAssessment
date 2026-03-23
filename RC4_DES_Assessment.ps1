@@ -719,12 +719,12 @@ function Get-KdcSvcEventAssessment {
     Write-Section "KDCSVC System Event Assessment (CVE-2026-20833)"
     
     $assessment = @{
-        TotalEvents   = 0
-        EventCounts   = @{}     # EventID -> count
-        EventDetails  = @()     # Array of event detail objects
-        QueriedDCs    = @()
-        FailedDCs     = @()
-        Status        = "Unknown"
+        TotalEvents  = 0
+        EventCounts  = @{}     # EventID -> count
+        EventDetails = @()     # Array of event detail objects
+        QueriedDCs   = @()
+        FailedDCs    = @()
+        Status       = "Unknown"
     }
     
     try {
@@ -811,10 +811,10 @@ function Get-KdcSvcEventAssessment {
                         $assessment.EventCounts["$eventId"]++
                         
                         $assessment.EventDetails += @{
-                            DC       = $dcName
-                            EventID  = $eventId
-                            Time     = if ($event.TimeCreated) { $event.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss') } else { 'Unknown' }
-                            Message  = if ($event.Message) { ($event.Message -split "`n")[0] } else { '' }
+                            DC      = $dcName
+                            EventID = $eventId
+                            Time    = if ($event.TimeCreated) { $event.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss') } else { 'Unknown' }
+                            Message = if ($event.Message) { ($event.Message -split "`n")[0] } else { '' }
                         }
                     }
                 }
