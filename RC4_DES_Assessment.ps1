@@ -221,15 +221,15 @@ function Get-DomainControllerEncryption {
     Write-Section "Domain Controller Encryption Configuration"
     
     $assessment = @{
-        TotalDCs              = 0
-        AESConfigured         = 0
-        RC4Configured         = 0
-        DESConfigured         = 0
-        NotConfigured         = 0
-        AzureADKerberos       = $null  # Entra Kerberos proxy object (not a real DC)
-        Details               = @()
-        GPOConfigured         = $false
-        GPOEncryptionTypes    = $null
+        TotalDCs           = 0
+        AESConfigured      = 0
+        RC4Configured      = 0
+        DESConfigured      = 0
+        NotConfigured      = 0
+        AzureADKerberos    = $null  # Entra Kerberos proxy object (not a real DC)
+        Details            = @()
+        GPOConfigured      = $false
+        GPOEncryptionTypes = $null
     }
     
     try {
@@ -265,10 +265,10 @@ function Get-DomainControllerEncryption {
         if ($azureADKerberos) {
             $encValue = $azureADKerberos.'msDS-SupportedEncryptionTypes'
             $assessment.AzureADKerberos = @{
-                Name            = 'AzureADKerberos'
-                EncryptionValue = $encValue
-                EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                Status          = 'Entra Kerberos Proxy (Managed by Microsoft Entra ID)'
+                Name              = 'AzureADKerberos'
+                EncryptionValue   = $encValue
+                EncryptionTypes   = Get-EncryptionTypeString -Value $encValue
+                Status            = 'Entra Kerberos Proxy (Managed by Microsoft Entra ID)'
                 IsAzureADKerberos = $true
             }
             Write-Finding -Status "INFO" -Message "AzureADKerberos object detected (Entra Kerberos proxy - not a real DC, excluded from DC counts)"
