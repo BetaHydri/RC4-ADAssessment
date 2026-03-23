@@ -672,9 +672,9 @@ function Get-KdcRegistryAssessment {
                         -Detail "Set to 1 first to enable KDCSVC audit events 201-209, monitor, then set to 2 for Enforcement (CVE-2026-20833)"
                 }
                 1 {
-                    $assessment.RC4DefaultDisablementPhase.Status = "WARNING"
-                    Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase = 1 (Audit mode - KDCSVC events enabled, RC4 not yet enforced)" `
-                        -Detail "Monitor KDCSVC events 201-209 in System log. When no more audit events appear, set to 2 for Enforcement (CVE-2026-20833)"
+                    $assessment.RC4DefaultDisablementPhase.Status = "OK"
+                    Write-Finding -Status "OK" -Message "RC4DefaultDisablementPhase = 1 (Audit mode active - KDCSVC events 201-209 enabled)" `
+                        -Detail "Monitor KDCSVC events in System log. When no audit events remain, set to 2 for Enforcement (CVE-2026-20833)"
                 }
                 2 {
                     $assessment.RC4DefaultDisablementPhase.Status = "OK"
@@ -2666,34 +2666,19 @@ try {
                 "RC4DefaultDisablementPhase = 0 (not active)"
             }
             else {
-                "RC4DefaultDisablementPhase = $currentPhase (Audit mode - not yet enforcing)"
+                "RC4DefaultDisablementPhase = $currentPhase"
             }
             
-            # Recommend phased approach: NOT SET/0 → set to 1 (audit); 1 → set to 2 (enforce)
-            if ($currentPhase -eq 1) {
-                $results.Recommendations += @{
-                    Level   = "WARNING"
-                    Message = "[$($results.Domain)] $phaseMsg"
-                    Fix     = @(
-                        "# KDCSVC audit events are enabled. Monitor events 201-209 in System log."
-                        "# When no more audit events appear, enable Enforcement mode:"
-                        "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord"
-                        "# Value 2 = Enforcement: blocks RC4 for accounts without explicit RC4 (CVE-2026-20833)"
-                    )
-                }
-            }
-            else {
-                $results.Recommendations += @{
-                    Level   = "WARNING"
-                    Message = "[$($results.Domain)] $phaseMsg"
-                    Fix     = @(
-                        "# Step 1: Deploy January 2026+ security updates on all DCs"
-                        "# Step 2: Enable KDCSVC audit events (System log events 201-209):"
-                        "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord"
-                        "# Step 3: Monitor KDCSVC events and remediate any RC4 dependencies"
-                        "# Step 4: When audit events are clear, enable Enforcement mode (value 2)"
-                    )
-                }
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] $phaseMsg"
+                Fix     = @(
+                    "# Step 1: Deploy January 2026+ security updates on all DCs"
+                    "# Step 2: Enable KDCSVC audit events (System log events 201-209):"
+                    "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord"
+                    "# Step 3: Monitor KDCSVC events and remediate any RC4 dependencies"
+                    "# Step 4: When audit events are clear, enable Enforcement mode (value 2)"
+                )
             }
         }
     }

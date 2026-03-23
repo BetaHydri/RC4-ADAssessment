@@ -1521,11 +1521,11 @@ Describe 'Get-KdcRegistryAssessment' {
             }
         }
 
-        It 'Reports RC4DefaultDisablementPhase as WARNING (audit mode)' {
+        It 'Reports RC4DefaultDisablementPhase as OK (audit mode)' {
             $result = Get-KdcRegistryAssessment -ServerParams @{}
             $result.RC4DefaultDisablementPhase.Configured | Should -BeTrue
             $result.RC4DefaultDisablementPhase.Value | Should -Be 1
-            $result.RC4DefaultDisablementPhase.Status | Should -Be 'WARNING'
+            $result.RC4DefaultDisablementPhase.Status | Should -Be 'OK'
         }
 
         It 'Tracks queried DC' {
