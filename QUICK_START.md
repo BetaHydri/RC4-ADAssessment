@@ -1,6 +1,6 @@
-# RC4_DES_Assessment.ps1 v2.3.0 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.4.0 - Quick Start Guide
 
-> **✨ New in v2.3.0:** KDC registry assessment, Kerberos audit policy pre-check, missing AES keys detection, inline remediation commands with every finding, and July 2026 RC4 removal timeline guidance. See also v2.2.0: KRBTGT assessment, service account scan, USE_DES_KEY_ONLY detection, stale password detection.
+> **✨ New in v2.4.0:** CVE-2026-20833 support — KDCSVC System event scanning (events 201-209), `RC4DefaultDisablementPhase` phased workflow (value 1 = Audit, value 2 = Enforce), April 2026 Enforcement phase, explicit RC4 exception value `0x24` per Microsoft guidance. See also v2.3.0: KDC registry assessment, audit policy pre-check, missing AES keys.
 
 ## 🔐 Using with Active Directory
 
@@ -16,7 +16,7 @@
 .\RC4_DES_Assessment.ps1 -QuickScan
 ```
 **Runtime**: ~30 seconds  
-**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry, DES flags, Missing AES keys
+**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry, KDCSVC Events (CVE-2026-20833), DES flags, Missing AES keys
 
 ### Full Assessment (Recommended)
 ```powershell
@@ -60,7 +60,7 @@
 ```powershell
 .\Compare-Assessments.ps1 -BaselineFile before.json -CurrentFile after.json -ShowDetails
 ```
-**Compares**: DC encryption, trusts, accounts (KRBTGT, service accounts, DES flags, missing AES keys), KDC registry, event log tickets
+**Compares**: DC encryption, trusts, accounts (KRBTGT, service accounts, DES flags, missing AES keys), KDC registry, KDCSVC events (CVE-2026-20833), event log tickets
 
 ---
 
@@ -69,7 +69,7 @@
 ### Successful Quick Scan
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.3.0
+DES/RC4 Kerberos Encryption Assessment v2.4.0
 ================================================================================
 
 Domain Controller Encryption Configuration
@@ -88,7 +88,12 @@ KDC Registry Configuration Assessment
 ────────────────────────────────────────────────────────────────
 ℹ️  DefaultDomainSupportedEncTypes: Not set (uses OS defaults)
 ⚠️  RC4DefaultDisablementPhase not set
-   Deploy January 2026+ security updates and set to 1 on all DCs
+   Deploy January 2026+ security updates, then set to 1 to enable KDCSVC audit events
+
+KDCSVC System Event Assessment (CVE-2026-20833)
+────────────────────────────────────────────────────────────────
+✅ No KDCSVC events found - no RC4 risks detected (CVE-2026-20833)
+  Note: KDCSVC events require RC4DefaultDisablementPhase >= 1 to be logged
 
 Trust Encryption Assessment (Post-November 2022 Logic)
 ────────────────────────────────────────────────────────────────
@@ -101,9 +106,12 @@ Overall Security Assessment
 
   Recommendations & Remediation:
     • WARNING: [contoso.com] RC4DefaultDisablementPhase not set
-      # Deploy January 2026+ security updates, then on each DC:
+      # Step 1: Deploy January 2026+ security updates on all DCs
+      # Step 2: Enable KDCSVC audit events (System log events 201-209):
       PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
             -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
+      # Step 3: Monitor KDCSVC events and remediate any RC4 dependencies
+      # Step 4: When audit events are clear, enable Enforcement mode (value 2)
 
   💡 Tip: Use -IncludeGuidance for the full reference manual
 ```
@@ -131,8 +139,9 @@ Event Log Analysis - Actual DES/RC4 Usage
       PS> Set-ADUser '<AccountName>' -Replace @{
             'msDS-SupportedEncryptionTypes'=24}
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
-      # If AES fails, add explicit RC4 exception:
-      #   -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      # If AES fails, add explicit RC4 exception (CVE-2026-20833 safe):
+      #   -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
+      #   0x24 = RC4 + AES256 session keys
 ```
 
 ### Event Log Access Failures (NEW in v2.0.1)
@@ -243,7 +252,13 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 
 ### KDC Registry (v2.3.0+)
 - **DefaultDomainSupportedEncTypes** - OS-level encryption defaults
-- **RC4DefaultDisablementPhase** - Should be set to 1 after January 2026 updates
+- **RC4DefaultDisablementPhase** - Set to 1 (Audit) then 2 (Enforce) per CVE-2026-20833
+
+### KDCSVC System Events (v2.4.0+)
+- **Events 201-209** - KDCSVC events in System log indicating RC4 risks (CVE-2026-20833)
+- Requires `RC4DefaultDisablementPhase >= 1` to be logged
+- Events 201-203: Audit warnings (RC4 requested for default accounts)
+- Events 206-208: Enforcement blocks (RC4 blocked in Enforcement mode)
 
 ### Missing AES Keys (v2.3.0+)
 - Accounts with passwords set before Domain Functional Level was raised to 2008
