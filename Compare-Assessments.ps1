@@ -7,13 +7,14 @@
   - Domain Controller encryption configuration
   - Trust encryption settings
   - KDC registry configuration (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase)
+  - KDCSVC System events (CVE-2026-20833, events 201-209)
   - Account encryption status (KRBTGT, service accounts, DES flags, missing AES keys)
   - Event log ticket usage patterns
   - Overall security posture
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.3.0
+  Version: 2.4.0
 
 .PARAMETER BaselineFile
   Path to the baseline (older) assessment JSON file.
@@ -188,7 +189,7 @@ try {
         
         $baseRC4Phase = if ($baseline.KdcRegistry.RC4DefaultDisablementPhase.Configured) { $baseline.KdcRegistry.RC4DefaultDisablementPhase.Value } else { "Not Set" }
         $currRC4Phase = if ($current.KdcRegistry.RC4DefaultDisablementPhase.Configured) { $current.KdcRegistry.RC4DefaultDisablementPhase.Value } else { "Not Set" }
-        Write-Host "  RC4Disablement:  $baseRC4Phase $([char]0x2192) $currRC4Phase" -ForegroundColor $(if ($currRC4Phase -eq 1) { 'Green' } elseif ($currRC4Phase -eq 'Not Set') { 'Yellow' } else { 'Gray' })
+        Write-Host "  RC4Disablement:  $baseRC4Phase $([char]0x2192) $currRC4Phase" -ForegroundColor $(if ($currRC4Phase -eq 2) { 'Green' } elseif ($currRC4Phase -eq 1) { 'Yellow' } elseif ($currRC4Phase -eq 'Not Set') { 'Yellow' } else { 'Gray' })
         
         $baseEncTypes = if ($baseline.KdcRegistry.DefaultDomainSupportedEncTypes.Configured) { $baseline.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
         $currEncTypes = if ($current.KdcRegistry.DefaultDomainSupportedEncTypes.Configured) { $current.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
@@ -228,6 +229,24 @@ try {
         Write-Host "  RC4 Tickets:     $($baseline.EventLogs.RC4Tickets) $($eventChanges.RC4Tickets.Symbol) $($current.EventLogs.RC4Tickets)" -ForegroundColor $(if ($eventChanges.RC4Tickets.Status -eq "Improved") { "Green" } else { $eventChanges.RC4Tickets.Color })
         Write-Host "  DES Tickets:     $($baseline.EventLogs.DESTickets) $($eventChanges.DESTickets.Symbol) $($current.EventLogs.DESTickets)" -ForegroundColor $(if ($eventChanges.DESTickets.Status -eq "Improved") { "Green" } else { $eventChanges.DESTickets.Color })
         Write-Host "  AES Tickets:     $($baseline.EventLogs.AESTickets) $($eventChanges.AESTickets.Symbol) $($current.EventLogs.AESTickets)" -ForegroundColor $(if ($eventChanges.AESTickets.Status -eq "Worsened") { "Red" } else { $eventChanges.AESTickets.Color })
+    }
+    
+    # KDCSVC Event Comparison (v2.4.0+ data, CVE-2026-20833)
+    if ($baseline.KdcSvcEvents -or $current.KdcSvcEvents) {
+        Write-ComparisonSection "KDCSVC System Events (CVE-2026-20833)"
+        
+        $baseKdcEvents = if ($baseline.KdcSvcEvents) { [int]$baseline.KdcSvcEvents.TotalEvents } else { 0 }
+        $currKdcEvents = if ($current.KdcSvcEvents) { [int]$current.KdcSvcEvents.TotalEvents } else { 0 }
+        $kdcEventChange = Get-ChangeIndicator -Old $baseKdcEvents -New $currKdcEvents
+        
+        Write-Host "  KDCSVC Events:   $baseKdcEvents $($kdcEventChange.Symbol) $currKdcEvents" -ForegroundColor $(if ($kdcEventChange.Status -eq "Improved") { "Green" } else { $kdcEventChange.Color })
+        
+        $baseKdcStatus = if ($baseline.KdcSvcEvents) { $baseline.KdcSvcEvents.Status } else { 'N/A' }
+        $currKdcStatus = if ($current.KdcSvcEvents) { $current.KdcSvcEvents.Status } else { 'N/A' }
+        Write-Host "  KDCSVC Status:   $baseKdcStatus $([char]0x2192) $currKdcStatus" -ForegroundColor $(if ($currKdcStatus -eq 'OK') { 'Green' } elseif ($currKdcStatus -eq 'WARNING') { 'Yellow' } else { 'Gray' })
+        
+        if ($kdcEventChange.Status -eq "Improved") { $improvements++ }
+        if ($kdcEventChange.Status -eq "Worsened") { $degradations++ }
     }
     
     # Detailed Changes

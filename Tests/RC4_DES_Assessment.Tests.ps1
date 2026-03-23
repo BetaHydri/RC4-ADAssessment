@@ -25,7 +25,7 @@ BeforeAll {
 
     # Also extract the version variable
     $versionBlock = @'
-$script:Version = "2.3.0"
+$script:Version = "2.4.0"
 $script:AssessmentTimestamp = Get-Date
 '@
 
@@ -1521,11 +1521,11 @@ Describe 'Get-KdcRegistryAssessment' {
             }
         }
 
-        It 'Reports RC4DefaultDisablementPhase as OK' {
+        It 'Reports RC4DefaultDisablementPhase as WARNING (audit mode)' {
             $result = Get-KdcRegistryAssessment -ServerParams @{}
             $result.RC4DefaultDisablementPhase.Configured | Should -BeTrue
             $result.RC4DefaultDisablementPhase.Value | Should -Be 1
-            $result.RC4DefaultDisablementPhase.Status | Should -Be 'OK'
+            $result.RC4DefaultDisablementPhase.Status | Should -Be 'WARNING'
         }
 
         It 'Tracks queried DC' {
@@ -1665,6 +1665,146 @@ Describe 'Get-KdcRegistryAssessment' {
             $result = Get-KdcRegistryAssessment -ServerParams @{}
             $result.DefaultDomainSupportedEncTypes.Status | Should -Be 'NOT SET'
             $result.RC4DefaultDisablementPhase.Status | Should -Be 'NOT SET'
+        }
+    }
+
+    Context 'When RC4DefaultDisablementPhase is set to 2 (Enforcement)' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = $null
+                    RC4DefaultDisablementPhase     = 2
+                }
+            }
+        }
+
+        It 'Reports RC4DefaultDisablementPhase as OK (Enforcement mode)' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.RC4DefaultDisablementPhase.Configured | Should -BeTrue
+            $result.RC4DefaultDisablementPhase.Value | Should -Be 2
+            $result.RC4DefaultDisablementPhase.Status | Should -Be 'OK'
+        }
+    }
+}
+
+# ============================================================
+# Get-KdcSvcEventAssessment
+# ============================================================
+
+Describe 'Get-KdcSvcEventAssessment' {
+    BeforeEach {
+        Mock Get-ADDomain {
+            [PSCustomObject]@{
+                DNSRoot           = 'contoso.com'
+                DistinguishedName = 'DC=contoso,DC=com'
+            }
+        }
+        Mock Write-Host {}
+    }
+
+    Context 'When no DCs are found' {
+        BeforeEach {
+            Mock Get-ADComputer { $null }
+        }
+
+        It 'Returns empty assessment' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.TotalEvents | Should -Be 0
+            $result.QueriedDCs | Should -HaveCount 0
+        }
+    }
+
+    Context 'When no KDCSVC events are found' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command { @() }
+        }
+
+        It 'Returns OK status with no events' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.TotalEvents | Should -Be 0
+            $result.Status | Should -Be 'OK'
+            $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
+        }
+    }
+
+    Context 'When KDCSVC events are found' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command {
+                @(
+                    [PSCustomObject]@{ Id = 201; TimeCreated = (Get-Date); Message = 'RC4 service ticket requested' },
+                    [PSCustomObject]@{ Id = 205; TimeCreated = (Get-Date); Message = 'Insecure DefaultDomainSupportedEncTypes' }
+                )
+            }
+        }
+
+        It 'Returns WARNING status with event counts' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.TotalEvents | Should -Be 2
+            $result.Status | Should -Be 'WARNING'
+            $result.EventCounts['201'] | Should -Be 1
+            $result.EventCounts['205'] | Should -Be 1
+        }
+
+        It 'Tracks event details' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.EventDetails | Should -HaveCount 2
+            $result.EventDetails[0].DC | Should -Be 'dc01.contoso.com'
+        }
+    }
+
+    Context 'When WinRM fails with No events found' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command { throw 'No events were found that match the specified selection criteria.' }
+        }
+
+        It 'Returns OK when no events match' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.TotalEvents | Should -Be 0
+            $result.Status | Should -Be 'OK'
+            $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
+        }
+    }
+
+    Context 'When WinRM fails completely' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'DC01'
+                    DNSHostName = 'dc01.contoso.com'
+                }
+            }
+            Mock Invoke-Command { throw 'WinRM connection failed' }
+            Mock Get-WinEvent { throw 'RPC server unavailable' }
+        }
+
+        It 'Adds DC to FailedDCs list' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.FailedDCs | Should -HaveCount 1
+            $result.FailedDCs[0].Name | Should -Be 'dc01.contoso.com'
         }
     }
 }

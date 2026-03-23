@@ -9,6 +9,7 @@
   Key features:
   - Fast DC-level assessment (no full computer object enumeration)
   - Event log analysis for actual DES/RC4 ticket usage (Event IDs 4768/4769)
+  - KDCSVC System event log scanning (Event IDs 201-209, CVE-2026-20833)
   - Post-Nov 2022 logic: Trusts default to AES when msDS-SupportedEncryptionTypes is unset
   - KDC registry key assessment (DefaultDomainSupportedEncTypes, RC4DefaultDisablementPhase)
   - Kerberos audit policy pre-check before event log analysis
@@ -18,7 +19,8 @@
   - Accounts missing AES keys (password set before DFL raised to 2008)
   - Realistic computer object assessment: Only flags actual RC4 fallback scenarios
   - Actionable guidance for manual validation and monitoring setup
-  - July 2026 RC4 removal timeline and explicit RC4 exception workflow
+  - CVE-2026-20833 RC4 KDC service ticket issuance assessment
+  - January/April/July 2026 RC4 removal timeline and explicit RC4 exception workflow
   - Performance optimized for large forests (<5 minutes vs 5+ hours)
   
   Post-November 2022 Update Logic:
@@ -67,7 +69,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.3.0
+  Version: 2.4.0
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -78,8 +80,10 @@
   Based on Microsoft guidance:
   - November 2022 OOB Updates (CVE-2022-37966, CVE-2022-37967)
   - KB5021131: Managing Kerberos protocol changes
+  - CVE-2026-20833: RC4 KDC service ticket issuance (KB5073381)
   - January 2026 security updates (RC4 disablement Phase 1)
-  - July 2026 RC4 full removal from KDC path
+  - April 2026 Enforcement phase (DefaultDomainSupportedEncTypes defaults to AES-only)
+  - July 2026 RC4 full removal from KDC path (RC4DefaultDisablementPhase removed)
   - Microsoft Kerberos-Crypto scripts: https://github.com/microsoft/Kerberos-Crypto
 
 .LINK
@@ -131,7 +135,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.3.0"
+$script:Version = "2.4.0"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -665,12 +669,17 @@ function Get-KdcRegistryAssessment {
                 0 {
                     $assessment.RC4DefaultDisablementPhase.Status = "WARNING"
                     Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase = 0 (RC4 disablement NOT active)" `
-                        -Detail "Set to 1 to begin RC4 disablement on this DC"
+                        -Detail "Set to 1 first to enable KDCSVC audit events 201-209, monitor, then set to 2 for Enforcement (CVE-2026-20833)"
                 }
                 1 {
+                    $assessment.RC4DefaultDisablementPhase.Status = "WARNING"
+                    Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase = 1 (Audit mode - KDCSVC events enabled, RC4 not yet enforced)" `
+                        -Detail "Monitor KDCSVC events 201-209 in System log. When no more audit events appear, set to 2 for Enforcement (CVE-2026-20833)"
+                }
+                2 {
                     $assessment.RC4DefaultDisablementPhase.Status = "OK"
-                    Write-Finding -Status "OK" -Message "RC4DefaultDisablementPhase = 1 (RC4 disablement active)" `
-                        -Detail "RC4 is disabled for accounts without explicit RC4 in msDS-SupportedEncryptionTypes"
+                    Write-Finding -Status "OK" -Message "RC4DefaultDisablementPhase = 2 (Enforcement mode active)" `
+                        -Detail "RC4 is blocked for accounts without explicit RC4 in msDS-SupportedEncryptionTypes (CVE-2026-20833)"
                 }
                 default {
                     $assessment.RC4DefaultDisablementPhase.Status = "INFO"
@@ -682,7 +691,7 @@ function Get-KdcRegistryAssessment {
         else {
             $assessment.RC4DefaultDisablementPhase.Status = "NOT SET"
             Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase registry key is not set" `
-                -Detail "Deploy January 2026+ security updates and set RC4DefaultDisablementPhase = 1 on all DCs"
+                -Detail "Deploy January 2026+ security updates, then set to 1 to enable KDCSVC audit events (CVE-2026-20833)"
         }
         
         if ($assessment.FailedDCs.Count -gt 0) {
@@ -696,6 +705,178 @@ function Get-KdcRegistryAssessment {
         }
         else {
             Write-Finding -Status "WARNING" -Message "Error checking KDC registry: $errorMsg"
+        }
+    }
+    
+    return $assessment
+}
+
+function Get-KdcSvcEventAssessment {
+    param(
+        [hashtable]$ServerParams
+    )
+    
+    Write-Section "KDCSVC System Event Assessment (CVE-2026-20833)"
+    
+    $assessment = @{
+        TotalEvents   = 0
+        EventCounts   = @{}     # EventID -> count
+        EventDetails  = @()     # Array of event detail objects
+        QueriedDCs    = @()
+        FailedDCs     = @()
+        Status        = "Unknown"
+    }
+    
+    try {
+        # Get domain info
+        if ($ServerParams.ContainsKey('Server')) {
+            try {
+                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
+            }
+            catch {
+                throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
+            }
+        }
+        else {
+            $domainInfo = Get-ADDomain
+        }
+        
+        # Get all DCs
+        $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
+        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
+        
+        if (-not $dcs) {
+            Write-Finding -Status "WARNING" -Message "No Domain Controllers found for KDCSVC event check"
+            return $assessment
+        }
+        
+        Write-Finding -Status "INFO" -Message "Checking KDCSVC events 201-209 on $($dcs.Count) Domain Controller(s)"
+        Write-Host "  These events indicate RC4 risks related to CVE-2026-20833" -ForegroundColor Gray
+        
+        foreach ($dc in $dcs) {
+            $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+            Write-Host "  $([char]0x2022) Querying $dcName (System log)..." -ForegroundColor Cyan
+            
+            try {
+                $filterXml = @"
+<QueryList>
+  <Query Id="0" Path="System">
+    <Select Path="System">
+      *[System[Provider[@Name='KDCSVC'] and (EventID &gt;= 201 and EventID &lt;= 209)]]
+    </Select>
+  </Query>
+</QueryList>
+"@
+                
+                $events = $null
+                try {
+                    $events = Invoke-Command -ComputerName $dcName -ScriptBlock {
+                        param($FilterXml)
+                        Get-WinEvent -FilterXml $FilterXml -MaxEvents 500 -ErrorAction Stop
+                    } -ArgumentList $filterXml -ErrorAction Stop
+                }
+                catch {
+                    if ($_.Exception.Message -match 'No events were found') {
+                        $events = @()
+                    }
+                    else {
+                        # WinRM failed, try RPC
+                        Write-Host "    $([char]0x26A0) WinRM unavailable, trying RPC..." -ForegroundColor DarkYellow
+                        try {
+                            $events = Get-WinEvent -ComputerName $dcName -FilterXml $filterXml -MaxEvents 500 -ErrorAction Stop
+                        }
+                        catch {
+                            if ($_.Exception.Message -match 'No events were found') {
+                                $events = @()
+                            }
+                            else {
+                                throw $_
+                            }
+                        }
+                    }
+                }
+                
+                $assessment.QueriedDCs += $dcName
+                
+                if ($events -and $events.Count -gt 0) {
+                    Write-Host "    $([char]0x26A0) Found $($events.Count) KDCSVC event(s)" -ForegroundColor Yellow
+                    $assessment.TotalEvents += $events.Count
+                    
+                    foreach ($event in $events) {
+                        $eventId = if ($event.Id) { $event.Id } else { $event.EventID }
+                        
+                        if (-not $assessment.EventCounts.ContainsKey("$eventId")) {
+                            $assessment.EventCounts["$eventId"] = 0
+                        }
+                        $assessment.EventCounts["$eventId"]++
+                        
+                        $assessment.EventDetails += @{
+                            DC       = $dcName
+                            EventID  = $eventId
+                            Time     = if ($event.TimeCreated) { $event.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss') } else { 'Unknown' }
+                            Message  = if ($event.Message) { ($event.Message -split "`n")[0] } else { '' }
+                        }
+                    }
+                }
+                else {
+                    Write-Host "    $([char]0x2713) No KDCSVC events found" -ForegroundColor Green
+                }
+            }
+            catch {
+                $assessment.FailedDCs += @{ Name = $dcName; Error = $_.Exception.Message }
+                Write-Host "    $([char]0x26A0) Could not query System log on $dcName" -ForegroundColor Yellow
+            }
+        }
+        
+        # Assess results
+        if ($assessment.TotalEvents -gt 0) {
+            $assessment.Status = "WARNING"
+            Write-Host ""
+            Write-Finding -Status "WARNING" -Message "KDCSVC events detected - RC4 risks exist (CVE-2026-20833)"
+            Write-Host "  Event breakdown:" -ForegroundColor Yellow
+            foreach ($kvp in $assessment.EventCounts.GetEnumerator()) {
+                $eventDesc = switch ($kvp.Key) {
+                    "201" { "RC4 service ticket requested for account with default encryption" }
+                    "202" { "RC4 TGT requested for account with default encryption" }
+                    "203" { "RC4 session key used for account with default encryption" }
+                    "204" { "Account has explicit RC4 in msDS-SupportedEncryptionTypes" }
+                    "205" { "DefaultDomainSupportedEncTypes includes insecure RC4 configuration" }
+                    "206" { "RC4 service ticket blocked (Enforcement mode)" }
+                    "207" { "RC4 TGT blocked (Enforcement mode)" }
+                    "208" { "RC4 session key blocked (Enforcement mode)" }
+                    "209" { "Domain functional level prevents AES-only operation" }
+                    default { "KDCSVC event" }
+                }
+                Write-Host "    Event $($kvp.Key): $($kvp.Value) occurrence(s) - $eventDesc" -ForegroundColor Yellow
+            }
+            
+            # Events 206-208 indicate Enforcement mode is active and blocking
+            $blockingEvents = ($assessment.EventCounts.Keys | Where-Object { [int]$_ -ge 206 -and [int]$_ -le 208 })
+            if ($blockingEvents) {
+                Write-Host "`n  $([char]0x26A0) Enforcement mode is actively blocking RC4 requests" -ForegroundColor Red
+                Write-Host "  Affected accounts need explicit RC4 exception (0x24) or migration to AES" -ForegroundColor Yellow
+            }
+        }
+        else {
+            if ($assessment.QueriedDCs.Count -gt 0) {
+                $assessment.Status = "OK"
+                Write-Finding -Status "OK" -Message "No KDCSVC events found - no RC4 risks detected (CVE-2026-20833)"
+                Write-Host "  Note: KDCSVC events require RC4DefaultDisablementPhase >= 1 to be logged" -ForegroundColor Gray
+                Write-Host "  If RC4DefaultDisablementPhase is not set or 0, set it to 1 to enable auditing" -ForegroundColor Gray
+            }
+        }
+        
+        if ($assessment.FailedDCs.Count -gt 0) {
+            Write-Host "`n  $([char]0x26A0) Could not query System log on $($assessment.FailedDCs.Count) DC(s)" -ForegroundColor Yellow
+        }
+    }
+    catch {
+        $errorMsg = $_.Exception.Message
+        if ($errorMsg -match "Failed to contact Domain Controller '([^']+)'") {
+            Write-Finding -Status "CRITICAL" -Message $errorMsg
+        }
+        else {
+            Write-Finding -Status "WARNING" -Message "Error checking KDCSVC events: $errorMsg"
         }
     }
     
@@ -2018,29 +2199,36 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    # CMD> klist purge
    # Then test access to the application
 
-7. RC4 Disablement Timeline & Registry Keys
+7. RC4 Disablement Timeline & Registry Keys (CVE-2026-20833)
    $([string]([char]0x2500) * 60)
    
    $([char]0x26A0) CRITICAL TIMELINE:
    $([char]0x2022) January 2026: Security updates add RC4DefaultDisablementPhase
-     registry key. Set to 1 on all DCs to begin RC4 disablement.
-   $([char]0x2022) July 2026: RC4 completely removed from Kerberos KDC path,
-     EXCEPT for accounts with explicit RC4 in msDS-SupportedEncryptionTypes.
+     registry key. Audit events (KDCSVC 201-209) logged in System log.
+     Set to 2 on all DCs to enable Enforcement mode.
+   $([char]0x2022) April 2026: Enforcement phase - DefaultDomainSupportedEncTypes
+     defaults to AES-only (0x18). Manual rollback still possible.
+   $([char]0x2022) July 2026: Full enforcement - RC4DefaultDisablementPhase
+     registry key removed. RC4 blocked for all accounts without explicit
+     RC4 in msDS-SupportedEncryptionTypes.
    
    Registry Keys to Configure:
    $([char]0x2022) HKLM\SYSTEM\CurrentControlSet\Services\Kdc
    
    a) RC4DefaultDisablementPhase (DWORD):
-      $([char]0x2022) Value = 1: Disables RC4 for accounts without explicit RC4
+      $([char]0x2022) Value = 0: RC4 disablement not active
+      $([char]0x2022) Value = 1: Audit mode only (logs KDCSVC events but allows RC4)
+      $([char]0x2022) Value = 2: Enforcement mode (blocks RC4 for default accounts)
       $([char]0x2022) Deploy to ALL Domain Controllers after January 2026 updates
       PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
-            -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
+            -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord
    
    b) DefaultDomainSupportedEncTypes (DWORD):
       $([char]0x2022) Controls default encryption types for the domain
-      $([char]0x2022) If set, MUST include RC4 (0x4) if you need explicit RC4
-        exceptions post-July 2026
-      $([char]0x2022) Usually NOT set (uses OS defaults) - verify before changing
+      $([char]0x2022) After April 2026 updates, defaults to 0x18 (AES-only)
+      $([char]0x2022) If explicit RC4 exceptions needed, set to 0x24
+        (RC4 + AES256 session keys) - but this leaves all accounts
+        vulnerable to CVE-2026-20833
       PS> # Check current value:
       PS> Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
             -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
@@ -2048,12 +2236,20 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) GPO Preference path for DefaultDomainSupportedEncTypes:
      Computer Configuration > Preferences > Windows Settings > Registry
      > DefaultDomainSupportedEncTypes
+   
+   $([char]0x2022) KDCSVC System Event Log Monitoring:
+     Monitor events 201-209 (Provider: KDCSVC) in the System log.
+     These identify accounts and configurations at risk before enabling
+     Enforcement mode.
+   
+   Reference: https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc
 
-8. Explicit RC4 Exception Workflow (Post-July 2026)
+8. Explicit RC4 Exception Workflow (CVE-2026-20833)
    $([string]([char]0x2500) * 60)
    
-   After July 2026, RC4 is blocked UNLESS explicitly configured on the account's
-   msDS-SupportedEncryptionTypes attribute. Use this workflow:
+   After April 2026 (Enforcement phase), RC4 is blocked for accounts with
+   default encryption configuration. After July 2026, the RC4DefaultDisablementPhase
+   registry key is removed entirely. Use this workflow for exceptions:
    
    a) Step 1: Try AES First
       PS> # Set account to AES-only
@@ -2064,26 +2260,35 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
       $([char]0x2022) Test application access
    
    b) Step 2: If AES Fails, Add Explicit RC4 Exception
+      Per CVE-2026-20833 guidance, use 0x24 (RC4 + AES256 session keys):
+      
       For USER/SERVICE accounts:
-      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
-      # 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)
+      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
+      # 0x24 = RC4 (0x4) + AES256 session keys (0x20)
+      # This allows RC4 ticket encryption but enforces AES session keys
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
       $([char]0x2022) Test application access
    
       For COMPUTER accounts (rare but possible):
-      PS> Set-ADComputer "LEGACYHOST" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      PS> Set-ADComputer "LEGACYHOST" -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
       CMD> klist purge
       $([char]0x2022) Test application access
    
-   c) Step 3: Document and Plan
+   c) Last Resort: Domain-Wide RC4 Fallback (INSECURE)
+      If per-account exceptions are not feasible:
+      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+            -Name 'DefaultDomainSupportedEncTypes' -Value 0x24 -Type DWord
+      $([char]0x26A0) This leaves ALL accounts vulnerable to CVE-2026-20833!
+      $([char]0x2022) Only use as temporary measure while migrating to AES
+   
+   d) Step 3: Document and Plan
       $([char]0x2022) Document all accounts with explicit RC4 exceptions
       $([char]0x2022) Engage vendors for AES support on third-party systems
       $([char]0x2022) Plan upgrades or replacements for legacy systems
       $([char]0x2022) Set review dates to revisit each exception
    
-   $([char]0x26A0) Ensure DefaultDomainSupportedEncTypes on DCs still
-   includes RC4 (0x4) if you have any explicit RC4 exceptions.
+   Reference: https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc
 
 9. Accounts Missing AES Keys
    $([string]([char]0x2500) * 60)
@@ -2130,6 +2335,8 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
     Write-Host "`n$([System.Char]::ConvertFromUtf32(0x1F4DA)) Reference Documentation:" -ForegroundColor Cyan
     Write-Host "  $([char]0x2022) KB5021131: Managing Kerberos protocol changes post-November 2022" -ForegroundColor Gray
+    Write-Host "  $([char]0x2022) CVE-2026-20833: RC4 KDC service ticket issuance (KB5073381)" -ForegroundColor Gray
+    Write-Host "  $([char]0x2022) https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc" -ForegroundColor Gray
     Write-Host "  $([char]0x2022) https://techcommunity.microsoft.com/blog/askds/what-happened-to-kerberos-authentication-after-installing-the-november-2022oob-u/3696351" -ForegroundColor Gray
     Write-Host "  $([char]0x2022) https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797" -ForegroundColor Gray
     Write-Host "  $([char]0x2022) https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4" -ForegroundColor Gray
@@ -2206,6 +2413,7 @@ $results = @{
     Trusts            = $null
     Accounts          = $null
     KdcRegistry       = $null
+    KdcSvcEvents      = $null
     AuditPolicy       = $null
     EventLogs         = $null
     OverallStatus     = "Unknown"
@@ -2224,6 +2432,9 @@ try {
     
     # 4. KDC Registry Assessment
     $results.KdcRegistry = Get-KdcRegistryAssessment -ServerParams $serverParams
+    
+    # 4b. KDCSVC System Event Assessment (CVE-2026-20833)
+    $results.KdcSvcEvents = Get-KdcSvcEventAssessment -ServerParams $serverParams
     
     # 5. Event Log Analysis (if requested)
     if ($AnalyzeEventLogs) {
@@ -2325,7 +2536,9 @@ try {
                 "# For each account using RC4, try AES first:"
                 "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
-                "# If AES fails, add explicit RC4 exception: -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
+                "# If AES fails, add explicit RC4 exception (CVE-2026-20833 safe):"
+                "# Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}"
+                "# 0x24 = RC4 (0x4) + AES256 session keys (0x20) - allows RC4 tickets with AES sessions"
             )
         }
     }
@@ -2437,28 +2650,69 @@ try {
                 Message = "[$($results.Domain)] DefaultDomainSupportedEncTypes does NOT include AES"
                 Fix     = @(
                     "# On each DC, update the registry to include AES:"
-                    "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'DefaultDomainSupportedEncTypes' -Value 28 -Type DWord"
-                    "# 28 = 0x1C = RC4 + AES128 + AES256 (keep RC4 for explicit exceptions)"
+                    "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'DefaultDomainSupportedEncTypes' -Value 24 -Type DWord"
+                    "# 24 = 0x18 = AES128 + AES256 (AES-only, recommended)"
+                    "# If explicit RC4 exceptions needed: use value 36 (0x24 = RC4 + AES256 session keys)"
                 )
             }
         }
         if ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -in @("NOT SET", "WARNING")) {
             $warnings++
+            $currentPhase = $results.KdcRegistry.RC4DefaultDisablementPhase.Value
             $phaseMsg = if ($results.KdcRegistry.RC4DefaultDisablementPhase.Status -eq "NOT SET") {
                 "RC4DefaultDisablementPhase not set"
             }
-            else {
+            elseif ($currentPhase -eq 0) {
                 "RC4DefaultDisablementPhase = 0 (not active)"
             }
-            $results.Recommendations += @{
-                Level   = "WARNING"
-                Message = "[$($results.Domain)] $phaseMsg"
-                Fix     = @(
-                    "# Deploy January 2026+ security updates, then on each DC:"
-                    "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord"
-                    "# This disables RC4 for accounts without explicit RC4 in msDS-SupportedEncryptionTypes"
-                )
+            else {
+                "RC4DefaultDisablementPhase = $currentPhase (Audit mode - not yet enforcing)"
             }
+            
+            # Recommend phased approach: NOT SET/0 → set to 1 (audit); 1 → set to 2 (enforce)
+            if ($currentPhase -eq 1) {
+                $results.Recommendations += @{
+                    Level   = "WARNING"
+                    Message = "[$($results.Domain)] $phaseMsg"
+                    Fix     = @(
+                        "# KDCSVC audit events are enabled. Monitor events 201-209 in System log."
+                        "# When no more audit events appear, enable Enforcement mode:"
+                        "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord"
+                        "# Value 2 = Enforcement: blocks RC4 for accounts without explicit RC4 (CVE-2026-20833)"
+                    )
+                }
+            }
+            else {
+                $results.Recommendations += @{
+                    Level   = "WARNING"
+                    Message = "[$($results.Domain)] $phaseMsg"
+                    Fix     = @(
+                        "# Step 1: Deploy January 2026+ security updates on all DCs"
+                        "# Step 2: Enable KDCSVC audit events (System log events 201-209):"
+                        "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord"
+                        "# Step 3: Monitor KDCSVC events and remediate any RC4 dependencies"
+                        "# Step 4: When audit events are clear, enable Enforcement mode (value 2)"
+                    )
+                }
+            }
+        }
+    }
+    
+    # Check KDCSVC events (CVE-2026-20833)
+    if ($results.KdcSvcEvents -and $results.KdcSvcEvents.TotalEvents -gt 0) {
+        $warnings++
+        $eventSummary = ($results.KdcSvcEvents.EventCounts.GetEnumerator() | ForEach-Object { "Event $($_.Key): $($_.Value)" }) -join ', '
+        $results.Recommendations += @{
+            Level   = "WARNING"
+            Message = "[$($results.Domain)] KDCSVC events detected - RC4 risks exist (CVE-2026-20833): $eventSummary"
+            Fix     = @(
+                "# Review KDCSVC events 201-209 in System event log on each DC"
+                "# For accounts triggering events 201-203 (audit), add explicit AES or RC4 exception:"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}"
+                "# 0x24 = RC4 (0x4) + AES256 session keys (0x20)"
+                "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                "# Then set RC4DefaultDisablementPhase = 2 when no more audit events appear"
+            )
         }
     }
     
@@ -2642,6 +2896,19 @@ try {
                 Status          = $results.KdcRegistry.RC4DefaultDisablementPhase.Status
                 EncryptionTypes = "N/A"
                 EncryptionValue = $results.KdcRegistry.RC4DefaultDisablementPhase.Value
+            }
+        }
+        
+        # Add KDCSVC event data (CVE-2026-20833)
+        if ($results.KdcSvcEvents -and $results.KdcSvcEvents.TotalEvents -gt 0) {
+            foreach ($kvp in $results.KdcSvcEvents.EventCounts.GetEnumerator()) {
+                $csvData += [PSCustomObject]@{
+                    Type            = "KDCSVC Event (CVE-2026-20833)"
+                    Name            = "Event ID $($kvp.Key)"
+                    Status          = $results.KdcSvcEvents.Status
+                    EncryptionTypes = "N/A"
+                    EncryptionValue = $kvp.Value
+                }
             }
         }
         
