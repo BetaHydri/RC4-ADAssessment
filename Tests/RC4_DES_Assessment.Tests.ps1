@@ -25,7 +25,7 @@ BeforeAll {
 
     # Also extract the version variable
     $versionBlock = @'
-$script:Version = "2.5.0"
+$script:Version = "2.5.1"
 $script:AssessmentTimestamp = Get-Date
 '@
 
@@ -1799,6 +1799,58 @@ Describe 'Get-KdcRegistryAssessment' {
             $result.RC4DefaultDisablementPhase.Status | Should -Be 'OK'
         }
     }
+
+    Context 'When AzureADKerberos object is present alongside real DCs' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                @(
+                    [PSCustomObject]@{
+                        Name        = 'AzureADKerberos'
+                        DNSHostName = 'AzureADKerberos.contoso.com'
+                    },
+                    [PSCustomObject]@{
+                        Name        = 'DC01'
+                        DNSHostName = 'dc01.contoso.com'
+                    }
+                )
+            }
+            Mock Invoke-Command {
+                @{
+                    DefaultDomainSupportedEncTypes = $null
+                    RC4DefaultDisablementPhase     = 1
+                }
+            }
+        }
+
+        It 'Excludes AzureADKerberos from registry queries' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.QueriedDCs | Should -Not -Contain 'AzureADKerberos.contoso.com'
+            $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
+        }
+
+        It 'Only queries real DCs' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.QueriedDCs | Should -HaveCount 1
+        }
+    }
+
+    Context 'When AzureADKerberos is the only object in DC OU' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'AzureADKerberos'
+                    DNSHostName = 'AzureADKerberos.contoso.com'
+                }
+            }
+        }
+
+        It 'Returns empty assessment with no queried DCs' {
+            $result = Get-KdcRegistryAssessment -ServerParams @{}
+            $result.QueriedDCs | Should -HaveCount 0
+            $result.DefaultDomainSupportedEncTypes.Configured | Should -BeFalse
+            $result.RC4DefaultDisablementPhase.Configured | Should -BeFalse
+        }
+    }
 }
 
 # ============================================================
@@ -1913,6 +1965,52 @@ Describe 'Get-KdcSvcEventAssessment' {
             $result = Get-KdcSvcEventAssessment -ServerParams @{}
             $result.FailedDCs | Should -HaveCount 1
             $result.FailedDCs[0].Name | Should -Be 'dc01.contoso.com'
+        }
+    }
+
+    Context 'When AzureADKerberos object is present alongside real DCs' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                @(
+                    [PSCustomObject]@{
+                        Name        = 'AzureADKerberos'
+                        DNSHostName = 'AzureADKerberos.contoso.com'
+                    },
+                    [PSCustomObject]@{
+                        Name        = 'DC01'
+                        DNSHostName = 'dc01.contoso.com'
+                    }
+                )
+            }
+            Mock Invoke-Command { @() }
+        }
+
+        It 'Excludes AzureADKerberos from KDCSVC event queries' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.QueriedDCs | Should -Not -Contain 'AzureADKerberos.contoso.com'
+            $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
+        }
+
+        It 'Only queries real DCs' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.QueriedDCs | Should -HaveCount 1
+        }
+    }
+
+    Context 'When AzureADKerberos is the only object in DC OU' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name        = 'AzureADKerberos'
+                    DNSHostName = 'AzureADKerberos.contoso.com'
+                }
+            }
+        }
+
+        It 'Returns empty assessment with no queried DCs' {
+            $result = Get-KdcSvcEventAssessment -ServerParams @{}
+            $result.TotalEvents | Should -Be 0
+            $result.QueriedDCs | Should -HaveCount 0
         }
     }
 }

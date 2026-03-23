@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.5.0-orange)
+![Version](https://img.shields.io/badge/version-2.5.1-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -74,9 +74,9 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 | Script | Purpose |
 |--------|---------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.5.0) |
+| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.5.1) |
 | `Assess-ADForest.ps1` | Forest-wide wrapper — runs assessment per domain |
-| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.5.0) |
+| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.5.1) |
 | `Test-EventLogFailureHandling.ps1` | Test script for event log error handling |
 | `Tests/` | 173 Pester unit tests |
 
@@ -307,7 +307,7 @@ This object is **not a real Domain Controller**. It is a read-only proxy object 
 | **Should you change it?** | **No.** Do not manually set encryption types on this object. Entra ID rotates its keys automatically via `Set-AzureADKerberosServer` / `Set-EntraKerberosServer` |
 | **Impact on assessment** | If counted as a DC, it inflates the "Not Configured" count and can trigger false positive warnings |
 
-Starting in **v2.5.0**, the assessment automatically detects this object, excludes it from all DC metrics (Total DCs, AES Configured, etc.), and displays it separately in the summary as an informational note.
+Starting in **v2.5.0** (refined in **v2.5.1**), the assessment automatically detects this object, excludes it from all DC metrics (Total DCs, AES Configured, etc.), and displays it separately in the summary as an informational note.
 
 If you need to manage the AzureADKerberos object (e.g., key rotation), use:
 
@@ -445,7 +445,10 @@ auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 
 ## Version History
 
-### v2.5.0 (March 2026) — Current
+### v2.5.1 (March 2026) — Current
+- **AzureADKerberos exclusion refinement**: Explicit filtering of AzureADKerberos from DC list in KDC registry and KDCSVC event log queries
+
+### v2.5.0 (March 2026)
 - **AzureADKerberos detection**: `AzureADKerberos` (Entra Kerberos proxy) object in DC OU is now automatically detected and excluded from all DC encryption counts
 - Separate informational display for AzureADKerberos in summary tables and CSV/JSON exports
 - Compare-Assessments.ps1: shows AzureADKerberos presence note in DC comparison

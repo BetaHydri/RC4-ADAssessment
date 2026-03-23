@@ -70,7 +70,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.5.0
+  Version: 2.5.1
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -136,7 +136,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.5.0"
+$script:Version = "2.5.1"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -597,7 +597,10 @@ function Get-KdcRegistryAssessment {
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
         $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
         
-        if (-not $dcs) {
+        # Exclude AzureADKerberos (Entra Kerberos proxy) - not a real DC
+        $dcs = @($dcs) | Where-Object { $_.Name -ne 'AzureADKerberos' }
+        
+        if (-not $dcs -or $dcs.Count -eq 0) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for registry assessment"
             return $assessment
         }
@@ -768,7 +771,10 @@ function Get-KdcSvcEventAssessment {
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
         $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
         
-        if (-not $dcs) {
+        # Exclude AzureADKerberos (Entra Kerberos proxy) - not a real DC
+        $dcs = @($dcs) | Where-Object { $_.Name -ne 'AzureADKerberos' }
+        
+        if (-not $dcs -or $dcs.Count -eq 0) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for KDCSVC event check"
             return $assessment
         }
@@ -934,9 +940,10 @@ function Get-AuditPolicyCheck {
             $domainInfo = Get-ADDomain
         }
         
-        # Query first available DC
+        # Query first available real DC (exclude AzureADKerberos proxy)
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dc = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams | Select-Object -First 1
+        $dc = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams |
+            Where-Object { $_.Name -ne 'AzureADKerberos' } | Select-Object -First 1
         
         if (-not $dc) {
             Write-Finding -Status "WARNING" -Message "No Domain Controller found for audit policy check"
@@ -1046,7 +1053,10 @@ function Get-EventLogEncryptionAnalysis {
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
         $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
         
-        if (-not $dcs) {
+        # Exclude AzureADKerberos (Entra Kerberos proxy) - not a real DC
+        $dcs = @($dcs) | Where-Object { $_.Name -ne 'AzureADKerberos' }
+        
+        if (-not $dcs -or $dcs.Count -eq 0) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for event log analysis"
             return $assessment
         }
