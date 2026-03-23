@@ -25,7 +25,7 @@ BeforeAll {
 
     # Also extract the version variable
     $versionBlock = @'
-$script:Version = "2.4.0"
+$script:Version = "2.5.0"
 $script:AssessmentTimestamp = Get-Date
 '@
 
@@ -395,6 +395,114 @@ Describe 'Get-DomainControllerEncryption' {
         It 'Returns assessment with zero counts (error handled)' {
             $result = Get-DomainControllerEncryption -ServerParams @{ Server = 'bad-dc.contoso.com' }
             $result.TotalDCs | Should -Be 0
+        }
+    }
+
+    Context 'When AzureADKerberos object is present alongside real DCs' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                @(
+                    [PSCustomObject]@{
+                        Name                            = 'AzureADKerberos'
+                        'msDS-SupportedEncryptionTypes' = $null
+                        OperatingSystem                 = $null
+                    },
+                    [PSCustomObject]@{
+                        Name                            = 'DC01'
+                        'msDS-SupportedEncryptionTypes' = 24  # AES128 + AES256
+                        OperatingSystem                 = 'Windows Server 2022'
+                    },
+                    [PSCustomObject]@{
+                        Name                            = 'DC02'
+                        'msDS-SupportedEncryptionTypes' = 24
+                        OperatingSystem                 = 'Windows Server 2022'
+                    }
+                )
+            }
+            Mock Get-GPInheritance { $null }
+        }
+
+        It 'Excludes AzureADKerberos from TotalDCs count' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.TotalDCs | Should -Be 2
+        }
+
+        It 'Excludes AzureADKerberos from Details array' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.Details | Should -HaveCount 2
+            $result.Details.Name | Should -Not -Contain 'AzureADKerberos'
+        }
+
+        It 'Populates AzureADKerberos property with proxy info' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.AzureADKerberos | Should -Not -BeNullOrEmpty
+            $result.AzureADKerberos.Name | Should -Be 'AzureADKerberos'
+            $result.AzureADKerberos.IsAzureADKerberos | Should -BeTrue
+            $result.AzureADKerberos.Status | Should -Match 'Entra Kerberos Proxy'
+        }
+
+        It 'Still counts real DCs as AES configured' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.AESConfigured | Should -Be 2
+        }
+
+        It 'Does not count AzureADKerberos as NotConfigured' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.NotConfigured | Should -Be 0
+        }
+    }
+
+    Context 'When AzureADKerberos is the only object in DC OU' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                [PSCustomObject]@{
+                    Name                            = 'AzureADKerberos'
+                    'msDS-SupportedEncryptionTypes' = $null
+                    OperatingSystem                 = $null
+                }
+            }
+            Mock Get-GPInheritance { $null }
+        }
+
+        It 'Reports zero DCs' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.TotalDCs | Should -Be 0
+        }
+
+        It 'Still populates AzureADKerberos property' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.AzureADKerberos | Should -Not -BeNullOrEmpty
+            $result.AzureADKerberos.Name | Should -Be 'AzureADKerberos'
+        }
+
+        It 'Has empty Details array' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.Details | Should -HaveCount 0
+        }
+    }
+
+    Context 'When no AzureADKerberos object exists' {
+        BeforeEach {
+            Mock Get-ADComputer {
+                @(
+                    [PSCustomObject]@{
+                        Name                            = 'DC01'
+                        'msDS-SupportedEncryptionTypes' = 24
+                        OperatingSystem                 = 'Windows Server 2022'
+                    }
+                )
+            }
+            Mock Get-GPInheritance { $null }
+        }
+
+        It 'AzureADKerberos property remains null' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.AzureADKerberos | Should -BeNullOrEmpty
+        }
+
+        It 'Counts normal DCs correctly' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.TotalDCs | Should -Be 1
         }
     }
 }

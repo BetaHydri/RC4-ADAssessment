@@ -14,7 +14,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.4.0
+  Version: 2.5.0
 
 .PARAMETER BaselineFile
   Path to the baseline (older) assessment JSON file.
@@ -134,6 +134,11 @@ try {
     Write-Host "  AES Configured:  $($baseline.DomainControllers.AESConfigured) $($dcChanges.AESConfigured.Symbol) $($current.DomainControllers.AESConfigured)" -ForegroundColor $(if ($dcChanges.AESConfigured.Status -eq "Improved") { "Green" } else { $dcChanges.AESConfigured.Color })
     Write-Host "  RC4 Configured:  $($baseline.DomainControllers.RC4Configured) $($dcChanges.RC4Configured.Symbol) $($current.DomainControllers.RC4Configured)" -ForegroundColor $(if ($dcChanges.RC4Configured.Status -eq "Improved") { "Green" } else { $dcChanges.RC4Configured.Color })
     Write-Host "  DES Configured:  $($baseline.DomainControllers.DESConfigured) $($dcChanges.DESConfigured.Symbol) $($current.DomainControllers.DESConfigured)" -ForegroundColor $(if ($dcChanges.DESConfigured.Status -eq "Improved") { "Green" } else { $dcChanges.DESConfigured.Color })
+    
+    # AzureADKerberos detection note
+    if ($current.DomainControllers.AzureADKerberos) {
+        Write-Host "  Entra Kerberos:  AzureADKerberos proxy detected (excluded from DC counts)" -ForegroundColor DarkCyan
+    }
     
     # Trust Comparison
     Write-ComparisonSection "Trust Changes"

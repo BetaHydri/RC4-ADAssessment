@@ -17,6 +17,7 @@
   - Service account (SPN) and gMSA/sMSA RC4/DES encryption detection
   - Accounts with USE_DES_KEY_ONLY UserAccountControl flag detection
   - Accounts missing AES keys (password set before DFL raised to 2008)
+  - AzureADKerberos (Entra Kerberos) object detection and exclusion from DC assessment
   - Realistic computer object assessment: Only flags actual RC4 fallback scenarios
   - Actionable guidance for manual validation and monitoring setup
   - CVE-2026-20833 RC4 KDC service ticket issuance assessment
@@ -69,7 +70,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.4.0
+  Version: 2.5.0
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -135,7 +136,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.4.0"
+$script:Version = "2.5.0"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -220,14 +221,15 @@ function Get-DomainControllerEncryption {
     Write-Section "Domain Controller Encryption Configuration"
     
     $assessment = @{
-        TotalDCs           = 0
-        AESConfigured      = 0
-        RC4Configured      = 0
-        DESConfigured      = 0
-        NotConfigured      = 0
-        Details            = @()
-        GPOConfigured      = $false
-        GPOEncryptionTypes = $null
+        TotalDCs              = 0
+        AESConfigured         = 0
+        RC4Configured         = 0
+        DESConfigured         = 0
+        NotConfigured         = 0
+        AzureADKerberos       = $null  # Entra Kerberos proxy object (not a real DC)
+        Details               = @()
+        GPOConfigured         = $false
+        GPOEncryptionTypes    = $null
     }
     
     try {
@@ -250,12 +252,30 @@ function Get-DomainControllerEncryption {
         
         # Get all domain controllers
         $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
-        $assessment.TotalDCs = if ($dcs) { if ($dcs -is [array]) { $dcs.Count } else { 1 } } else { 0 }
+        
+        # Separate AzureADKerberos (Entra Kerberos) proxy object from real DCs
+        $azureADKerberos = $dcs | Where-Object { $_.Name -eq 'AzureADKerberos' }
+        $realDCs = $dcs | Where-Object { $_.Name -ne 'AzureADKerberos' }
+        
+        $assessment.TotalDCs = if ($realDCs) { if ($realDCs -is [array]) { $realDCs.Count } else { 1 } } else { 0 }
         
         Write-Finding -Status "INFO" -Message "Found $($assessment.TotalDCs) Domain Controller(s)"
         
-        # Analyze each DC
-        foreach ($dc in $dcs) {
+        # Handle AzureADKerberos object separately
+        if ($azureADKerberos) {
+            $encValue = $azureADKerberos.'msDS-SupportedEncryptionTypes'
+            $assessment.AzureADKerberos = @{
+                Name            = 'AzureADKerberos'
+                EncryptionValue = $encValue
+                EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                Status          = 'Entra Kerberos Proxy (Managed by Microsoft Entra ID)'
+                IsAzureADKerberos = $true
+            }
+            Write-Finding -Status "INFO" -Message "AzureADKerberos object detected (Entra Kerberos proxy - not a real DC, excluded from DC counts)"
+        }
+        
+        # Analyze each real DC
+        foreach ($dc in $realDCs) {
             $encValue = $dc.'msDS-SupportedEncryptionTypes'
             $encTypes = Get-EncryptionTypeString -Value $encValue
             
@@ -341,6 +361,9 @@ function Get-DomainControllerEncryption {
         Write-Host "  $([char]0x2022) RC4 Configured: $($assessment.RC4Configured)" -ForegroundColor $(if ($assessment.RC4Configured -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) DES Configured: $($assessment.DESConfigured)" -ForegroundColor $(if ($assessment.DESConfigured -gt 0) { "Red" } else { "Green" })
         Write-Host "  $([char]0x2022) Not Configured (GPO Inherited): $($assessment.NotConfigured)" -ForegroundColor Cyan
+        if ($assessment.AzureADKerberos) {
+            Write-Host "  $([char]0x2022) AzureADKerberos (Entra proxy): Excluded from DC counts (managed by Entra ID)" -ForegroundColor DarkCyan
+        }
         
         # Display individual DC details
         if ($assessment.Details.Count -gt 0) {
@@ -366,10 +389,10 @@ function Get-DomainControllerEncryption {
                 Write-Finding -Status "INFO" -Message "$($assessment.NotConfigured) DC(s) inherit AES settings from GPO (this is normal)"
             }
         }
-        elseif ($assessment.AESConfigured -eq $assessment.TotalDCs) {
+        elseif ($assessment.AESConfigured -eq $assessment.TotalDCs -and $assessment.TotalDCs -gt 0) {
             Write-Finding -Status "OK" -Message "All Domain Controllers have AES encryption configured"
         }
-        else {
+        elseif ($assessment.TotalDCs -gt 0) {
             Write-Finding -Status "WARNING" -Message "Not all Domain Controllers have AES encryption configured"
         }
         
@@ -1767,6 +1790,19 @@ function Show-AssessmentSummary {
         if ($Results.DomainControllers.AESConfigured -gt 0) {
             Write-Host "    AES Configured: $($Results.DomainControllers.AESConfigured)" -ForegroundColor Green
         }
+        
+        # Display AzureADKerberos separately if present
+        if ($Results.DomainControllers.AzureADKerberos) {
+            $aadK = $Results.DomainControllers.AzureADKerberos
+            Write-Host "`n  ENTRA KERBEROS PROXY (excluded from DC counts)" -ForegroundColor DarkCyan
+            Write-Host ("  " + ([string]([char]0x2500) * 60)) -ForegroundColor DarkGray
+            Write-Host "    Name:             $($aadK.Name)" -ForegroundColor DarkCyan
+            Write-Host "    Encryption Types: $($aadK.EncryptionTypes)" -ForegroundColor DarkCyan
+            Write-Host "    Status:           $($aadK.Status)" -ForegroundColor DarkCyan
+            Write-Host "    $([char]0x24D8)  This is a Microsoft Entra ID (Azure AD) Kerberos proxy object." -ForegroundColor Gray
+            Write-Host "    It is NOT a real Domain Controller and is managed entirely by Entra ID." -ForegroundColor Gray
+            Write-Host "    Do not manually modify its encryption settings." -ForegroundColor Gray
+        }
     }
     else {
         Write-Host "  No Domain Controller data available" -ForegroundColor Yellow
@@ -2797,6 +2833,18 @@ try {
                 Status          = $dc.Status
                 EncryptionTypes = $dc.EncryptionTypes
                 EncryptionValue = $dc.EncryptionValue
+            }
+        }
+        
+        # Add AzureADKerberos if present
+        if ($results.DomainControllers.AzureADKerberos) {
+            $aadK = $results.DomainControllers.AzureADKerberos
+            $csvData += [PSCustomObject]@{
+                Type            = "Entra Kerberos Proxy"
+                Name            = $aadK.Name
+                Status          = $aadK.Status
+                EncryptionTypes = $aadK.EncryptionTypes
+                EncryptionValue = $aadK.EncryptionValue
             }
         }
         

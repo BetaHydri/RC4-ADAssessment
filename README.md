@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.4.0-orange)
+![Version](https://img.shields.io/badge/version-2.5.0-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -33,6 +33,7 @@ This toolkit helps you:
 | **Service Account Scan** | SPN accounts, gMSA/sMSA with RC4/DES-only encryption |
 | **USE_DES_KEY_ONLY Detection** | Accounts with the UserAccountControl flag forcing DES |
 | **Missing AES Keys** | Accounts with passwords predating DFL 2008 raise (no AES keys generated) |
+| **AzureADKerberos Detection** | Entra Kerberos proxy object excluded from DC counts (Cloud Kerberos Trust) |
 | **Stale Password Detection** | Service accounts with passwords >365 days old and RC4 enabled |
 | **Inline Fix Commands** | Every finding includes copy-paste PowerShell remediation commands |
 | **Forest-Wide Scanning** | Assess all domains in a forest with parallel processing (PS 7+) |
@@ -73,9 +74,9 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 | Script | Purpose |
 |--------|---------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.4.0) |
+| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.5.0) |
 | `Assess-ADForest.ps1` | Forest-wide wrapper — runs assessment per domain |
-| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.4.0) |
+| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.5.0) |
 | `Test-EventLogFailureHandling.ps1` | Test script for event log error handling |
 | `Tests/` | 173 Pester unit tests |
 
@@ -271,6 +272,36 @@ This toolkit implements the full [CVE-2026-20833 deployment guidance](https://su
 | **Events 206-208** (Enforcement blocking) | Detected with note about accounts needing `0x24` exception or AES migration |
 | **Installing updates alone doesn't fix CVE** | Recommendations explicitly guide to enable Enforcement (value 2) |
 
+## AzureADKerberos (Entra Kerberos Proxy)
+
+If your environment uses **Microsoft Entra ID** (formerly Azure AD) features such as **Windows Hello for Business Cloud Kerberos Trust** or **FIDO2 security key sign-in**, you will have a computer object named `AzureADKerberos` in your Domain Controllers OU.
+
+This object is **not a real Domain Controller**. It is a read-only proxy object created and fully managed by the Entra ID cloud service to issue Kerberos TGTs for cloud authentication scenarios.
+
+### Why it is excluded from DC counts
+
+| Aspect | Detail |
+|--------|--------|
+| **What it does** | Enables Entra ID to issue partial TGTs so users can access on-premises resources via Cloud Kerberos Trust |
+| **Encryption settings** | Managed by Entra ID — `msDS-SupportedEncryptionTypes` is typically not set (shows "Not Set (Default)") |
+| **Should you change it?** | **No.** Do not manually set encryption types on this object. Entra ID rotates its keys automatically via `Set-AzureADKerberosServer` / `Set-EntraKerberosServer` |
+| **Impact on assessment** | If counted as a DC, it inflates the "Not Configured" count and can trigger false positive warnings |
+
+Starting in **v2.5.0**, the assessment automatically detects this object, excludes it from all DC metrics (Total DCs, AES Configured, etc.), and displays it separately in the summary as an informational note.
+
+If you need to manage the AzureADKerberos object (e.g., key rotation), use:
+
+```powershell
+# Check current status
+Get-AzureADKerberosServer -Domain contoso.com -DomainCredential (Get-Credential)
+
+# Rotate keys (recommended periodically)
+Set-AzureADKerberosServer -Domain contoso.com -DomainCredential (Get-Credential) `
+  -RotateServerKey
+```
+
+For more information, see [Microsoft: Cloud Kerberos Trust deployment](https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-deploy-cloud-kerberos-trust).
+
 ## Post-November 2022 Logic
 
 ### Computer Objects
@@ -349,7 +380,13 @@ auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 
 ## Version History
 
-### v2.4.0 (March 2026) — Current
+### v2.5.0 (March 2026) — Current
+- **AzureADKerberos detection**: `AzureADKerberos` (Entra Kerberos proxy) object in DC OU is now automatically detected and excluded from all DC encryption counts
+- Separate informational display for AzureADKerberos in summary tables and CSV/JSON exports
+- Compare-Assessments.ps1: shows AzureADKerberos presence note in DC comparison
+- New Pester tests for AzureADKerberos filtering (with real DCs, alone, absent)
+
+### v2.4.0 (March 2026)
 - **CVE-2026-20833** support: KDCSVC System event scanning (events 201-209)
 - `RC4DefaultDisablementPhase` value 2 (Enforcement mode) recognition
 - Phased recommendation workflow: value 1 (Audit) → monitor KDCSVC events → value 2 (Enforce)
