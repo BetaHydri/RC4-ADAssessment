@@ -266,11 +266,11 @@ Document all exceptions and plan vendor upgrades.
 > account is sufficient — the KDC will issue RC4 tickets for that specific account only, while
 > all other accounts remain AES-only.
 >
-> **Source:** Microsoft Directory Services team confirms this in
-> [What is going on with RC4 in Kerberos?](https://techcommunity.microsoft.com/blog/askds/what-is-going-on-with-rc4-in-kerberos/4222373) (AskDS):
-> _"RC4 is not removed from Windows"_ — when `msDS-SupportedEncryptionTypes` includes RC4,
-> no additional KDC configuration is required. `DefaultDomainSupportedEncTypes` only applies
-> when the account attribute is not set.
+> **Source:** Microsoft Core Infrastructure and Security team confirms this in
+> [Decrypting the Selection of Supported Kerberos Encryption Types](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797):
+> _"a null value for msDS-SupportedEncryptionTypes will cause the DC to issue service tickets and session keys with RC4"_ —
+> when `msDS-SupportedEncryptionTypes` includes RC4, the KDC honours it directly.
+> `DefaultDomainSupportedEncTypes` only applies when the account attribute is not set.
 
 ### CVE-2026-20833 Toolkit Coverage
 
@@ -440,7 +440,7 @@ auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 - [What happened to Kerberos after November 2022 updates](https://techcommunity.microsoft.com/blog/askds/what-happened-to-kerberos-authentication-after-installing-the-november-2022oob-u/3696351)
 - [Decrypting Kerberos Encryption Types Selection](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797)
 - [Detect and Remediate RC4 Usage in Kerberos](https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4)
-- [What is going on with RC4 in Kerberos? — AskDS](https://techcommunity.microsoft.com/blog/askds/what-is-going-on-with-rc4-in-kerberos/4222373)
+- [RC4 deprecation in Windows Server — Deprecated Features](https://learn.microsoft.com/en-us/windows-server/get-started/removed-deprecated-features-windows-server)
 - [Microsoft Kerberos-Crypto Scripts](https://github.com/microsoft/Kerberos-Crypto) (Get-KerbEncryptionUsage.ps1, List-AccountKeys.ps1)
 
 ## Version History
