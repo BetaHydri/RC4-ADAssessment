@@ -1312,28 +1312,28 @@ function Get-AccountEncryptionAssessment {
     Write-Section "KRBTGT & Service Account Encryption Assessment"
     
     $assessment = @{
-        KRBTGT                  = @{
+        KRBTGT                 = @{
             PasswordAgeDays = 0
             PasswordLastSet = $null
             EncryptionValue = $null
             EncryptionTypes = ""
             Status          = "Unknown"
         }
-        DESFlagAccounts         = @()
-        RC4OnlyServiceAccounts  = @()
-        RC4OnlyMSAs             = @()
-        RC4ExceptionAccounts    = @()
-        DESEnabledAccounts      = @()
-        StaleServiceAccounts    = @()
-        MissingAESKeyAccounts   = @()
-        TotalDESFlag            = 0
-        TotalRC4OnlySvc         = 0
-        TotalRC4OnlyMSA         = 0
-        TotalRC4Exception       = 0
-        TotalDESEnabled         = 0
-        TotalStaleSvc           = 0
-        TotalMissingAES         = 0
-        Details                 = @()
+        DESFlagAccounts        = @()
+        RC4OnlyServiceAccounts = @()
+        RC4OnlyMSAs            = @()
+        RC4ExceptionAccounts   = @()
+        DESEnabledAccounts     = @()
+        StaleServiceAccounts   = @()
+        MissingAESKeyAccounts  = @()
+        TotalDESFlag           = 0
+        TotalRC4OnlySvc        = 0
+        TotalRC4OnlyMSA        = 0
+        TotalRC4Exception      = 0
+        TotalDESEnabled        = 0
+        TotalStaleSvc          = 0
+        TotalMissingAES        = 0
+        Details                = @()
     }
     
     try {
