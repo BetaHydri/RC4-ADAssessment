@@ -883,7 +883,7 @@ function Get-KdcSvcEventAssessment {
             $blockingEvents = ($assessment.EventCounts.Keys | Where-Object { [int]$_ -ge 206 -and [int]$_ -le 208 })
             if ($blockingEvents) {
                 Write-Host "`n  $([char]0x26A0) Enforcement mode is actively blocking RC4 requests" -ForegroundColor Red
-                Write-Host "  Affected accounts need explicit RC4 exception (0x24) or migration to AES" -ForegroundColor Yellow
+                Write-Host "  Affected accounts need explicit RC4 exception (0x1C) or migration to AES" -ForegroundColor Yellow
             }
         }
         else {
@@ -2272,8 +2272,8 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    b) DefaultDomainSupportedEncTypes (DWORD):
       $([char]0x2022) Controls default encryption types for the domain
       $([char]0x2022) After April 2026 updates, defaults to 0x18 (AES-only)
-      $([char]0x2022) If explicit RC4 exceptions needed, set to 0x24
-        (RC4 + AES256 session keys) - but this leaves all accounts
+      $([char]0x2022) If explicit RC4 exceptions needed, set to 0x1C
+        (RC4 + AES128 + AES256) - but this leaves all accounts
         vulnerable to CVE-2026-20833
       PS> # Check current value:
       PS> Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
@@ -2306,25 +2306,25 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
       $([char]0x2022) Test application access
    
    b) Step 2: If AES Fails, Add Explicit RC4 Exception
-      Per CVE-2026-20833 guidance, use 0x24 (RC4 + AES256 session keys):
+      Per CVE-2026-20833 guidance, use 0x1C (RC4 + AES128 + AES256):
       
       For USER/SERVICE accounts:
-      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
-      # 0x24 = RC4 (0x4) + AES256 session keys (0x20)
-      # This allows RC4 ticket encryption but enforces AES session keys
+      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      # 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)
+      # This allows RC4 ticket encryption while also supporting AES
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
       $([char]0x2022) Test application access
    
       For COMPUTER accounts (rare but possible):
-      PS> Set-ADComputer "LEGACYHOST" -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
+      PS> Set-ADComputer "LEGACYHOST" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
       CMD> klist purge
       $([char]0x2022) Test application access
    
    c) Last Resort: Domain-Wide RC4 Fallback (INSECURE)
       If per-account exceptions are not feasible:
       PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
-            -Name 'DefaultDomainSupportedEncTypes' -Value 0x24 -Type DWord
+            -Name 'DefaultDomainSupportedEncTypes' -Value 0x1C -Type DWord
       $([char]0x26A0) This leaves ALL accounts vulnerable to CVE-2026-20833!
       $([char]0x2022) Only use as temporary measure while migrating to AES
    
@@ -2583,8 +2583,8 @@ try {
                 "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 "# If AES fails, add explicit RC4 exception (CVE-2026-20833 safe):"
-                "# Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}"
-                "# 0x24 = RC4 (0x4) + AES256 session keys (0x20) - allows RC4 tickets with AES sessions"
+                "# Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
+                "# 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10) - allows RC4 tickets with AES support"
             )
         }
     }
@@ -2698,7 +2698,7 @@ try {
                     "# On each DC, update the registry to include AES:"
                     "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'DefaultDomainSupportedEncTypes' -Value 24 -Type DWord"
                     "# 24 = 0x18 = AES128 + AES256 (AES-only, recommended)"
-                    "# If explicit RC4 exceptions needed: use value 36 (0x24 = RC4 + AES256 session keys)"
+                    "# If explicit RC4 exceptions needed: use value 28 (0x1C = RC4 + AES128 + AES256)"
                 )
             }
         }
@@ -2739,8 +2739,8 @@ try {
             Fix     = @(
                 "# Review KDCSVC events 201-209 in System event log on each DC"
                 "# For accounts triggering events 201-203 (audit), add explicit AES or RC4 exception:"
-                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}"
-                "# 0x24 = RC4 (0x4) + AES256 session keys (0x20)"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
+                "# 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 "# Then set RC4DefaultDisablementPhase = 2 when no more audit events appear"
             )

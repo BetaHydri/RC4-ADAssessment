@@ -230,24 +230,44 @@ Follow inline fix commands            .\RC4_DES_Assessment.ps1 `
 - Accounts with **explicit RC4** (`0x4` bit) in `msDS-SupportedEncryptionTypes` → still allowed (exception)
 - Accounts relying on default/legacy RC4 fallback → **blocked**
 
+### `msDS-SupportedEncryptionTypes` Reference
+
+| Decimal | Hex | Encryption Types | Use Case |
+|---------|------|------------------|----------|
+| 0 | 0x0 | Not set — defaults to RC4 (pre-Nov 2022) or AES (post-Nov 2022) | Default behaviour |
+| 1 | 0x1 | DES-CBC-CRC | **Insecure — do not use** |
+| 2 | 0x2 | DES-CBC-MD5 | **Insecure — do not use** |
+| 3 | 0x3 | DES-CBC-CRC, DES-CBC-MD5 | **Insecure — do not use** |
+| 4 | 0x4 | RC4-HMAC | RC4 only (no AES — avoid) |
+| 8 | 0x8 | AES128-CTS-HMAC-SHA1-96 | AES128 only |
+| 16 | 0x10 | AES256-CTS-HMAC-SHA1-96 | AES256 only |
+| 24 | 0x18 | AES128 + AES256 | **Recommended (AES-only)** |
+| 28 | 0x1C | RC4 + AES128 + AES256 | **RC4 exception with AES** |
+| 31 | 0x1F | DES-CBC-CRC, DES-CBC-MD5, RC4, AES128, AES256 | All types (insecure — includes DES) |
+
+> **Tip:** The value is a bitmask — add the decimal values for the types you need.
+> For per-account RC4 exceptions, use **28 (`0x1C`)** = RC4 (4) + AES128 (8) + AES256 (16).
+>
+> Source: [Decrypting the Selection of Supported Kerberos Encryption Types](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797) (Microsoft Core Infrastructure and Security Blog)
+
 ### Explicit RC4 Exception (Last Resort)
 
 If a service absolutely cannot use AES after April/July 2026 (per [CVE-2026-20833 guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)):
 
 ```powershell
 # Per-account exception (recommended):
-Set-ADUser 'svc_LegacyApp' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
-# 0x24 = RC4 (0x4) + AES256 session keys (0x20)
+Set-ADUser 'svc_LegacyApp' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+# 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)
 Set-ADAccountPassword 'svc_LegacyApp' -Reset; klist purge
 
 # Computer account (rare):
-Set-ADComputer 'LEGACYHOST' -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
+Set-ADComputer 'LEGACYHOST' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
 klist purge
 
 # Domain-wide fallback (INSECURE - leaves all accounts vulnerable to CVE-2026-20833):
 # Only as last resort if per-account exceptions are not feasible:
 # Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
-#   -Name 'DefaultDomainSupportedEncTypes' -Value 0x24 -Type DWord
+#   -Name 'DefaultDomainSupportedEncTypes' -Value 0x1C -Type DWord
 ```
 
 Document all exceptions and plan vendor upgrades.
@@ -258,11 +278,11 @@ Document all exceptions and plan vendor upgrades.
 > The enforcement is a _policy_ decision, not a code removal. When the KDC processes a ticket request,
 > it checks the target account's `msDS-SupportedEncryptionTypes`:
 >
-> - **Explicit RC4 flag (e.g. `0x24`)** → KDC honors it and issues RC4 tickets for that account
+> - **Explicit RC4 flag (e.g. `0x1C`)** → KDC honors it and issues RC4 tickets for that account
 > - **No value set (0 or empty)** → KDC uses `DefaultDomainSupportedEncTypes` (AES-only after April 2026) → RC4 blocked
 >
 > You do **not** need to set `DefaultDomainSupportedEncTypes` to include RC4 on the DCs for
-> per-account exceptions to work. Setting `msDS-SupportedEncryptionTypes = 0x24` on the service
+> per-account exceptions to work. Setting `msDS-SupportedEncryptionTypes = 0x1C` on the service
 > account is sufficient — the KDC will issue RC4 tickets for that specific account only, while
 > all other accounts remain AES-only.
 >
@@ -286,10 +306,10 @@ This toolkit implements the full [CVE-2026-20833 deployment guidance](https://su
 | **January 2026 Initial Deployment** | Timeline in guidance + recommendations |
 | **April 2026 Enforcement Phase** | Timeline + `DefaultDomainSupportedEncTypes` defaults to AES-only (0x18) |
 | **July 2026 Full Enforcement** | Timeline + `RC4DefaultDisablementPhase` removed |
-| **Explicit RC4 exception (`0x24`)** | All fix commands use `0x24` per Microsoft guidance |
-| **Domain-wide fallback (`0x24` on DCs)** | Documented as last resort with CVE-2026-20833 vulnerability warning |
+| **Explicit RC4 exception (`0x1C`)** | All fix commands use `0x1C` (RC4 + AES128 + AES256) |
+| **Domain-wide fallback (`0x1C` on DCs)** | Documented as last resort with CVE-2026-20833 vulnerability warning |
 | **Event 205** (insecure `DefaultDomainSupportedEncTypes`) | Registry check detects RC4 in `DefaultDomainSupportedEncTypes` |
-| **Events 206-208** (Enforcement blocking) | Detected with note about accounts needing `0x24` exception or AES migration |
+| **Events 206-208** (Enforcement blocking) | Detected with note about accounts needing `0x1C` exception or AES migration |
 | **Installing updates alone doesn't fix CVE** | Recommendations explicitly guide to enable Enforcement (value 2) |
 
 ## AzureADKerberos (Entra Kerberos Proxy)
@@ -347,7 +367,7 @@ An account is flagged only when **both** conditions are true:
 
 ### When an Account is NOT Flagged
 
-If `msDS-SupportedEncryptionTypes` has a non-zero value (e.g. `0x27`, `0x18`, `0x24`), the account is **not** flagged — regardless of password age. The reasoning: a non-zero value means the attribute was explicitly configured, which typically happens alongside a password reset that would generate AES keys.
+If `msDS-SupportedEncryptionTypes` has a non-zero value (e.g. `0x27`, `0x18`, `0x1C`), the account is **not** flagged — regardless of password age. The reasoning: a non-zero value means the attribute was explicitly configured, which typically happens alongside a password reset that would generate AES keys.
 
 ### Example: Old Password but Explicit Encryption Types
 

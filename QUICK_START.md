@@ -1,6 +1,6 @@
 # RC4_DES_Assessment.ps1 v2.4.0 - Quick Start Guide
 
-> **✨ New in v2.4.0:** CVE-2026-20833 support — KDCSVC System event scanning (events 201-209), `RC4DefaultDisablementPhase` phased workflow (value 1 = Audit, value 2 = Enforce), April 2026 Enforcement phase, explicit RC4 exception value `0x24` per Microsoft guidance. See also v2.3.0: KDC registry assessment, audit policy pre-check, missing AES keys.
+> **✨ New in v2.4.0:** CVE-2026-20833 support — KDCSVC System event scanning (events 201-209), `RC4DefaultDisablementPhase` phased workflow (value 1 = Audit, value 2 = Enforce), April 2026 Enforcement phase, explicit RC4 exception value `0x1C` (RC4 + AES128 + AES256). See also v2.3.0: KDC registry assessment, audit policy pre-check, missing AES keys.
 
 ## 🔐 Using with Active Directory
 
@@ -140,8 +140,8 @@ Event Log Analysis - Actual DES/RC4 Usage
             'msDS-SupportedEncryptionTypes'=24}
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES fails, add explicit RC4 exception (CVE-2026-20833 safe):
-      #   -Replace @{'msDS-SupportedEncryptionTypes'=0x24}
-      #   0x24 = RC4 + AES256 session keys
+      #   -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      #   0x1C = RC4 + AES128 + AES256
 ```
 
 ### Event Log Access Failures (NEW in v2.0.1)

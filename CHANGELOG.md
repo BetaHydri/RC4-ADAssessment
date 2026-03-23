@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
 - `RC4DefaultDisablementPhase` value 2 (Enforcement mode) recognition
 - Phased recommendation workflow: value 1 (Audit) → monitor KDCSVC events → value 2 (Enforce)
 - April 2026 Enforcement phase added to timeline
-- Explicit RC4 exception value changed from `0x1C` to `0x24` (RC4 + AES256 session keys) per Microsoft guidance
+- Explicit RC4 exception value `0x1C` (decimal 28 = RC4 + AES128 + AES256) for per-account exceptions
 - Domain-wide `DefaultDomainSupportedEncTypes` fallback warning (leaves accounts vulnerable to CVE-2026-20833)
 - Compare-Assessments.ps1: KDCSVC event comparison across assessments
 - CVE-2026-20833 KB5073381 reference documentation added
