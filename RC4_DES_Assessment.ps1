@@ -1610,63 +1610,62 @@ function Get-AccountEncryptionAssessment {
                         }
                         $assessment.RC4OnlyMSAs += $msaInfo
                     }
+                    
+                    # Check for DES bits enabled on MSA (has DES bits, even alongside AES)
+                    if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
+                        $desInfo = @{
+                            Name            = $msa.SamAccountName
+                            DN              = $msa.DistinguishedName
+                            Enabled         = $msa.Enabled
+                            PasswordLastSet = $msa.PasswordLastSet
+                            EncryptionValue = $encValue
+                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
+                            AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
+                        }
+                        if ($msa.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
+                            $assessment.DESEnabledAccounts += $desInfo
+                        }
+                    }
                 }
                 
-                # Check for DES bits enabled on MSA (has DES bits, even alongside AES)
-                if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
-                    $desInfo = @{
-                        Name            = $msa.SamAccountName
-                        DN              = $msa.DistinguishedName
-                        Enabled         = $msa.Enabled
-                        PasswordLastSet = $msa.PasswordLastSet
-                        EncryptionValue = $encValue
-                        EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                        AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
-                    }
-                    if ($msa.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
-                        $assessment.DESEnabledAccounts += $desInfo
+                $assessment.TotalRC4OnlyMSA = $assessment.RC4OnlyMSAs.Count
+                
+                if ($assessment.RC4OnlyMSAs.Count -gt 0) {
+                    Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
+                    foreach ($msa in $assessment.RC4OnlyMSAs) {
+                        Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)" -ForegroundColor Yellow
                     }
                 }
-            }
-                
-            $assessment.TotalRC4OnlyMSA = $assessment.RC4OnlyMSAs.Count
-                
-            if ($assessment.RC4OnlyMSAs.Count -gt 0) {
-                Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
-                foreach ($msa in $assessment.RC4OnlyMSAs) {
-                    Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)" -ForegroundColor Yellow
+                else {
+                    Write-Finding -Status "OK" -Message "All Managed Service Accounts use AES or default encryption"
                 }
             }
             else {
-                Write-Finding -Status "OK" -Message "All Managed Service Accounts use AES or default encryption"
+                Write-Finding -Status "INFO" -Message "No Managed Service Accounts found"
             }
         }
-        else {
-            Write-Finding -Status "INFO" -Message "No Managed Service Accounts found"
+        catch {
+            if ($_.Exception.Message -match "cmdlet.*not recognized|not loaded|is not recognized") {
+                Write-Finding -Status "INFO" -Message "Get-ADServiceAccount not available - skipping MSA check"
+            }
+            else {
+                Write-Finding -Status "WARNING" -Message "Could not query Managed Service Accounts: $($_.Exception.Message)"
+            }
         }
-    }
-    catch {
-        if ($_.Exception.Message -match "cmdlet.*not recognized|not loaded|is not recognized") {
-            Write-Finding -Status "INFO" -Message "Get-ADServiceAccount not available - skipping MSA check"
-        }
-        else {
-            Write-Finding -Status "WARNING" -Message "Could not query Managed Service Accounts: $($_.Exception.Message)"
-        }
-    }
         
-    # Update DES-enabled totals and display
-    $assessment.TotalDESEnabled = $assessment.DESEnabledAccounts.Count
-    if ($assessment.TotalDESEnabled -gt 0) {
-        Write-Finding -Status "WARNING" -Message "$($assessment.TotalDESEnabled) account(s) have DES encryption bits enabled (DES is removed in Server 2025)"
-        foreach ($des in $assessment.DESEnabledAccounts) {
-            Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)" -ForegroundColor Yellow
+        # Update DES-enabled totals and display
+        $assessment.TotalDESEnabled = $assessment.DESEnabledAccounts.Count
+        if ($assessment.TotalDESEnabled -gt 0) {
+            Write-Finding -Status "WARNING" -Message "$($assessment.TotalDESEnabled) account(s) have DES encryption bits enabled (DES is removed in Server 2025)"
+            foreach ($des in $assessment.DESEnabledAccounts) {
+                Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)" -ForegroundColor Yellow
+            }
         }
-    }
         
-    # ────────────────────────────────────────────────
-    # 5. Accounts missing AES keys (password set before DFL 2008)
-    # ────────────────────────────────────────────────
-    Write-Host "`n  Checking for accounts missing AES keys..." -ForegroundColor Cyan
+        # ────────────────────────────────────────────────
+        # 5. Accounts missing AES keys (password set before DFL 2008)
+        # ────────────────────────────────────────────────
+        Write-Host "`n  Checking for accounts missing AES keys..." -ForegroundColor Cyan
         
     try {
         # Determine when DFL was raised to 2008 (DFL >= Windows2008Domain means AES keys are generated on password set)
