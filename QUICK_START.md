@@ -410,7 +410,9 @@ Resolve-DnsName your-domain.com
 
 ### v2.7.1 (March 2026) — Current
 
-- Patch release
+- **Linux / Kerberos keytab impact guidance** added to KRBTGT rotation procedure and service account remediation
+- `ktpass` / `ktutil` keytab regeneration commands, verification steps, and reference links
+- Inline keytab warnings in KRBTGT and service account fix recommendations
 
 ### v2.7.0 (March 2026)
 - **DC discovery refactored to `Get-ADDomainController -Filter *`** - Uses DC Locator (Configuration partition) instead of OU queries — no false positives from non-DC objects

@@ -4,7 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## v2.7.1 (March 2026) — Current
 
-- Patch release
+- **Linux / Kerberos keytab impact guidance**: New subsection in KRBTGT rotation procedure warning that password rotation invalidates keytab files for Linux services (Apache, Nginx, SSSD, Samba, PostgreSQL, IBM WebSphere, etc.)
+  - `ktpass` (Windows) and `ktutil` (Linux) keytab regeneration commands with AES256 examples
+  - Verification step: `kinit -kt /etc/krb5.keytab <principal>`
+  - Troubleshooting: check `msDS-SupportedEncryptionTypes` includes `0x10` (AES256) and password was reset after setting encryption type
+  - Reference links: AD Hardening Series Part 4, keytab creation guide, `ktpass` command reference, Samuraj RC4-to-AES migration guide
+- **Service account remediation keytab warning**: Inline reminder in Section 6 service account update commands that Linux services using keytabs must regenerate them after encryption type changes and password resets
+- **KRBTGT rotation recommendation keytab notes**: Inline keytab impact comments added to KRBTGT rotation fix commands in overall assessment recommendations
 
 ## v2.7.0 (March 2026)
 - **DC discovery refactored to `Get-ADDomainController -Filter *`**: All functions now use the authoritative DC Locator (Configuration partition) instead of querying the `OU=Domain Controllers` container
