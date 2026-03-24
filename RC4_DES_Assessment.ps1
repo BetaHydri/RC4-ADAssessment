@@ -70,7 +70,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.7.1
+  Version: 2.7.2
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)

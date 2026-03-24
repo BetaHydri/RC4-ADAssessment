@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.7.1-orange)
+![Version](https://img.shields.io/badge/version-2.7.2-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -74,11 +74,11 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 | Script | Purpose |
 |--------|---------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.7.1) |
+| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.7.2) |
 | `Assess-ADForest.ps1` | Forest-wide wrapper — runs assessment per domain |
-| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.7.1) |
+| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.7.2) |
 | `Test-EventLogFailureHandling.ps1` | Test script for event log error handling |
-| `Tests/` | 173 Pester unit tests |
+| `Tests/` | 204 Pester unit tests |
 
 ## Parameters
 

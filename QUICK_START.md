@@ -408,7 +408,12 @@ Resolve-DnsName your-domain.com
 
 ## 🎯 What's New
 
-### v2.7.1 (March 2026) — Current
+### v2.7.2 (March 2026) — Current
+
+- **SYSVOL GPO detection fallback fix**: Fixed silent failure in SYSVOL-based GPO encryption detection when GroupPolicy module is broken
+- Fixed Pester test mock parameter type mismatch for `Get-ADComputer` and `Get-ADObject` stubs
+
+### v2.7.1 (March 2026)
 
 - **Linux / Kerberos keytab impact guidance** added to KRBTGT rotation procedure and service account remediation
 - `ktpass` / `ktutil` keytab regeneration commands, verification steps, and reference links
