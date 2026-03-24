@@ -14,7 +14,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.7.0
+  Version: 2.7.1
 
 .PARAMETER BaselineFile
   Path to the baseline (older) assessment JSON file.

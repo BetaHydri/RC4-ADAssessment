@@ -70,7 +70,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.7.0
+  Version: 2.7.1
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -136,7 +136,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.7.0"
+$script:Version = "2.7.1"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
