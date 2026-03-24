@@ -1,4 +1,4 @@
-# RC4_DES_Assessment.ps1 v2.7.1 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.7.2 - Quick Start Guide
 
 > **✨ New in v2.7.x:** DC discovery now uses `Get-ADDomainController -Filter *` (DC Locator) instead of OU queries — no false positives from non-DC objects. See also v2.6.0: AES-first hardening (`0x18` default), RC4 exception account detection. v2.5.x: AzureADKerberos auto-exclusion, DES-enabled account detection, dMSA support. v2.4.0: CVE-2026-20833 KDCSVC events (201-209), `RC4DefaultDisablementPhase` phased workflow.
 
