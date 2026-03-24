@@ -390,6 +390,57 @@ Describe 'Get-DomainControllerEncryption' {
         }
     }
 
+    Context 'When GPO is configured but Get-GPOReport fails (SYSVOL fallback)' {
+        BeforeEach {
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' }
+            }
+            Mock Get-ADComputer {
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
+                }
+            }
+            Mock Get-GPInheritance {
+                [PSCustomObject]@{
+                    GpoLinks = @(
+                        [PSCustomObject]@{
+                            Enabled     = $true
+                            GpoId       = [guid]'12345678-1234-1234-1234-123456789012'
+                            DisplayName = 'Kerberos Encryption Policy'
+                        }
+                    )
+                }
+            }
+            # Simulate Get-GPOReport failure (e.g., Microsoft.GroupPolicy.Interop assembly missing)
+            Mock Get-GPOReport { $null }
+            Mock Test-Path { $true } -ParameterFilter { $LiteralPath -like '*GptTmpl.inf' }
+            Mock Get-Content {
+                @"
+[Unicode]
+Unicode=yes
+[Version]
+signature="`$CHICAGO`$"
+Revision=1
+[Registry Values]
+MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters\SupportedEncryptionTypes=4,24
+"@
+            } -ParameterFilter { $LiteralPath -like '*GptTmpl.inf' }
+        }
+
+        It 'Sets GPOConfigured to true via SYSVOL fallback' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.GPOConfigured | Should -BeTrue
+        }
+
+        It 'Extracts GPO encryption types from SYSVOL security template' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.GPOEncryptionTypes | Should -Be 24
+        }
+    }
+
     Context 'With -Server parameter' {
         BeforeEach {
             Mock Get-ADDomainController { @() }

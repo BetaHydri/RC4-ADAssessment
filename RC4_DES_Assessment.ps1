@@ -286,7 +286,7 @@ function Get-DomainControllerEncryption {
                 Name            = $dc.Name
                 EncryptionValue = $encValue
                 EncryptionTypes = $encTypes
-                OS              = $dcComputer.OperatingSystem
+                OperatingSystem = $dcComputer.OperatingSystem
                 Status          = "Unknown"
             }
             
@@ -347,6 +347,27 @@ function Get-DomainControllerEncryption {
                             Write-Finding -Status "OK" -Message "GPO '$($gpoLink.DisplayName)' configures Kerberos encryption" `
                                 -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
                             break
+                        }
+                        elseif (-not $gpoReport) {
+                            # Fallback: Parse SYSVOL security template when Get-GPOReport is unavailable
+                            # (e.g., Microsoft.GroupPolicy.Interop assembly missing)
+                            try {
+                                $gpoGuid = "{$($gpoLink.GpoId.ToString().ToUpper())}"
+                                $sysvolPath = "\\$($domainInfo.DNSRoot)\SYSVOL\$($domainInfo.DNSRoot)\Policies\$gpoGuid\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
+                                if (Test-Path -LiteralPath $sysvolPath) {
+                                    $gptTmplContent = Get-Content -LiteralPath $sysvolPath -Raw -ErrorAction Stop
+                                    if ($gptTmplContent -match 'SupportedEncryptionTypes\s*=\s*4\s*,\s*(\d+)') {
+                                        $assessment.GPOConfigured = $true
+                                        $assessment.GPOEncryptionTypes = [int]$matches[1]
+                                        Write-Finding -Status "OK" -Message "GPO '$($gpoLink.DisplayName)' configures Kerberos encryption (detected via SYSVOL)" `
+                                            -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
+                                        break
+                                    }
+                                }
+                            }
+                            catch {
+                                Write-Verbose "SYSVOL fallback failed for GPO '$($gpoLink.DisplayName)': $($_.Exception.Message)"
+                            }
                         }
                     }
                 }
@@ -1835,8 +1856,9 @@ function Show-AssessmentSummary {
             
             # Check GPO status
             $gpoStatus = if ($Results.DomainControllers.GPOConfigured) { 
-                if ($Results.DomainControllers.GPOEncryptionTypes -match "DES") { "CRITICAL" }
-                elseif ($Results.DomainControllers.GPOEncryptionTypes -match "RC4") { "WARNING" }
+                $gpoEnc = $Results.DomainControllers.GPOEncryptionTypes
+                if ($gpoEnc -band 0x3) { "CRITICAL" }      # DES enabled
+                elseif ($gpoEnc -band 0x4) { "WARNING" }    # RC4 enabled
                 else { "OK" }
             }
             else { "Not Configured" }
