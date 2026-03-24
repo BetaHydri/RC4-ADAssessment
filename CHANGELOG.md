@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.6.0 (March 2026) — Current
+## v2.7.0 (March 2026) — Current
+- **DC discovery refactored to `Get-ADDomainController -Filter *`**: All functions now use the authoritative DC Locator (Configuration partition) instead of querying the `OU=Domain Controllers` container
+  - `Get-ADDomainController -Filter *` returns only registered DCs from NTDS Settings — no false positives from non-DC objects in the OU, no false negatives from DCs moved out of the default OU
+  - AzureADKerberos filtering removed from `Get-KdcRegistryAssessment`, `Get-KdcSvcEventAssessment`, `Get-AuditPolicyCheck`, `Get-EventLogEncryptionAnalysis` — no longer needed since `Get-ADDomainController` never returns the proxy object
+  - AzureADKerberos detection in `Get-DomainControllerEncryption` now uses a targeted `Get-ADComputer -Identity 'AzureADKerberos'` lookup instead of filtering a full OU query
+  - Per-DC encryption properties (`msDS-SupportedEncryptionTypes`, `OperatingSystem`) read via `Get-ADComputer` using `ComputerObjectDN` from the DC Locator result
+  - GPO inheritance check (`Get-GPInheritance`) still uses the DC OU path (required by the cmdlet)
+- **No breaking changes to JSON/CSV export format**: Compare-Assessments.ps1 works unchanged with v2.6.0 and v2.7.0 exports
+- Updated Pester tests to mock `Get-ADDomainController -Filter *` for DC discovery across all assessment functions
+
+## v2.6.0 (March 2026)
 - **AES-first hardening**: All default fix commands now use `0x18` (AES-only) instead of `0x1C`
   - `0x1C` (RC4 + AES) is now only recommended as a documented fallback when AES breaks an application
   - Aligns with July 2026 enforcement: only accounts with explicit RC4 in `msDS-SupportedEncryptionTypes` can still use RC4

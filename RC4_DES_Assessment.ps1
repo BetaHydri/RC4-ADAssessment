@@ -70,7 +70,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.6.0
+  Version: 2.7.0
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -136,7 +136,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.6.0"
+$script:Version = "2.7.0"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -250,40 +250,43 @@ function Get-DomainControllerEncryption {
         
         Write-Finding -Status "INFO" -Message "Analyzing domain: $($domainInfo.DNSRoot)"
         
-        # Get all domain controllers
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
+        # Get all domain controllers using authoritative DC Locator (queries Configuration partition)
+        $dcObjects = @(Get-ADDomainController -Filter * @ServerParams)
         
-        # Separate AzureADKerberos (Entra Kerberos) proxy object from real DCs
-        $azureADKerberos = $dcs | Where-Object { $_.Name -eq 'AzureADKerberos' }
-        $realDCs = $dcs | Where-Object { $_.Name -ne 'AzureADKerberos' }
-        
-        $assessment.TotalDCs = if ($realDCs) { if ($realDCs -is [array]) { $realDCs.Count } else { 1 } } else { 0 }
+        $assessment.TotalDCs = $dcObjects.Count
         
         Write-Finding -Status "INFO" -Message "Found $($assessment.TotalDCs) Domain Controller(s)"
         
-        # Handle AzureADKerberos object separately
-        if ($azureADKerberos) {
-            $encValue = $azureADKerberos.'msDS-SupportedEncryptionTypes'
-            $assessment.AzureADKerberos = @{
-                Name              = 'AzureADKerberos'
-                EncryptionValue   = $encValue
-                EncryptionTypes   = Get-EncryptionTypeString -Value $encValue
-                Status            = 'Entra Kerberos Proxy (Managed by Microsoft Entra ID)'
-                IsAzureADKerberos = $true
+        # Check for AzureADKerberos (Entra Kerberos proxy) in DC OU - not a real DC
+        try {
+            $azureADKerberos = Get-ADComputer -Identity 'AzureADKerberos' -Properties msDS-SupportedEncryptionTypes @ServerParams -ErrorAction SilentlyContinue
+            if ($azureADKerberos) {
+                $encValue = $azureADKerberos.'msDS-SupportedEncryptionTypes'
+                $assessment.AzureADKerberos = @{
+                    Name              = 'AzureADKerberos'
+                    EncryptionValue   = $encValue
+                    EncryptionTypes   = Get-EncryptionTypeString -Value $encValue
+                    Status            = 'Entra Kerberos Proxy (Managed by Microsoft Entra ID)'
+                    IsAzureADKerberos = $true
+                }
+                Write-Finding -Status "INFO" -Message "AzureADKerberos object detected (Entra Kerberos proxy - not a real DC, excluded from DC counts)"
             }
-            Write-Finding -Status "INFO" -Message "AzureADKerberos object detected (Entra Kerberos proxy - not a real DC, excluded from DC counts)"
+        }
+        catch {
+            # AzureADKerberos object not found - this is normal
         }
         
-        # Analyze each real DC
-        foreach ($dc in $realDCs) {
-            $encValue = $dc.'msDS-SupportedEncryptionTypes'
+        # Analyze each DC - read computer object properties for encryption assessment
+        foreach ($dc in $dcObjects) {
+            $dcComputer = Get-ADComputer $dc.ComputerObjectDN -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
+            $encValue = $dcComputer.'msDS-SupportedEncryptionTypes'
             $encTypes = Get-EncryptionTypeString -Value $encValue
             
             $dcInfo = @{
                 Name            = $dc.Name
                 EncryptionValue = $encValue
                 EncryptionTypes = $encTypes
-                OS              = $dc.OperatingSystem
+                OS              = $dcComputer.OperatingSystem
                 Status          = "Unknown"
             }
             
@@ -593,24 +596,20 @@ function Get-KdcRegistryAssessment {
             $domainInfo = Get-ADDomain
         }
         
-        # Get all DCs
-        $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
-        
-        # Exclude AzureADKerberos (Entra Kerberos proxy) - not a real DC
-        $dcs = @($dcs) | Where-Object { $_.Name -ne 'AzureADKerberos' }
+        # Get all DCs using authoritative DC Locator
+        $dcs = @(Get-ADDomainController -Filter * @ServerParams)
         
         if (-not $dcs -or $dcs.Count -eq 0) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for registry assessment"
             return $assessment
         }
         
-        Write-Finding -Status "INFO" -Message "Checking KDC registry keys on $(@($dcs).Count) Domain Controller(s)"
+        Write-Finding -Status "INFO" -Message "Checking KDC registry keys on $($dcs.Count) Domain Controller(s)"
         
         $regPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc'
         
-        foreach ($dc in @($dcs)) {
-            $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+        foreach ($dc in $dcs) {
+            $dcName = $dc.HostName
             Write-Host "  $([char]0x2022) Querying $dcName..." -ForegroundColor Cyan
             
             try {
@@ -767,12 +766,8 @@ function Get-KdcSvcEventAssessment {
             $domainInfo = Get-ADDomain
         }
         
-        # Get all DCs
-        $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
-        
-        # Exclude AzureADKerberos (Entra Kerberos proxy) - not a real DC
-        $dcs = @($dcs) | Where-Object { $_.Name -ne 'AzureADKerberos' }
+        # Get all DCs using authoritative DC Locator
+        $dcs = @(Get-ADDomainController -Filter * @ServerParams)
         
         if (-not $dcs -or $dcs.Count -eq 0) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for KDCSVC event check"
@@ -783,7 +778,7 @@ function Get-KdcSvcEventAssessment {
         Write-Host "  These events indicate RC4 risks related to CVE-2026-20833" -ForegroundColor Gray
         
         foreach ($dc in $dcs) {
-            $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+            $dcName = $dc.HostName
             Write-Host "  $([char]0x2022) Querying $dcName (System log)..." -ForegroundColor Cyan
             
             try {
@@ -940,17 +935,15 @@ function Get-AuditPolicyCheck {
             $domainInfo = Get-ADDomain
         }
         
-        # Query first available real DC (exclude AzureADKerberos proxy)
-        $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dc = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams |
-        Where-Object { $_.Name -ne 'AzureADKerberos' } | Select-Object -First 1
+        # Query first available DC using authoritative DC Locator
+        $dc = Get-ADDomainController -Filter * @ServerParams | Select-Object -First 1
         
         if (-not $dc) {
             Write-Finding -Status "WARNING" -Message "No Domain Controller found for audit policy check"
             return $assessment
         }
         
-        $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+        $dcName = $dc.HostName
         $assessment.QueriedDC = $dcName
         
         Write-Finding -Status "INFO" -Message "Checking Kerberos audit policy on $dcName"
@@ -1048,13 +1041,9 @@ function Get-EventLogEncryptionAnalysis {
             $domainInfo = Get-ADDomain
         }
         
-        # Get ALL domain controllers for comprehensive event log analysis
+        # Get ALL domain controllers using authoritative DC Locator
         Write-Verbose "Discovering all Domain Controllers in $($domainInfo.DNSRoot)"
-        $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        $dcs = Get-ADComputer -SearchBase $dcOU -Filter * -Properties DNSHostName @ServerParams
-        
-        # Exclude AzureADKerberos (Entra Kerberos proxy) - not a real DC
-        $dcs = @($dcs) | Where-Object { $_.Name -ne 'AzureADKerberos' }
+        $dcs = @(Get-ADDomainController -Filter * @ServerParams)
         
         if (-not $dcs -or $dcs.Count -eq 0) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for event log analysis"
@@ -1066,7 +1055,7 @@ function Get-EventLogEncryptionAnalysis {
         Write-Host "  If this fails, ensure WinRM is enabled on DCs: Enable-PSRemoting -Force" -ForegroundColor Gray
         
         foreach ($dc in $dcs) {
-            $dcName = if ($dc.DNSHostName) { $dc.DNSHostName } else { "$($dc.Name).$($domainInfo.DNSRoot)" }
+            $dcName = $dc.HostName
             Write-Host "  $([char]0x2022) Querying $dcName..." -ForegroundColor Cyan
             
             try {

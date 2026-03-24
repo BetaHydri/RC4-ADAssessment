@@ -25,7 +25,7 @@ BeforeAll {
 
     # Also extract the version variable
     $versionBlock = @'
-$script:Version = "2.6.0"
+$script:Version = "2.7.0"
 $script:AssessmentTimestamp = Get-Date
 '@
 
@@ -61,7 +61,7 @@ $script:AssessmentTimestamp = Get-Date
     }
     if (-not (Get-Command 'Get-ADDomainController' -ErrorAction SilentlyContinue)) {
         function global:Get-ADDomainController {
-            param([string]$DomainName, [switch]$Discover, [string]$Server, $ErrorAction)
+            param([string]$DomainName, [switch]$Discover, [string]$Filter, [string]$Server, $ErrorAction)
         }
     }
     if (-not (Get-Command 'Get-ADForest' -ErrorAction SilentlyContinue)) {
@@ -194,19 +194,20 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When all DCs have AES configured' {
         BeforeEach {
-            Mock Get-ADComputer {
+            Mock Get-ADDomainController {
                 @(
-                    [PSCustomObject]@{
-                        Name                            = 'DC01'
-                        'msDS-SupportedEncryptionTypes' = 24  # AES128 + AES256
-                        OperatingSystem                 = 'Windows Server 2022'
-                    },
-                    [PSCustomObject]@{
-                        Name                            = 'DC02'
-                        'msDS-SupportedEncryptionTypes' = 24
-                        OperatingSystem                 = 'Windows Server 2022'
-                    }
+                    [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
+                    [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
+            }
+            Mock Get-ADComputer {
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
+                    '*DC02*' { [PSCustomObject]@{ Name = 'DC02'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
+                }
             }
             Mock Get-GPInheritance { $null }
         }
@@ -237,19 +238,20 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When a DC has RC4 only' {
         BeforeEach {
-            Mock Get-ADComputer {
+            Mock Get-ADDomainController {
                 @(
-                    [PSCustomObject]@{
-                        Name                            = 'DC01'
-                        'msDS-SupportedEncryptionTypes' = 24  # AES
-                        OperatingSystem                 = 'Windows Server 2022'
-                    },
-                    [PSCustomObject]@{
-                        Name                            = 'DC02'
-                        'msDS-SupportedEncryptionTypes' = 4   # RC4 only
-                        OperatingSystem                 = 'Windows Server 2016'
-                    }
+                    [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
+                    [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
+            }
+            Mock Get-ADComputer {
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
+                    '*DC02*' { [PSCustomObject]@{ Name = 'DC02'; 'msDS-SupportedEncryptionTypes' = 4; OperatingSystem = 'Windows Server 2016' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
+                }
             }
             Mock Get-GPInheritance { $null }
         }
@@ -268,11 +270,15 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When a DC has DES only' {
         BeforeEach {
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC-LEGACY'; HostName = 'dc-legacy.contoso.com'; ComputerObjectDN = 'CN=DC-LEGACY,OU=Domain Controllers,DC=contoso,DC=com' }
+            }
             Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name                            = 'DC-LEGACY'
-                    'msDS-SupportedEncryptionTypes' = 3  # DES-CBC-CRC + DES-CBC-MD5
-                    OperatingSystem                 = 'Windows Server 2008'
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC-LEGACY*' { [PSCustomObject]@{ Name = 'DC-LEGACY'; 'msDS-SupportedEncryptionTypes' = 3; OperatingSystem = 'Windows Server 2008' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
                 }
             }
             Mock Get-GPInheritance { $null }
@@ -291,11 +297,15 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When a DC has AES + RC4 + DES' {
         BeforeEach {
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC-MIXED'; HostName = 'dc-mixed.contoso.com'; ComputerObjectDN = 'CN=DC-MIXED,OU=Domain Controllers,DC=contoso,DC=com' }
+            }
             Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name                            = 'DC-MIXED'
-                    'msDS-SupportedEncryptionTypes' = 31  # All bits set (0x1F)
-                    OperatingSystem                 = 'Windows Server 2019'
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC-MIXED*' { [PSCustomObject]@{ Name = 'DC-MIXED'; 'msDS-SupportedEncryptionTypes' = 31; OperatingSystem = 'Windows Server 2019' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
                 }
             }
             Mock Get-GPInheritance { $null }
@@ -316,19 +326,20 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When DCs have no encryption type set (inherit from GPO)' {
         BeforeEach {
-            Mock Get-ADComputer {
+            Mock Get-ADDomainController {
                 @(
-                    [PSCustomObject]@{
-                        Name                            = 'DC01'
-                        'msDS-SupportedEncryptionTypes' = $null
-                        OperatingSystem                 = 'Windows Server 2022'
-                    },
-                    [PSCustomObject]@{
-                        Name                            = 'DC02'
-                        'msDS-SupportedEncryptionTypes' = 0
-                        OperatingSystem                 = 'Windows Server 2022'
-                    }
+                    [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
+                    [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
+            }
+            Mock Get-ADComputer {
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = 'Windows Server 2022' } }
+                    '*DC02*' { [PSCustomObject]@{ Name = 'DC02'; 'msDS-SupportedEncryptionTypes' = 0; OperatingSystem = 'Windows Server 2022' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
+                }
             }
             Mock Get-GPInheritance { $null }
         }
@@ -341,11 +352,15 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When GPO is configured with AES' {
         BeforeEach {
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' }
+            }
             Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name                            = 'DC01'
-                    'msDS-SupportedEncryptionTypes' = $null
-                    OperatingSystem                 = 'Windows Server 2022'
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = 'Windows Server 2022' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
                 }
             }
             Mock Get-GPInheritance {
@@ -377,7 +392,12 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'With -Server parameter' {
         BeforeEach {
-            Mock Get-ADComputer { @() }
+            Mock Get-ADDomainController { @() }
+            Mock Get-ADComputer {
+                param($Identity)
+                if ($Identity -eq 'AzureADKerberos') { throw 'not found' }
+                $null
+            }
             Mock Get-GPInheritance { $null }
         }
 
@@ -400,24 +420,22 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When AzureADKerberos object is present alongside real DCs' {
         BeforeEach {
-            Mock Get-ADComputer {
+            # Get-ADDomainController only returns real DCs (no AzureADKerberos)
+            Mock Get-ADDomainController {
                 @(
-                    [PSCustomObject]@{
-                        Name                            = 'AzureADKerberos'
-                        'msDS-SupportedEncryptionTypes' = $null
-                        OperatingSystem                 = $null
-                    },
-                    [PSCustomObject]@{
-                        Name                            = 'DC01'
-                        'msDS-SupportedEncryptionTypes' = 24  # AES128 + AES256
-                        OperatingSystem                 = 'Windows Server 2022'
-                    },
-                    [PSCustomObject]@{
-                        Name                            = 'DC02'
-                        'msDS-SupportedEncryptionTypes' = 24
-                        OperatingSystem                 = 'Windows Server 2022'
-                    }
+                    [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
+                    [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
+            }
+            # Get-ADComputer is called per-DC for properties, and for AzureADKerberos detection
+            Mock Get-ADComputer {
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
+                    '*DC02*' { [PSCustomObject]@{ Name = 'DC02'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
+                    'AzureADKerberos' { [PSCustomObject]@{ Name = 'AzureADKerberos'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = $null } }
+                    default { $null }
+                }
             }
             Mock Get-GPInheritance { $null }
         }
@@ -452,14 +470,15 @@ Describe 'Get-DomainControllerEncryption' {
         }
     }
 
-    Context 'When AzureADKerberos is the only object in DC OU' {
+    Context 'When AzureADKerberos is the only object in DC OU (no real DCs from DC Locator)' {
         BeforeEach {
+            # Get-ADDomainController returns no results (AzureADKerberos is not a real DC)
+            Mock Get-ADDomainController { @() }
             Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name                            = 'AzureADKerberos'
-                    'msDS-SupportedEncryptionTypes' = $null
-                    OperatingSystem                 = $null
-                }
+                param($Identity)
+                if ($Identity -eq 'AzureADKerberos') {
+                    [PSCustomObject]@{ Name = 'AzureADKerberos'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = $null }
+                } else { $null }
             }
             Mock Get-GPInheritance { $null }
         }
@@ -483,14 +502,16 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When no AzureADKerberos object exists' {
         BeforeEach {
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' }
+            }
             Mock Get-ADComputer {
-                @(
-                    [PSCustomObject]@{
-                        Name                            = 'DC01'
-                        'msDS-SupportedEncryptionTypes' = 24
-                        OperatingSystem                 = 'Windows Server 2022'
-                    }
-                )
+                param($Identity)
+                switch -Wildcard ($Identity) {
+                    '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
+                    'AzureADKerberos' { throw 'not found' }
+                    default { $null }
+                }
             }
             Mock Get-GPInheritance { $null }
         }
@@ -1294,7 +1315,7 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock Get-ADComputer { $null }
+            Mock Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment' {
@@ -1308,11 +1329,8 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When DC is unreachable' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Test-Connection { $false }
         }
@@ -1331,11 +1349,8 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When events are retrieved successfully with AES tickets' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Test-Connection { $true }
             Mock Invoke-Command {
@@ -1375,11 +1390,8 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When RC4 and DES tickets are detected' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Test-Connection { $true }
             Mock Invoke-Command {
@@ -1433,11 +1445,8 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When WinRM fails and RPC fallback succeeds' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Test-Connection { $true }
             Mock Invoke-Command { throw "WinRM connection failed" }
@@ -1460,11 +1469,8 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When both WinRM and RPC fail' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Test-Connection { $true }
             Mock Invoke-Command { throw "WinRM connection failed" }
@@ -1480,7 +1486,7 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'TimeRange parameter' {
         BeforeEach {
-            Mock Get-ADComputer { $null }
+            Mock Get-ADDomainController { @() }
         }
 
         It 'Uses provided Hours value' {
@@ -1803,7 +1809,7 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock Get-ADComputer { $null }
+            Mock Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment' {
@@ -1816,11 +1822,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When RC4DefaultDisablementPhase is set to 1' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -1845,11 +1848,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When RC4DefaultDisablementPhase is set to 0' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -1867,11 +1867,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When DefaultDomainSupportedEncTypes is AES-only' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -1892,11 +1889,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When DefaultDomainSupportedEncTypes includes RC4 and AES' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -1915,11 +1909,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When DefaultDomainSupportedEncTypes has no AES' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -1938,11 +1929,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When WinRM fails on a DC' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command { throw "WinRM connection failed" }
         }
@@ -1956,11 +1944,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When neither registry key is set' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -1979,11 +1964,8 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When RC4DefaultDisablementPhase is set to 2 (Enforcement)' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -2003,17 +1985,9 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When AzureADKerberos object is present alongside real DCs' {
         BeforeEach {
-            Mock Get-ADComputer {
-                @(
-                    [PSCustomObject]@{
-                        Name        = 'AzureADKerberos'
-                        DNSHostName = 'AzureADKerberos.contoso.com'
-                    },
-                    [PSCustomObject]@{
-                        Name        = 'DC01'
-                        DNSHostName = 'dc01.contoso.com'
-                    }
-                )
+            # Get-ADDomainController only returns real DCs
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -2023,26 +1997,16 @@ Describe 'Get-KdcRegistryAssessment' {
             }
         }
 
-        It 'Excludes AzureADKerberos from registry queries' {
+        It 'Only queries real DCs (AzureADKerberos automatically excluded)' {
             $result = Get-KdcRegistryAssessment -ServerParams @{}
-            $result.QueriedDCs | Should -Not -Contain 'AzureADKerberos.contoso.com'
             $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
-        }
-
-        It 'Only queries real DCs' {
-            $result = Get-KdcRegistryAssessment -ServerParams @{}
             $result.QueriedDCs | Should -HaveCount 1
         }
     }
 
-    Context 'When AzureADKerberos is the only object in DC OU' {
+    Context 'When no DCs found (AzureADKerberos only exists in OU but not as real DC)' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'AzureADKerberos'
-                    DNSHostName = 'AzureADKerberos.contoso.com'
-                }
-            }
+            Mock Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment with no queried DCs' {
@@ -2071,7 +2035,7 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock Get-ADComputer { $null }
+            Mock Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment' {
@@ -2083,11 +2047,8 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When no KDCSVC events are found' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command { @() }
         }
@@ -2102,11 +2063,8 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When KDCSVC events are found' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @(
@@ -2133,11 +2091,8 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When WinRM fails with No events found' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command { throw 'No events were found that match the specified selection criteria.' }
         }
@@ -2152,11 +2107,8 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When WinRM fails completely' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command { throw 'WinRM connection failed' }
             Mock Get-WinEvent { throw 'RPC server unavailable' }
@@ -2171,41 +2123,23 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When AzureADKerberos object is present alongside real DCs' {
         BeforeEach {
-            Mock Get-ADComputer {
-                @(
-                    [PSCustomObject]@{
-                        Name        = 'AzureADKerberos'
-                        DNSHostName = 'AzureADKerberos.contoso.com'
-                    },
-                    [PSCustomObject]@{
-                        Name        = 'DC01'
-                        DNSHostName = 'dc01.contoso.com'
-                    }
-                )
+            # Get-ADDomainController only returns real DCs
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command { @() }
         }
 
-        It 'Excludes AzureADKerberos from KDCSVC event queries' {
+        It 'Only queries real DCs (AzureADKerberos automatically excluded)' {
             $result = Get-KdcSvcEventAssessment -ServerParams @{}
-            $result.QueriedDCs | Should -Not -Contain 'AzureADKerberos.contoso.com'
             $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
-        }
-
-        It 'Only queries real DCs' {
-            $result = Get-KdcSvcEventAssessment -ServerParams @{}
             $result.QueriedDCs | Should -HaveCount 1
         }
     }
 
-    Context 'When AzureADKerberos is the only object in DC OU' {
+    Context 'When no DCs found (AzureADKerberos only in OU)' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'AzureADKerberos'
-                    DNSHostName = 'AzureADKerberos.contoso.com'
-                }
-            }
+            Mock Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment with no queried DCs' {
@@ -2233,7 +2167,7 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When no DC is found' {
         BeforeEach {
-            Mock Get-ADComputer { $null }
+            Mock Get-ADDomainController { @() }
         }
 
         It 'Returns unknown status' {
@@ -2244,11 +2178,8 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When both audit policies are enabled' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -2273,11 +2204,8 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When no audit policies are enabled' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -2297,11 +2225,8 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When only one audit policy is enabled' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command {
                 @{
@@ -2321,11 +2246,8 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When WinRM fails' {
         BeforeEach {
-            Mock Get-ADComputer {
-                [PSCustomObject]@{
-                    Name        = 'DC01'
-                    DNSHostName = 'dc01.contoso.com'
-                }
+            Mock Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
             Mock Invoke-Command { throw "WinRM connection failed" }
         }
