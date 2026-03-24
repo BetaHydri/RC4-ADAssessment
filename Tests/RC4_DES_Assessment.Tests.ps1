@@ -69,6 +69,11 @@ $script:AssessmentTimestamp = Get-Date
             param([string]$Identity, [string]$Server, $ErrorAction)
         }
     }
+    if (-not (Get-Command 'Get-ADObject' -ErrorAction SilentlyContinue)) {
+        function global:Get-ADObject {
+            param([string]$Identity, [string]$Filter, [string]$SearchBase, [string[]]$Properties, [string]$Server, $ErrorAction)
+        }
+    }
 
     # Stub GP cmdlets with proper parameters
     if (-not (Get-Command 'Get-GPInheritance' -ErrorAction SilentlyContinue)) {
@@ -415,7 +420,7 @@ Describe 'Get-DomainControllerEncryption' {
             # AD-native fallback: gPLink attribute on DC OU
             Mock Get-ADObject {
                 param($Identity, $Filter)
-                if ($Identity -eq 'OU=Domain Controllers,DC=contoso,DC=com') {
+                if ("$Identity" -eq 'OU=Domain Controllers,DC=contoso,DC=com') {
                     [PSCustomObject]@{
                         gPLink = '[LDAP://cn={12345678-1234-1234-1234-123456789012},cn=policies,cn=system,DC=contoso,DC=com;0][LDAP://cn={31B2F340-016D-11D2-945F-00C04FB984F9},cn=policies,cn=system,DC=contoso,DC=com;0]'
                     }
@@ -455,7 +460,7 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
             Mock Get-ADDomainController { @() }
             Mock Get-ADComputer {
                 param($Identity)
-                if ($Identity -eq 'AzureADKerberos') { throw 'not found' }
+                if ("$Identity" -eq 'AzureADKerberos') { throw 'not found' }
                 $null
             }
             Mock Get-GPInheritance { $null }
@@ -536,7 +541,7 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
             Mock Get-ADDomainController { @() }
             Mock Get-ADComputer {
                 param($Identity)
-                if ($Identity -eq 'AzureADKerberos') {
+                if ("$Identity" -eq 'AzureADKerberos') {
                     [PSCustomObject]@{ Name = 'AzureADKerberos'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = $null }
                 } else { $null }
             }
