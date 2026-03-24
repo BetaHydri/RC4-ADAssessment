@@ -543,7 +543,8 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
                 param($Identity)
                 if ("$Identity" -eq 'AzureADKerberos') {
                     [PSCustomObject]@{ Name = 'AzureADKerberos'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = $null }
-                } else { $null }
+                }
+                else { $null }
             }
             Mock Get-GPInheritance { $null }
         }
