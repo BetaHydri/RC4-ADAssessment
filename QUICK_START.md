@@ -1,6 +1,6 @@
-# RC4_DES_Assessment.ps1 v2.4.0 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.7.0 - Quick Start Guide
 
-> **✨ New in v2.4.0:** CVE-2026-20833 support — KDCSVC System event scanning (events 201-209), `RC4DefaultDisablementPhase` phased workflow (value 1 = Audit, value 2 = Enforce), April 2026 Enforcement phase, explicit RC4 exception value `0x1C` (RC4 + AES128 + AES256). See also v2.3.0: KDC registry assessment, audit policy pre-check, missing AES keys.
+> **✨ New in v2.7.0:** DC discovery now uses `Get-ADDomainController -Filter *` (DC Locator) instead of OU queries — no false positives from non-DC objects. See also v2.6.0: AES-first hardening (`0x18` default), RC4 exception account detection. v2.5.x: AzureADKerberos auto-exclusion, DES-enabled account detection, dMSA support. v2.4.0: CVE-2026-20833 KDCSVC events (201-209), `RC4DefaultDisablementPhase` phased workflow.
 
 ## 🔐 Using with Active Directory
 
@@ -16,7 +16,7 @@
 .\RC4_DES_Assessment.ps1 -QuickScan
 ```
 **Runtime**: ~30 seconds  
-**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry, KDCSVC Events (CVE-2026-20833), DES flags, Missing AES keys
+**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), KDC Registry, KDCSVC Events (CVE-2026-20833), DES flags, Missing AES keys, RC4 exceptions, AzureADKerberos detection
 
 ### Full Assessment (Recommended)
 ```powershell
@@ -264,6 +264,19 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 - Accounts with passwords set before Domain Functional Level was raised to 2008
 - These accounts have no AES keys generated — password reset required
 
+### AzureADKerberos (v2.5.0+)
+- **Entra Kerberos proxy** object in DC OU is auto-detected and excluded from DC counts
+- Separate informational display in summary tables and exports
+
+### RC4 Exception Accounts (v2.6.0+)
+- Accounts with explicit RC4 + AES (`0x1C`) flagged as WARNING
+- AES-first hardening: default fix commands now use `0x18` (AES-only)
+- `0x1C` recommended only as last resort when AES breaks an application
+
+### DES-Enabled Accounts (v2.5.1+)
+- Accounts with DES bits set alongside AES are flagged as WARNING (DES removed in Server 2025)
+- Covers SPN user accounts, gMSA, sMSA, and dMSA
+
 ### Trusts (Post-November 2022 Logic)
 - **AES Default (not set)** - Trusts with no msDS-SupportedEncryptionTypes (✓ secure)
 - **AES Explicit** - Trusts with AES explicitly configured (✓ secure)
@@ -394,7 +407,31 @@ Resolve-DnsName your-domain.com
 
 ## 🎯 What's New
 
-### v2.3.0 (March 2026) — Current
+### v2.7.0 (March 2026) — Current
+- **DC discovery refactored to `Get-ADDomainController -Filter *`** - Uses DC Locator (Configuration partition) instead of OU queries — no false positives from non-DC objects
+- AzureADKerberos filtering no longer needed for KDC registry, KDCSVC events, audit policy, event log functions
+- AzureADKerberos detection uses targeted `Get-ADComputer -Identity 'AzureADKerberos'` lookup
+
+### v2.6.0 (March 2026)
+- **AES-first hardening** - Default fix commands use `0x18` (AES-only); `0x1C` only as documented fallback
+- **RC4 exception account detection** - Accounts with explicit RC4 + AES flagged as WARNING
+- Updated guidance: AES-first approach with clear "last resort" language for RC4 exceptions
+
+### v2.5.1 (March 2026)
+- **DES-enabled account detection** - Accounts with DES bits alongside AES flagged as WARNING
+- **dMSA support** - Delegated Managed Service Accounts (Server 2025) correctly identified
+- **AzureADKerberos exclusion refinement** across KDC registry and KDCSVC queries
+
+### v2.5.0 (March 2026)
+- **AzureADKerberos detection** - Entra Kerberos proxy auto-detected and excluded from DC counts
+- Separate informational display in summary tables and CSV/JSON exports
+
+### v2.4.0 (March 2026)
+- **CVE-2026-20833 support** - KDCSVC System event scanning (events 201-209)
+- **`RC4DefaultDisablementPhase`** phased workflow (1 = Audit, 2 = Enforce)
+- Explicit RC4 exception value `0x1C` (RC4 + AES128 + AES256)
+
+### v2.3.0 (March 2026)
 - **KDC registry assessment** - `DefaultDomainSupportedEncTypes` and `RC4DefaultDisablementPhase` checked on all DCs
 - **Kerberos audit policy pre-check** - Verifies auditing is enabled before event log analysis
 - **Missing AES keys detection** - Accounts with passwords predating DFL 2008 raise (no AES keys)
