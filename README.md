@@ -481,6 +481,39 @@ auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 - [RC4 deprecation in Windows Server — Deprecated Features](https://learn.microsoft.com/en-us/windows-server/get-started/removed-deprecated-features-windows-server)
 - [Microsoft Kerberos-Crypto Scripts](https://github.com/microsoft/Kerberos-Crypto) (Get-KerbEncryptionUsage.ps1, List-AccountKeys.ps1)
 
+### Linux / Kerberos Keytab Impact
+
+When rotating the KRBTGT password or resetting service account passwords, **any Kerberos keytab files generated from the previous password become invalid**. Linux services using AD-based Kerberos AES256 authentication (Apache, Nginx, SSSD, Samba, PostgreSQL, IBM WebSphere, etc.) will fail to authenticate until their keytabs are regenerated.
+
+After password rotation, regenerate keytabs using `ktpass` (Windows) or `ktutil` (Linux):
+
+```powershell
+# From Windows — generate AES256 keytab for a Linux service:
+ktpass -princ HTTP/linux.domain.com@DOMAIN.COM `
+  -mapuser DOMAIN\svc_linux -pass <NewPassword> `
+  -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL `
+  -out c:\temp\linux.keytab
+```
+
+```bash
+# From Linux — verify the new keytab works:
+kinit -kt /etc/krb5.keytab HTTP/linux.domain.com@DOMAIN.COM
+klist
+```
+
+> **Tip:** Ensure `msDS-SupportedEncryptionTypes` includes `0x10` (AES256) on the service account *before* resetting the password, otherwise no AES256 key will be generated. Use `-IncludeGuidance` for the full step-by-step procedure.
+
+References:
+- [Active Directory Hardening Series Part 4 — Enforcing AES for Kerberos](https://techcommunity.microsoft.com/blog/yourwindowsserverpodcast/active-directory-hardening-series---part-4---enforcing-aes-for-kerberos/4260477)
+- [Creating a Keytab File for Kerberos Authentication in Active Directory](https://woshub.com/creating-keytab-file-kerberos-authentication-active-directory/)
+- [ktpass command reference](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ktpass)
+- [Kerberos disabling RC4 — Moving from RC4 to AES](https://www.samuraj-cz.com/en/clanek/kerberos-disabling-rc4-part-2-moving-from-rc4-to-aes/)
+- [Kerberos deactivation RC4 — Protocol Principle and Encryption Types](https://www.samuraj-cz.com/en/clanek/kerberos-deactivation-rc4-part-1-protocol-principle-and-encryption-types/)
+- [Create Keytab for Kerberos Authentication in Linux](https://www.techjogging.com/create-keytab-for-kerberos-authentication-in-linux.html)
+- [Creating a Kerberos Service Principal and Keytab File — IBM Documentation](https://www.ibm.com/docs/en/was/9.0.5?topic=SSEQTP_9.0.5/com.ibm.websphere.base.doc/ae/tsec_kerb_create_spn.htm)
+- [Kerberos SSO with Apache on Linux](https://docs.active-directory-wp.com/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html)
+- [AES-256 Keytab troubleshooting — Stack Overflow](https://stackoverflow.com/questions/36475536/kerberos-aes-256-keytab-does-not-work)
+
 ## Version History
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.

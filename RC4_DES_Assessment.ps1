@@ -2335,6 +2335,37 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) Consider using Microsoft's official KRBTGT reset script:
      https://github.com/microsoft/New-KrbtgtKeys.ps1
 
+   $([char]0x26A0) Linux / Kerberos Keytab Impact:
+   $([char]0x2022) KRBTGT or service account password rotation INVALIDATES
+     any Kerberos keytab files generated from that account's previous password.
+   $([char]0x2022) Linux services using AD-based Kerberos AES256 authentication
+     (Apache, Nginx, SSSD, Samba, PostgreSQL, IBM WebSphere, etc.) will fail
+     to authenticate until their keytab files are regenerated.
+   $([char]0x2022) After password rotation, regenerate keytabs:
+      # From Windows (for a service account, e.g. HTTP/linux.domain.com):
+      PS> ktpass -princ HTTP/linux.domain.com@DOMAIN.COM ``
+            -mapuser DOMAIN\svc_linux -pass <NewPassword> ``
+            -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL ``
+            -out c:\temp\linux.keytab
+      # From Linux:
+      `$ ktutil
+      ktutil: addent -password -p HTTP/linux.domain.com@DOMAIN.COM ``
+               -k 1 -e aes256-cts-hmac-sha1-96
+      ktutil: wkt /etc/krb5.keytab
+   $([char]0x2022) Always test with: kinit -kt /etc/krb5.keytab <principal>
+   $([char]0x2022) If AES256 keytab fails, verify the account's
+     msDS-SupportedEncryptionTypes includes 0x10 (AES256) and that the
+     password was reset AFTER setting the encryption type.
+   $([char]0x2022) References:
+     - Active Directory Hardening Series Part 4 - Enforcing AES:
+       https://techcommunity.microsoft.com/blog/yourwindowsserverpodcast/active-directory-hardening-series---part-4---enforcing-aes-for-kerberos/4260477
+     - Creating a Keytab File for Kerberos Authentication:
+       https://woshub.com/creating-keytab-file-kerberos-authentication-active-directory/
+     - ktpass command reference:
+       https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ktpass
+     - Kerberos disabling RC4 - Moving from RC4 to AES:
+       https://www.samuraj-cz.com/en/clanek/kerberos-disabling-rc4-part-2-moving-from-rc4-to-aes/
+
    Check KRBTGT:
    PS> Get-ADUser krbtgt -Properties PasswordLastSet, msDS-SupportedEncryptionTypes |
        Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
@@ -2356,6 +2387,9 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    # IMPORTANT: After changing encryption types, purge cached tickets:
    # CMD> klist purge
    # Then test access to the application
+   # IMPORTANT: If this service account is used by Linux services with a
+   # keytab, regenerate the keytab file after updating encryption types
+   # and resetting the password (see Linux/Kerberos Keytab Impact above).
 
 7. RC4 Disablement Timeline & Registry Keys (CVE-2026-20833)
    $([string]([char]0x2500) * 60)
@@ -2714,6 +2748,9 @@ try {
                     "# Step 2: First rotation:"
                     "Reset-ADAccountPassword -Identity krbtgt -NewPassword (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset"
                     "# Step 3: Wait 10-12 hours, then second rotation (same command)"
+                    "# IMPORTANT: Linux/Kerberos keytab impact - after KRBTGT rotation,"
+                    "#   regenerate all keytab files (ktpass/ktutil) for Linux services"
+                    "#   using AD-based Kerberos AES256 authentication."
                     "# See -IncludeGuidance for full KRBTGT rotation procedure"
                 )
             }
@@ -2726,6 +2763,9 @@ try {
                 Fix     = @(
                     "# Rotate KRBTGT password (double rotation with 10-12h wait between):"
                     "Reset-ADAccountPassword -Identity krbtgt -NewPassword (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset"
+                    "# IMPORTANT: Linux/Kerberos keytab impact - after KRBTGT rotation,"
+                    "#   regenerate all keytab files (ktpass/ktutil) for Linux services"
+                    "#   using AD-based Kerberos AES256 authentication."
                     "# See -IncludeGuidance for full procedure"
                 )
             }

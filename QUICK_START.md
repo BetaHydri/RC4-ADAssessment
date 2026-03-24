@@ -245,6 +245,7 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 
 ### KRBTGT & Service Accounts (v2.2.0+)
 - **KRBTGT Password Age** - Should be rotated regularly (guidance provided)
+- **Linux Keytab Impact** - KRBTGT or service account password rotation invalidates Kerberos keytab files; Linux services (Apache, SSSD, Samba, PostgreSQL, etc.) must regenerate keytabs after rotation
 - **USE_DES_KEY_ONLY** - Accounts with this UAC flag need remediation
 - **RC4/DES-only SPN Accounts** - Service accounts missing AES (fix commands shown)
 - **gMSA/sMSA** - Managed service accounts reviewed for weak encryption
