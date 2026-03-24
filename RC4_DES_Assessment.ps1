@@ -384,7 +384,7 @@ function Get-DomainControllerEncryption {
                                 $gpoDisplayName = $gpoGuid
                                 try {
                                     $gpoADObj = Get-ADObject -Filter "objectClass -eq 'groupPolicyContainer'" -SearchBase "CN=Policies,CN=System,$($domainInfo.DistinguishedName)" -Properties DisplayName @ServerParams |
-                                    Where-Object { $_.Name -eq $gpoGuid }
+                                        Where-Object { $_.Name -eq $gpoGuid }
                                     if ($gpoADObj) { $gpoDisplayName = $gpoADObj.DisplayName }
                                 }
                                 catch { }
