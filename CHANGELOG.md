@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.7.1 (March 2026) — Current
+## v2.7.2 (March 2026) — Current
+
+- **SYSVOL GPO detection fallback fix**: Fixed `Get-DomainControllerEncryption` SYSVOL fallback path failing silently when `Get-ADObject` was not available as a mockable command in test environments
+  - Added `Get-ADObject` stub to Pester test harness alongside existing AD cmdlet stubs
+  - Fixed Pester mock parameter type mismatch: `$Identity` bound as `ADComputer` object caused `$Identity -eq 'string'` comparisons to fail; resolved by using string interpolation (`"$Identity"`) in mock bodies
+  - All 204 Pester tests now pass on machines without the ActiveDirectory module
+
+## v2.7.1 (March 2026)
 
 - **Linux / Kerberos keytab impact guidance**: New subsection in KRBTGT rotation procedure warning that password rotation invalidates keytab files for Linux services (Apache, Nginx, SSSD, Samba, PostgreSQL, IBM WebSphere, etc.)
   - `ktpass` (Windows) and `ktutil` (Linux) keytab regeneration commands with AES256 examples

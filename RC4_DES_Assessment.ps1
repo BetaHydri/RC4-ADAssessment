@@ -136,7 +136,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.7.1"
+$script:Version = "2.7.2"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
