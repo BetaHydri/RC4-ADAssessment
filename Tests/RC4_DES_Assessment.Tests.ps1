@@ -390,7 +390,7 @@ Describe 'Get-DomainControllerEncryption' {
         }
     }
 
-    Context 'When GPO is configured but Get-GPOReport fails (SYSVOL fallback)' {
+    Context 'When GroupPolicy module is broken (SYSVOL fallback via gPLink AD attribute)' {
         BeforeEach {
             Mock Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' }
@@ -403,19 +403,28 @@ Describe 'Get-DomainControllerEncryption' {
                     default { $null }
                 }
             }
+            # Simulate broken GroupPolicy module: GpoLinks returns strings instead of objects
             Mock Get-GPInheritance {
                 [PSCustomObject]@{
                     GpoLinks = @(
-                        [PSCustomObject]@{
-                            Enabled     = $true
-                            GpoId       = [guid]'12345678-1234-1234-1234-123456789012'
-                            DisplayName = 'Kerberos Encryption Policy'
-                        }
+                        'Microsoft.GroupPolicy.GpoLink',
+                        'Microsoft.GroupPolicy.GpoLink'
                     )
                 }
             }
-            # Simulate Get-GPOReport failure (e.g., Microsoft.GroupPolicy.Interop assembly missing)
-            Mock Get-GPOReport { $null }
+            # AD-native fallback: gPLink attribute on DC OU
+            Mock Get-ADObject {
+                param($Identity, $Filter)
+                if ($Identity -eq 'OU=Domain Controllers,DC=contoso,DC=com') {
+                    [PSCustomObject]@{
+                        gPLink = '[LDAP://cn={12345678-1234-1234-1234-123456789012},cn=policies,cn=system,DC=contoso,DC=com;0][LDAP://cn={31B2F340-016D-11D2-945F-00C04FB984F9},cn=policies,cn=system,DC=contoso,DC=com;0]'
+                    }
+                }
+                elseif ($Filter) {
+                    # GPO display name lookup
+                    [PSCustomObject]@{ Name = '{12345678-1234-1234-1234-123456789012}'; DisplayName = 'Kerberos Encryption Policy' }
+                }
+            }
             Mock Test-Path { $true } -ParameterFilter { $LiteralPath -like '*GptTmpl.inf' }
             Mock Get-Content {
                 @"

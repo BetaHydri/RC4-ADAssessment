@@ -328,11 +328,13 @@ function Get-DomainControllerEncryption {
         Write-Host "`n  Checking GPO Kerberos encryption policy..." -ForegroundColor Cyan
         
         try {
-            # Try to get GPO inheritance for DC OU
+            # Try to get GPO inheritance for DC OU via GroupPolicy module
             $gpoInheritance = Get-GPInheritance -Target $dcOU -Domain $domainInfo.DNSRoot @ServerParams -ErrorAction Stop
             
             if ($gpoInheritance -and $gpoInheritance.GpoLinks) {
                 foreach ($gpoLink in $gpoInheritance.GpoLinks) {
+                    # Guard: on broken GroupPolicy assemblies, GpoLinks may be strings instead of objects
+                    if ($gpoLink -is [string]) { continue }
                     if ($gpoLink.Enabled) {
                         $gpoReport = Get-GPOReport -Guid $gpoLink.GpoId -ReportType Xml -Domain $domainInfo.DNSRoot @ServerParams -ErrorAction SilentlyContinue
                         
@@ -348,33 +350,56 @@ function Get-DomainControllerEncryption {
                                 -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
                             break
                         }
-                        elseif (-not $gpoReport) {
-                            # Fallback: Parse SYSVOL security template when Get-GPOReport is unavailable
-                            # (e.g., Microsoft.GroupPolicy.Interop assembly missing)
-                            try {
-                                $gpoGuid = "{$($gpoLink.GpoId.ToString().ToUpper())}"
-                                $sysvolPath = "\\$($domainInfo.DNSRoot)\SYSVOL\$($domainInfo.DNSRoot)\Policies\$gpoGuid\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
-                                if (Test-Path -LiteralPath $sysvolPath) {
-                                    $gptTmplContent = Get-Content -LiteralPath $sysvolPath -Raw -ErrorAction Stop
-                                    if ($gptTmplContent -match 'SupportedEncryptionTypes\s*=\s*4\s*,\s*(\d+)') {
-                                        $assessment.GPOConfigured = $true
-                                        $assessment.GPOEncryptionTypes = [int]$matches[1]
-                                        Write-Finding -Status "OK" -Message "GPO '$($gpoLink.DisplayName)' configures Kerberos encryption (detected via SYSVOL)" `
-                                            -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
-                                        break
-                                    }
-                                }
-                            }
-                            catch {
-                                Write-Verbose "SYSVOL fallback failed for GPO '$($gpoLink.DisplayName)': $($_.Exception.Message)"
-                            }
-                        }
                     }
                 }
             }
         }
         catch {
-            Write-Finding -Status "WARNING" -Message "Could not retrieve GPO information: $($_.Exception.Message)"
+            Write-Verbose "GroupPolicy module failed: $($_.Exception.Message)"
+        }
+        
+        # Fallback: If GroupPolicy module produced no results (broken assembly, serialization issues, etc.)
+        # read the gPLink AD attribute on the DC OU and parse SYSVOL GptTmpl.inf directly
+        if (-not $assessment.GPOConfigured) {
+            try {
+                $dcOUObj = Get-ADObject -Identity $dcOU -Properties gPLink @ServerParams -ErrorAction Stop
+                if ($dcOUObj.gPLink) {
+                    # Parse gPLink format: [LDAP://cn={GUID},cn=policies,cn=system,DC=...;flags]
+                    # flags: 0=enabled, 1=disabled, 2=enforced, 3=disabled+enforced
+                    $linkMatches = [regex]::Matches($dcOUObj.gPLink, 'LDAP://cn=(\{[0-9A-Fa-f\-]+\}),cn=policies,cn=system,[^;]*;(\d+)')
+                    foreach ($linkMatch in $linkMatches) {
+                        $gpoGuid = $linkMatch.Groups[1].Value.ToUpper()
+                        $linkFlags = [int]$linkMatch.Groups[2].Value
+                        # Skip disabled links (bit 0 set = disabled)
+                        if ($linkFlags -band 1) { continue }
+                        
+                        $sysvolPath = "\\$($domainInfo.DNSRoot)\SYSVOL\$($domainInfo.DNSRoot)\Policies\$gpoGuid\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
+                        if (Test-Path -LiteralPath $sysvolPath) {
+                            $gptTmplContent = Get-Content -LiteralPath $sysvolPath -Raw -ErrorAction Stop
+                            if ($gptTmplContent -match 'SupportedEncryptionTypes\s*=\s*4\s*,\s*(\d+)') {
+                                $assessment.GPOConfigured = $true
+                                $assessment.GPOEncryptionTypes = [int]$matches[1]
+                                
+                                # Try to resolve GPO display name
+                                $gpoDisplayName = $gpoGuid
+                                try {
+                                    $gpoADObj = Get-ADObject -Filter "objectClass -eq 'groupPolicyContainer'" -SearchBase "CN=Policies,CN=System,$($domainInfo.DistinguishedName)" -Properties DisplayName @ServerParams |
+                                        Where-Object { $_.Name -eq $gpoGuid }
+                                    if ($gpoADObj) { $gpoDisplayName = $gpoADObj.DisplayName }
+                                }
+                                catch { }
+                                
+                                Write-Finding -Status "OK" -Message "GPO '$gpoDisplayName' configures Kerberos encryption (detected via SYSVOL)" `
+                                    -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+            catch {
+                Write-Verbose "SYSVOL fallback failed: $($_.Exception.Message)"
+            }
         }
         
         # Display summary
