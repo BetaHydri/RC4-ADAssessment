@@ -531,4 +531,5 @@ MIT — See [LICENSE](LICENSE) file.
 - Author: Jan Tiedemann
 - Customer feedback and real-world testing (Thanks to Simon Arnreiter)
 - Bug fixes and feedback to improve the tool (Thanks to Aleix Porta Torns and Yari Campagna)
+- AzureADKerberos key rotation guidance and link fixes (Thanks to Alan La Pietra)
 - Microsoft Kerberos security documentation team
