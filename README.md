@@ -344,7 +344,11 @@ Set-AzureADKerberosServer -Domain contoso.com -DomainCredential (Get-Credential)
   -RotateServerKey
 ```
 
-For more information, see [Microsoft: Cloud Kerberos Trust deployment](https://learn.microsoft.com/en-us/entra/identity/authentication/how-to-deploy-cloud-kerberos-trust).
+> **Key rotation:** The Microsoft Entra Kerberos server encryption `krbtgt` keys should be rotated on a regular basis. We recommend that you follow the same schedule you use to rotate all other Active Directory DC `krbtgt` keys.
+
+For more information, see:
+- [Windows Hello for Business cloud Kerberos trust deployment guide](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/deploy/hybrid-cloud-kerberos-trust)
+- [Passwordless security key sign-in to on-premises resources](https://learn.microsoft.com/en-us/entra/identity/authentication/howto-authentication-passwordless-security-key-on-premises) (includes key rotation steps)
 
 ## Post-November 2022 Logic
 

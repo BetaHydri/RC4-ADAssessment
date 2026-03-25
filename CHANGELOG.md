@@ -18,6 +18,10 @@ All notable changes to this project will be documented in this file.
   - Before/after Event ID 4768 examples showing the difference between RC4-only and AES-enabled
   - Clarifies that `Available Keys: AES-SHA1, RC4` is expected (AD always stores RC4 keys)
 - **Missing AES key accounts added to summary table**: These accounts now appear in the KRBTGT & Account Encryption Summary table alongside other account types
+- **AzureADKerberos key rotation guidance**: Summary table now displays key rotation reminder with `Set-AzureADKerberosServer -RotateServerKey` and link to Microsoft documentation
+  - Fixed broken "Cloud Kerberos Trust deployment" link in README.md (old URL returned 404)
+  - Updated to correct URLs: [Windows Hello for Business cloud Kerberos trust deployment guide](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/deploy/hybrid-cloud-kerberos-trust) and [Passwordless security key sign-in](https://learn.microsoft.com/en-us/entra/identity/authentication/howto-authentication-passwordless-security-key-on-premises)
+  - Added note that Entra Kerberos `krbtgt` keys should be rotated on the same schedule as AD DC `krbtgt` keys
 - 2 new Pester tests for lastLogonTimestamp handling (with and without logon data)
 
 ## v2.7.2 (March 2026)
