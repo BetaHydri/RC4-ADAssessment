@@ -366,6 +366,23 @@ RC4 fallback only occurs when **both** conditions are true:
 
 **Impact:** You do NOT need to set this attribute on 100,000+ computers if DCs have AES configured via GPO.
 
+### DC Summary Counters Explained
+
+The Domain Controller summary shows five counters:
+
+| Counter | What it reads | Example |
+|---------|---------------|---------|
+| **AES Configured** | DCs where `msDS-SupportedEncryptionTypes` includes AES bits (0x8 or 0x10) | GPO applied → attribute stamped to `0x18` |
+| **RC4 Configured** | DCs where attribute includes RC4 (0x4) alongside AES | Attribute = `0x1C` |
+| **DES Configured** | DCs where attribute includes DES bits (0x1 or 0x2) | Attribute = `0x1F` |
+| **Not Configured (GPO Inherited)** | DCs where attribute is null/0 — they inherit encryption settings from the GPO at the protocol level | Brand new DC before first `gpupdate` |
+| **GPO Status** | Separate check: does a GPO exist on the DC OU that configures Kerberos encryption? | `OK` if GPO sets AES |
+
+The GPO "Network security: Configure encryption types allowed for Kerberos" works by **writing** `msDS-SupportedEncryptionTypes` to each DC's computer object when Group Policy applies. After application, the attribute IS set — so the DC moves from "Not Configured" to "AES Configured".
+
+> **When would "Not Configured" be > 0?**
+> If a brand new DC hasn't received its first `gpupdate` yet (or GPO replication is delayed), its `msDS-SupportedEncryptionTypes` attribute is still null. The script counts it as "Not Configured (GPO Inherited)" because the GPO exists to cover it — it just hasn't applied yet. This is a transient state and resolves on the next Group Policy refresh cycle (default: 5 minutes for DCs).
+
 ### Trusts
 When `msDS-SupportedEncryptionTypes` is 0 or empty on trusts, they **default to AES**. No action needed for these trusts.
 
