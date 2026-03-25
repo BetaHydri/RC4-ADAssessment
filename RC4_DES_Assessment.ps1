@@ -1785,15 +1785,15 @@ function Get-AccountEncryptionAssessment {
                                 }
                             }
                             $acctInfo = @{
-                                Name              = $acct.SamAccountName
-                                DN                = $acct.DistinguishedName
-                                PasswordLastSet   = $acct.PasswordLastSet
-                                PasswordAgeDays   = $pwdAge
-                                WhenCreated       = $acct.WhenCreated
-                                HasSPN            = [bool]$acct.ServicePrincipalName
-                                LastLogon         = $lastLogon
-                                LastLogonDaysAgo  = $lastLogonDaysAgo
-                                Type              = "Missing AES Keys"
+                                Name             = $acct.SamAccountName
+                                DN               = $acct.DistinguishedName
+                                PasswordLastSet  = $acct.PasswordLastSet
+                                PasswordAgeDays  = $pwdAge
+                                WhenCreated      = $acct.WhenCreated
+                                HasSPN           = [bool]$acct.ServicePrincipalName
+                                LastLogon        = $lastLogon
+                                LastLogonDaysAgo = $lastLogonDaysAgo
+                                Type             = "Missing AES Keys"
                             }
                             $assessment.MissingAESKeyAccounts += $acctInfo
                         }
@@ -3001,9 +3001,9 @@ try {
         if ($results.Accounts.TotalMissingAES -gt 0) {
             $warnings++
             $missingNames = ($results.Accounts.MissingAESKeyAccounts | Select-Object -First 5 | ForEach-Object {
-                $logon = if ($_.LastLogon) { " (last logon: $($_.LastLogon.ToString('yyyy-MM-dd')))" } else { " (never logged on)" }
-                "$($_.Name)$logon"
-            }) -join ', '
+                    $logon = if ($_.LastLogon) { " (last logon: $($_.LastLogon.ToString('yyyy-MM-dd')))" } else { " (never logged on)" }
+                    "$($_.Name)$logon"
+                }) -join ', '
             $results.Recommendations += @{
                 Level   = "WARNING"
                 Message = "[$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys: $missingNames"
@@ -3275,12 +3275,12 @@ try {
             # Add accounts missing AES keys
             foreach ($acct in $results.Accounts.MissingAESKeyAccounts) {
                 $csvData += [PSCustomObject]@{
-                    Type            = "Missing AES Keys"
-                    Name            = $acct.Name
-                    Status          = "Password age: $($acct.PasswordAgeDays) days"
-                    EncryptionTypes = "Not Set"
-                    EncryptionValue = $null
-                    LastLogon       = if ($acct.LastLogon) { $acct.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    Type             = "Missing AES Keys"
+                    Name             = $acct.Name
+                    Status           = "Password age: $($acct.PasswordAgeDays) days"
+                    EncryptionTypes  = "Not Set"
+                    EncryptionValue  = $null
+                    LastLogon        = if ($acct.LastLogon) { $acct.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
                     LastLogonDaysAgo = $acct.LastLogonDaysAgo
                 }
             }
