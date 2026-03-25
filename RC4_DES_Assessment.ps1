@@ -1079,6 +1079,7 @@ function Get-EventLogEncryptionAnalysis {
         Details        = @()
         FailedDCs      = @()  # Track DCs that couldn't be queried
         QueriedDCs     = @()  # Track DCs that were successfully queried
+        PerDcStats     = @{}  # Per-DC event counts keyed by hostname
     }
     
     try {
@@ -1164,6 +1165,7 @@ function Get-EventLogEncryptionAnalysis {
                 if (-not $events) {
                     Write-Host "    $([char]0x24D8) No events found on $dcName" -ForegroundColor Gray
                     $assessment.QueriedDCs += $dcName  # Still track as successfully queried
+                    $assessment.PerDcStats[$dcName] = @{ EventsAnalyzed = 0; RC4Tickets = 0; DESTickets = 0; AESTickets = 0 }
                     continue
                 }
                 
@@ -1171,6 +1173,7 @@ function Get-EventLogEncryptionAnalysis {
                     Write-Host "    $([char]0x2713) Retrieved $($events.Count) events from $dcName" -ForegroundColor Green
                     $assessment.EventsAnalyzed += $events.Count
                     $assessment.QueriedDCs += $dcName  # Track successfully queried DC
+                    $dcStats = @{ EventsAnalyzed = $events.Count; RC4Tickets = 0; DESTickets = 0; AESTickets = 0 }
                     
                     foreach ($event in $events) {
                         # Handle both direct and remoted event objects
@@ -1212,6 +1215,7 @@ function Get-EventLogEncryptionAnalysis {
                             { $_ -in @(0x1, 0x3) } {
                                 # DES
                                 $assessment.DESTickets++
+                                $dcStats.DESTickets++
                                 if ($account -and $account -notin $assessment.DESAccounts) {
                                     $assessment.DESAccounts += $account
                                 }
@@ -1219,6 +1223,7 @@ function Get-EventLogEncryptionAnalysis {
                             0x17 {
                                 # RC4
                                 $assessment.RC4Tickets++
+                                $dcStats.RC4Tickets++
                                 if ($account -and $account -notin $assessment.RC4Accounts) {
                                     $assessment.RC4Accounts += $account
                                 }
@@ -1226,12 +1231,14 @@ function Get-EventLogEncryptionAnalysis {
                             { $_ -in @(0x11, 0x12) } {
                                 # AES
                                 $assessment.AESTickets++
+                                $dcStats.AESTickets++
                             }
                             default {
                                 $assessment.UnknownTickets++
                             }
                         }
                     }
+                    $assessment.PerDcStats[$dcName] = $dcStats
                 }
             }
             catch {
@@ -2016,12 +2023,13 @@ function Show-AssessmentSummary {
         # Add successfully queried DCs
         if ($Results.EventLogs.QueriedDCs -and $Results.EventLogs.QueriedDCs.Count -gt 0) {
             foreach ($dcName in $Results.EventLogs.QueriedDCs) {
+                $dcStats = if ($Results.EventLogs.PerDcStats -and $Results.EventLogs.PerDcStats[$dcName]) { $Results.EventLogs.PerDcStats[$dcName] } else { $null }
                 $eventTable += [PSCustomObject]@{
                     'Domain Controller' = $dcName
                     'Status'            = 'Success'
-                    'Events Analyzed'   = if ($Results.EventLogs.EventsAnalyzed) { $Results.EventLogs.EventsAnalyzed } else { 0 }
-                    'RC4 Tickets'       = if ($Results.EventLogs.RC4Tickets) { $Results.EventLogs.RC4Tickets } else { 0 }
-                    'DES Tickets'       = if ($Results.EventLogs.DESTickets) { $Results.EventLogs.DESTickets } else { 0 }
+                    'Events Analyzed'   = if ($dcStats) { $dcStats.EventsAnalyzed } else { 0 }
+                    'RC4 Tickets'       = if ($dcStats) { $dcStats.RC4Tickets } else { 0 }
+                    'DES Tickets'       = if ($dcStats) { $dcStats.DESTickets } else { 0 }
                     'Error Message'     = '-'
                 }
             }

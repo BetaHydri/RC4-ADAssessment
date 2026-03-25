@@ -1452,6 +1452,15 @@ Describe 'Get-EventLogEncryptionAnalysis' {
             $result = Get-EventLogEncryptionAnalysis -ServerParams @{} -Hours 24
             $result.EventsAnalyzed | Should -Be 2
         }
+
+        It 'Tracks per-DC stats' {
+            $result = Get-EventLogEncryptionAnalysis -ServerParams @{} -Hours 24
+            $result.PerDcStats | Should -Not -BeNullOrEmpty
+            $result.PerDcStats['dc01.contoso.com'].EventsAnalyzed | Should -Be 2
+            $result.PerDcStats['dc01.contoso.com'].AESTickets | Should -Be 2
+            $result.PerDcStats['dc01.contoso.com'].RC4Tickets | Should -Be 0
+            $result.PerDcStats['dc01.contoso.com'].DESTickets | Should -Be 0
+        }
     }
 
     Context 'When RC4 and DES tickets are detected' {
@@ -1506,6 +1515,13 @@ Describe 'Get-EventLogEncryptionAnalysis' {
             $result = Get-EventLogEncryptionAnalysis -ServerParams @{} -Hours 24
             $result.DESAccounts | Should -HaveCount 1
             $result.DESAccounts | Should -Contain 'ancient_app'
+        }
+
+        It 'Tracks per-DC stats for RC4 and DES' {
+            $result = Get-EventLogEncryptionAnalysis -ServerParams @{} -Hours 24
+            $result.PerDcStats['dc01.contoso.com'].EventsAnalyzed | Should -Be 3
+            $result.PerDcStats['dc01.contoso.com'].RC4Tickets | Should -Be 2
+            $result.PerDcStats['dc01.contoso.com'].DESTickets | Should -Be 1
         }
     }
 
@@ -1598,6 +1614,10 @@ Describe 'Show-AssessmentSummary' {
                     AESTickets     = 100
                     QueriedDCs     = @('dc01.contoso.com', 'dc02.contoso.com')
                     FailedDCs      = @()
+                    PerDcStats     = @{
+                        'dc01.contoso.com' = @{ EventsAnalyzed = 50; RC4Tickets = 0; DESTickets = 0; AESTickets = 50 }
+                        'dc02.contoso.com' = @{ EventsAnalyzed = 50; RC4Tickets = 0; DESTickets = 0; AESTickets = 50 }
+                    }
                 }
                 Trusts            = @{
                     TotalTrusts = 1
