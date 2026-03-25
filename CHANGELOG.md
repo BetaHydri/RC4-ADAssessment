@@ -4,12 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## v2.8.0 (March 2026) — Current
 
-- **lastLogonTimestamp for missing AES key accounts**: Accounts detected as missing AES keys now include `lastLogonTimestamp` information to help determine if the account is still actively in use
-  - AD query includes `lastLogonTimestamp` property; converted from FileTime Int64 to DateTime
-  - New fields in assessment output: `LastLogon` (DateTime), `LastLogonDaysAgo` (int)
-  - Inline display shows last logon date and days ago for each flagged account
-  - Summary table includes last logon info in the Password Age column
-  - CSV/JSON export includes `LastLogon` and `LastLogonDaysAgo` fields
+- **lastLogonTimestamp for all flagged accounts**: All detected accounts (Missing AES keys, RC4-only, DES-only, DES-enabled, RC4 exception, stale password, USE_DES_KEY_ONLY, RC4-only MSAs) now include `lastLogonTimestamp` to determine if accounts are still actively in use
+  - New `ConvertFrom-LastLogonTimestamp` helper function (FileTime Int64 to DateTime conversion)
+  - AD queries for SPN service accounts, MSAs, and DES flag accounts include `lastLogonTimestamp`
+  - New fields in all account info objects: `LastLogon` (DateTime), `LastLogonDaysAgo` (int)
+  - Inline display shows last logon date for each flagged account
+  - New `Last Logon` column in KRBTGT & Account Encryption Summary table
+  - CSV/JSON export includes `LastLogon` and `LastLogonDaysAgo` columns for all account types
   - Recommendations include last logon date per account for triage prioritization
 - **Fine-Grained Password Policy (FGPP) workaround guidance**: New Section 9b in manual guidance documents the zero-disruption approach to generating AES keys by using a temporary FGPP that disables password history, allowing service account passwords to be reset with the same value
   - Step-by-step: create temporary FGPP, apply to account, reset password, replicate, remove FGPP

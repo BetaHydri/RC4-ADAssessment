@@ -209,6 +209,20 @@ function Get-TicketEncryptionType {
     }
 }
 
+function ConvertFrom-LastLogonTimestamp {
+    param($RawValue)
+    
+    $result = @{ LastLogon = $null; LastLogonDaysAgo = -1 }
+    if ($RawValue) {
+        try {
+            $result.LastLogon = [DateTime]::FromFileTime($RawValue)
+            $result.LastLogonDaysAgo = ((Get-Date) - $result.LastLogon).Days
+        }
+        catch { }
+    }
+    return $result
+}
+
 #endregion
 
 #region Assessment Functions
@@ -1460,22 +1474,25 @@ function Get-AccountEncryptionAssessment {
         try {
             # UAC bit 0x200000 = 2097152 = USE_DES_KEY_ONLY
             $desAccounts = Get-ADUser -Filter 'UserAccountControl -band 2097152' `
-                -Properties UserAccountControl, 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, Enabled @ServerParams -ErrorAction Stop
+                -Properties UserAccountControl, 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, Enabled, lastLogonTimestamp @ServerParams -ErrorAction Stop
             
             if ($desAccounts) {
                 $desList = @($desAccounts)
                 $assessment.TotalDESFlag = $desList.Count
                 
                 foreach ($acct in $desList) {
+                    $logon = ConvertFrom-LastLogonTimestamp -RawValue $acct.lastLogonTimestamp
                     $acctInfo = @{
-                        Name            = $acct.SamAccountName
-                        DN              = $acct.DistinguishedName
-                        Enabled         = $acct.Enabled
-                        PasswordLastSet = $acct.PasswordLastSet
-                        EncryptionValue = $acct.'msDS-SupportedEncryptionTypes'
-                        EncryptionTypes = Get-EncryptionTypeString -Value $acct.'msDS-SupportedEncryptionTypes'
-                        HasSPN          = [bool]$acct.ServicePrincipalName
-                        Flag            = "USE_DES_KEY_ONLY"
+                        Name             = $acct.SamAccountName
+                        DN               = $acct.DistinguishedName
+                        Enabled          = $acct.Enabled
+                        PasswordLastSet  = $acct.PasswordLastSet
+                        EncryptionValue  = $acct.'msDS-SupportedEncryptionTypes'
+                        EncryptionTypes  = Get-EncryptionTypeString -Value $acct.'msDS-SupportedEncryptionTypes'
+                        HasSPN           = [bool]$acct.ServicePrincipalName
+                        LastLogon        = $logon.LastLogon
+                        LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                        Flag             = "USE_DES_KEY_ONLY"
                     }
                     $assessment.DESFlagAccounts += $acctInfo
                 }
@@ -1485,7 +1502,8 @@ function Get-AccountEncryptionAssessment {
                 
                 foreach ($acct in $assessment.DESFlagAccounts) {
                     $enabledStr = if ($acct.Enabled) { "Enabled" } else { "Disabled" }
-                    Write-Host "    $([char]0x2022) $($acct.Name) ($enabledStr)" -ForegroundColor Red
+                    $logonStr = if ($acct.LastLogon) { ", Last logon: $($acct.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                    Write-Host "    $([char]0x2022) $($acct.Name) ($enabledStr)$logonStr" -ForegroundColor Red
                 }
             }
             else {
@@ -1504,7 +1522,7 @@ function Get-AccountEncryptionAssessment {
         try {
             # Get user accounts with SPNs (service accounts)
             $svcAccounts = Get-ADUser -Filter 'ServicePrincipalName -like "*"' `
-                -Properties ServicePrincipalName, 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, DisplayName @ServerParams -ErrorAction Stop
+                -Properties ServicePrincipalName, 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, DisplayName, lastLogonTimestamp @ServerParams -ErrorAction Stop
             
             if ($svcAccounts) {
                 $svcList = @($svcAccounts)
@@ -1513,19 +1531,22 @@ function Get-AccountEncryptionAssessment {
                 foreach ($svc in $svcList) {
                     $encValue = $svc.'msDS-SupportedEncryptionTypes'
                     $pwdAge = if ($svc.PasswordLastSet) { ((Get-Date) - $svc.PasswordLastSet).Days } else { -1 }
+                    $logon = ConvertFrom-LastLogonTimestamp -RawValue $svc.lastLogonTimestamp
                     
                     # Check for RC4-only (has RC4 bit but no AES bits)
                     if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
                         $svcInfo = @{
-                            Name            = $svc.SamAccountName
-                            DN              = $svc.DistinguishedName
-                            Enabled         = $svc.Enabled
-                            PasswordLastSet = $svc.PasswordLastSet
-                            PasswordAgeDays = $pwdAge
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
-                            Type            = "RC4-Only Service Account"
+                            Name             = $svc.SamAccountName
+                            DN               = $svc.DistinguishedName
+                            Enabled          = $svc.Enabled
+                            PasswordLastSet  = $svc.PasswordLastSet
+                            PasswordAgeDays  = $pwdAge
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            SPNs             = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            Type             = "RC4-Only Service Account"
                         }
                         $assessment.RC4OnlyServiceAccounts += $svcInfo
                     }
@@ -1533,15 +1554,17 @@ function Get-AccountEncryptionAssessment {
                     # Check for DES-only (has DES bits but no AES bits)
                     if ($encValue -and ($encValue -band 0x3) -and -not ($encValue -band 0x18)) {
                         $svcInfo = @{
-                            Name            = $svc.SamAccountName
-                            DN              = $svc.DistinguishedName
-                            Enabled         = $svc.Enabled
-                            PasswordLastSet = $svc.PasswordLastSet
-                            PasswordAgeDays = $pwdAge
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
-                            Type            = "DES-Only Service Account"
+                            Name             = $svc.SamAccountName
+                            DN               = $svc.DistinguishedName
+                            Enabled          = $svc.Enabled
+                            PasswordLastSet  = $svc.PasswordLastSet
+                            PasswordAgeDays  = $pwdAge
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            SPNs             = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            Type             = "DES-Only Service Account"
                         }
                         # Avoid duplicate if already caught by RC4 check (e.g., value 0x7 = DES+RC4)
                         if ($svc.SamAccountName -notin $assessment.RC4OnlyServiceAccounts.Name) {
@@ -1552,15 +1575,17 @@ function Get-AccountEncryptionAssessment {
                     # Check for DES bits enabled (has DES bits, even alongside AES - DES is removed in Server 2025)
                     if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
                         $desInfo = @{
-                            Name            = $svc.SamAccountName
-                            DN              = $svc.DistinguishedName
-                            Enabled         = $svc.Enabled
-                            PasswordLastSet = $svc.PasswordLastSet
-                            PasswordAgeDays = $pwdAge
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
-                            AccountType     = "Service Account (SPN)"
+                            Name             = $svc.SamAccountName
+                            DN               = $svc.DistinguishedName
+                            Enabled          = $svc.Enabled
+                            PasswordLastSet  = $svc.PasswordLastSet
+                            PasswordAgeDays  = $pwdAge
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            SPNs             = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            AccountType      = "Service Account (SPN)"
                         }
                         if ($svc.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
                             $assessment.DESEnabledAccounts += $desInfo
@@ -1570,15 +1595,17 @@ function Get-AccountEncryptionAssessment {
                     # Check for explicit RC4 exception (has RC4 + AES = 0x1C or similar)
                     if ($encValue -and ($encValue -band 0x4) -and ($encValue -band 0x18)) {
                         $excInfo = @{
-                            Name            = $svc.SamAccountName
-                            DN              = $svc.DistinguishedName
-                            Enabled         = $svc.Enabled
-                            PasswordLastSet = $svc.PasswordLastSet
-                            PasswordAgeDays = $pwdAge
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
-                            AccountType     = "Service Account (SPN)"
+                            Name             = $svc.SamAccountName
+                            DN               = $svc.DistinguishedName
+                            Enabled          = $svc.Enabled
+                            PasswordLastSet  = $svc.PasswordLastSet
+                            PasswordAgeDays  = $pwdAge
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            SPNs             = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            AccountType      = "Service Account (SPN)"
                         }
                         if ($svc.SamAccountName -notin $assessment.RC4ExceptionAccounts.Name) {
                             $assessment.RC4ExceptionAccounts += $excInfo
@@ -1588,15 +1615,17 @@ function Get-AccountEncryptionAssessment {
                     # Check for stale password with RC4 enabled (>365 days old, RC4 bit set, account enabled)
                     if ($pwdAge -gt 365 -and $encValue -and ($encValue -band 0x4) -and $svc.Enabled) {
                         $svcInfo = @{
-                            Name            = $svc.SamAccountName
-                            DN              = $svc.DistinguishedName
-                            Enabled         = $svc.Enabled
-                            PasswordLastSet = $svc.PasswordLastSet
-                            PasswordAgeDays = $pwdAge
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            SPNs            = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
-                            Type            = "Stale Password Service Account"
+                            Name             = $svc.SamAccountName
+                            DN               = $svc.DistinguishedName
+                            Enabled          = $svc.Enabled
+                            PasswordLastSet  = $svc.PasswordLastSet
+                            PasswordAgeDays  = $pwdAge
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            SPNs             = ($svc.ServicePrincipalName | Select-Object -First 3) -join "; "
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            Type             = "Stale Password Service Account"
                         }
                         # Avoid duplicates with RC4-only list
                         if ($svc.SamAccountName -notin $assessment.StaleServiceAccounts.Name) {
@@ -1612,7 +1641,8 @@ function Get-AccountEncryptionAssessment {
                     Write-Finding -Status "CRITICAL" -Message "$($assessment.RC4OnlyServiceAccounts.Count) service account(s) have RC4/DES-only encryption configured"
                     foreach ($svc in $assessment.RC4OnlyServiceAccounts) {
                         $enabledStr = if ($svc.Enabled) { "Enabled" } else { "Disabled" }
-                        Write-Host "    $([char]0x2022) $($svc.Name) ($enabledStr) - $($svc.EncryptionTypes)" -ForegroundColor Red
+                        $logonStr = if ($svc.LastLogon) { ", Last logon: $($svc.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                        Write-Host "    $([char]0x2022) $($svc.Name) ($enabledStr) - $($svc.EncryptionTypes)$logonStr" -ForegroundColor Red
                         Write-Host "      SPNs: $($svc.SPNs)" -ForegroundColor Gray
                     }
                 }
@@ -1623,7 +1653,8 @@ function Get-AccountEncryptionAssessment {
                 if ($assessment.StaleServiceAccounts.Count -gt 0) {
                     Write-Finding -Status "WARNING" -Message "$($assessment.StaleServiceAccounts.Count) service account(s) have stale passwords (>365 days) with RC4 enabled"
                     foreach ($svc in $assessment.StaleServiceAccounts) {
-                        Write-Host "    $([char]0x2022) $($svc.Name) - Password age: $($svc.PasswordAgeDays) days, Types: $($svc.EncryptionTypes)" -ForegroundColor Yellow
+                        $logonStr = if ($svc.LastLogon) { ", Last logon: $($svc.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                        Write-Host "    $([char]0x2022) $($svc.Name) - Password age: $($svc.PasswordAgeDays) days, Types: $($svc.EncryptionTypes)$logonStr" -ForegroundColor Yellow
                     }
                 }
             }
@@ -1642,7 +1673,7 @@ function Get-AccountEncryptionAssessment {
         
         try {
             $msaAccounts = Get-ADServiceAccount -Filter * `
-                -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, ServicePrincipalName, ObjectClass @ServerParams -ErrorAction Stop
+                -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, ServicePrincipalName, ObjectClass, lastLogonTimestamp @ServerParams -ErrorAction Stop
             
             if ($msaAccounts) {
                 $msaList = @($msaAccounts)
@@ -1650,18 +1681,21 @@ function Get-AccountEncryptionAssessment {
                 
                 foreach ($msa in $msaList) {
                     $encValue = $msa.'msDS-SupportedEncryptionTypes'
+                    $logon = ConvertFrom-LastLogonTimestamp -RawValue $msa.lastLogonTimestamp
                     
                     # Check for RC4-only (has RC4 bit but no AES bits)
                     if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
                         $msaInfo = @{
-                            Name            = $msa.SamAccountName
-                            DN              = $msa.DistinguishedName
-                            Enabled         = $msa.Enabled
-                            PasswordLastSet = $msa.PasswordLastSet
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            ObjectClass     = $msa.ObjectClass
-                            Type            = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
+                            Name             = $msa.SamAccountName
+                            DN               = $msa.DistinguishedName
+                            Enabled          = $msa.Enabled
+                            PasswordLastSet  = $msa.PasswordLastSet
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            ObjectClass      = $msa.ObjectClass
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            Type             = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
                         }
                         $assessment.RC4OnlyMSAs += $msaInfo
                     }
@@ -1669,13 +1703,15 @@ function Get-AccountEncryptionAssessment {
                     # Check for explicit RC4 exception on MSA (has RC4 + AES = 0x1C or similar)
                     if ($encValue -and ($encValue -band 0x4) -and ($encValue -band 0x18)) {
                         $excInfo = @{
-                            Name            = $msa.SamAccountName
-                            DN              = $msa.DistinguishedName
-                            Enabled         = $msa.Enabled
-                            PasswordLastSet = $msa.PasswordLastSet
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
+                            Name             = $msa.SamAccountName
+                            DN               = $msa.DistinguishedName
+                            Enabled          = $msa.Enabled
+                            PasswordLastSet  = $msa.PasswordLastSet
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            AccountType      = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
                         }
                         if ($msa.SamAccountName -notin $assessment.RC4ExceptionAccounts.Name) {
                             $assessment.RC4ExceptionAccounts += $excInfo
@@ -1685,13 +1721,15 @@ function Get-AccountEncryptionAssessment {
                     # Check for DES bits enabled on MSA (has DES bits, even alongside AES)
                     if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
                         $desInfo = @{
-                            Name            = $msa.SamAccountName
-                            DN              = $msa.DistinguishedName
-                            Enabled         = $msa.Enabled
-                            PasswordLastSet = $msa.PasswordLastSet
-                            EncryptionValue = $encValue
-                            EncryptionTypes = Get-EncryptionTypeString -Value $encValue
-                            AccountType     = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
+                            Name             = $msa.SamAccountName
+                            DN               = $msa.DistinguishedName
+                            Enabled          = $msa.Enabled
+                            PasswordLastSet  = $msa.PasswordLastSet
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            AccountType      = switch ($msa.ObjectClass) { 'msDS-GroupManagedServiceAccount' { 'gMSA' } 'msDS-DelegatedManagedServiceAccount' { 'dMSA' } default { 'sMSA' } }
                         }
                         if ($msa.SamAccountName -notin $assessment.DESEnabledAccounts.Name) {
                             $assessment.DESEnabledAccounts += $desInfo
@@ -1704,7 +1742,8 @@ function Get-AccountEncryptionAssessment {
                 if ($assessment.RC4OnlyMSAs.Count -gt 0) {
                     Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
                     foreach ($msa in $assessment.RC4OnlyMSAs) {
-                        Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)" -ForegroundColor Yellow
+                        $logonStr = if ($msa.LastLogon) { ", Last logon: $($msa.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                        Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)$logonStr" -ForegroundColor Yellow
                     }
                 }
                 else {
@@ -1729,7 +1768,8 @@ function Get-AccountEncryptionAssessment {
         if ($assessment.TotalDESEnabled -gt 0) {
             Write-Finding -Status "WARNING" -Message "$($assessment.TotalDESEnabled) account(s) have DES encryption bits enabled (DES is removed in Server 2025)"
             foreach ($des in $assessment.DESEnabledAccounts) {
-                Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)" -ForegroundColor Yellow
+                $logonStr = if ($des.LastLogon) { ", Last logon: $($des.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)$logonStr" -ForegroundColor Yellow
             }
         }
         
@@ -1739,7 +1779,8 @@ function Get-AccountEncryptionAssessment {
             Write-Finding -Status "WARNING" -Message "$($assessment.TotalRC4Exception) account(s) have explicit RC4 exception (RC4 + AES) - review and remove RC4 when possible"
             foreach ($exc in $assessment.RC4ExceptionAccounts) {
                 $excType = if ($exc.AccountType) { $exc.AccountType } else { 'Service Account' }
-                Write-Host "    $([char]0x2022) $($exc.Name) ($excType) - $($exc.EncryptionTypes)" -ForegroundColor Yellow
+                $logonStr = if ($exc.LastLogon) { ", Last logon: $($exc.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                Write-Host "    $([char]0x2022) $($exc.Name) ($excType) - $($exc.EncryptionTypes)$logonStr" -ForegroundColor Yellow
             }
         }
         
@@ -1772,18 +1813,7 @@ function Get-AccountEncryptionAssessment {
                         # Flag accounts where password hasn't been reset since before AES was available
                         # AND msDS-SupportedEncryptionTypes is not set (meaning no explicit AES bits)
                         if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
-                            # Convert lastLogonTimestamp (FileTime Int64) to DateTime
-                            $lastLogon = $null
-                            $lastLogonDaysAgo = -1
-                            if ($acct.lastLogonTimestamp) {
-                                try {
-                                    $lastLogon = [DateTime]::FromFileTime($acct.lastLogonTimestamp)
-                                    $lastLogonDaysAgo = ((Get-Date) - $lastLogon).Days
-                                }
-                                catch {
-                                    $lastLogon = $null
-                                }
-                            }
+                            $logon = ConvertFrom-LastLogonTimestamp -RawValue $acct.lastLogonTimestamp
                             $acctInfo = @{
                                 Name             = $acct.SamAccountName
                                 DN               = $acct.DistinguishedName
@@ -1791,8 +1821,8 @@ function Get-AccountEncryptionAssessment {
                                 PasswordAgeDays  = $pwdAge
                                 WhenCreated      = $acct.WhenCreated
                                 HasSPN           = [bool]$acct.ServicePrincipalName
-                                LastLogon        = $lastLogon
-                                LastLogonDaysAgo = $lastLogonDaysAgo
+                                LastLogon        = $logon.LastLogon
+                                LastLogonDaysAgo = $logon.LastLogonDaysAgo
                                 Type             = "Missing AES Keys"
                             }
                             $assessment.MissingAESKeyAccounts += $acctInfo
@@ -2118,6 +2148,7 @@ function Show-AssessmentSummary {
             'Type'             = 'KRBTGT'
             'Status'           = $krbtgtStatus
             'Password Age'     = if ($Results.Accounts.KRBTGT.PasswordAgeDays -ge 0) { "$($Results.Accounts.KRBTGT.PasswordAgeDays) days" } else { "Unknown" }
+            'Last Logon'       = 'N/A'
             'Encryption Types' = if ($Results.Accounts.KRBTGT.EncryptionTypes) { $Results.Accounts.KRBTGT.EncryptionTypes } else { "Not Set" }
         }
         
@@ -2128,6 +2159,7 @@ function Show-AssessmentSummary {
                 'Type'             = 'USE_DES_KEY_ONLY'
                 'Status'           = 'CRITICAL'
                 'Password Age'     = if ($acct.PasswordLastSet) { "$([int]((Get-Date) - $acct.PasswordLastSet).TotalDays) days" } else { "Unknown" }
+                'Last Logon'       = if ($acct.LastLogon) { "$($acct.LastLogon.ToString('yyyy-MM-dd')) ($($acct.LastLogonDaysAgo)d)" } else { "Never" }
                 'Encryption Types' = $acct.EncryptionTypes
             }
         }
@@ -2139,6 +2171,7 @@ function Show-AssessmentSummary {
                 'Type'             = $svc.Type
                 'Status'           = 'CRITICAL'
                 'Password Age'     = if ($svc.PasswordAgeDays -ge 0) { "$($svc.PasswordAgeDays) days" } else { "Unknown" }
+                'Last Logon'       = if ($svc.LastLogon) { "$($svc.LastLogon.ToString('yyyy-MM-dd')) ($($svc.LastLogonDaysAgo)d)" } else { "Never" }
                 'Encryption Types' = $svc.EncryptionTypes
             }
         }
@@ -2151,6 +2184,7 @@ function Show-AssessmentSummary {
                     'Type'             = 'Stale Password SPN'
                     'Status'           = 'WARNING'
                     'Password Age'     = "$($svc.PasswordAgeDays) days"
+                    'Last Logon'       = if ($svc.LastLogon) { "$($svc.LastLogon.ToString('yyyy-MM-dd')) ($($svc.LastLogonDaysAgo)d)" } else { "Never" }
                     'Encryption Types' = $svc.EncryptionTypes
                 }
             }
@@ -2163,6 +2197,7 @@ function Show-AssessmentSummary {
                 'Type'             = "RC4-Only $($msa.Type)"
                 'Status'           = 'WARNING'
                 'Password Age'     = if ($msa.PasswordLastSet) { "$([int]((Get-Date) - $msa.PasswordLastSet).TotalDays) days" } else { "Auto-managed" }
+                'Last Logon'       = if ($msa.LastLogon) { "$($msa.LastLogon.ToString('yyyy-MM-dd')) ($($msa.LastLogonDaysAgo)d)" } else { "Never" }
                 'Encryption Types' = $msa.EncryptionTypes
             }
         }
@@ -2174,6 +2209,7 @@ function Show-AssessmentSummary {
                 'Type'             = "DES-Enabled $($des.AccountType)"
                 'Status'           = 'WARNING'
                 'Password Age'     = if ($des.PasswordAgeDays) { "$($des.PasswordAgeDays) days" } elseif ($des.PasswordLastSet) { "$([int]((Get-Date) - $des.PasswordLastSet).TotalDays) days" } else { "Auto-managed" }
+                'Last Logon'       = if ($des.LastLogon) { "$($des.LastLogon.ToString('yyyy-MM-dd')) ($($des.LastLogonDaysAgo)d)" } else { "Never" }
                 'Encryption Types' = $des.EncryptionTypes
             }
         }
@@ -2186,18 +2222,19 @@ function Show-AssessmentSummary {
                 'Type'             = $excType
                 'Status'           = 'WARNING'
                 'Password Age'     = if ($exc.PasswordAgeDays -and $exc.PasswordAgeDays -ge 0) { "$($exc.PasswordAgeDays) days" } elseif ($exc.PasswordLastSet) { "$([int]((Get-Date) - $exc.PasswordLastSet).TotalDays) days" } else { "Auto-managed" }
+                'Last Logon'       = if ($exc.LastLogon) { "$($exc.LastLogon.ToString('yyyy-MM-dd')) ($($exc.LastLogonDaysAgo)d)" } else { "Never" }
                 'Encryption Types' = $exc.EncryptionTypes
             }
         }
         
         # Missing AES key accounts
         foreach ($acct in $Results.Accounts.MissingAESKeyAccounts) {
-            $logonInfo = if ($acct.LastLogon) { "Last logon: $($acct.LastLogon.ToString('yyyy-MM-dd'))" } else { "Last logon: Never" }
             $krbtgtTable += [PSCustomObject]@{
                 'Account'          = $acct.Name
                 'Type'             = "Missing AES Keys"
                 'Status'           = 'WARNING'
-                'Password Age'     = "$($acct.PasswordAgeDays) days ($logonInfo)"
+                'Password Age'     = "$($acct.PasswordAgeDays) days"
+                'Last Logon'       = if ($acct.LastLogon) { "$($acct.LastLogon.ToString('yyyy-MM-dd')) ($($acct.LastLogonDaysAgo)d)" } else { "Never" }
                 'Encryption Types' = 'Not Set'
             }
         }
@@ -3221,44 +3258,52 @@ try {
             # Add DES flag accounts
             foreach ($acct in $results.Accounts.DESFlagAccounts) {
                 $csvData += [PSCustomObject]@{
-                    Type            = "DES Flag Account"
-                    Name            = $acct.Name
-                    Status          = "USE_DES_KEY_ONLY"
-                    EncryptionTypes = $acct.EncryptionTypes
-                    EncryptionValue = $acct.EncryptionValue
+                    Type             = "DES Flag Account"
+                    Name             = $acct.Name
+                    Status           = "USE_DES_KEY_ONLY"
+                    EncryptionTypes  = $acct.EncryptionTypes
+                    EncryptionValue  = $acct.EncryptionValue
+                    LastLogon        = if ($acct.LastLogon) { $acct.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $acct.LastLogonDaysAgo
                 }
             }
             
             # Add RC4/DES-only service accounts
             foreach ($svc in $results.Accounts.RC4OnlyServiceAccounts) {
                 $csvData += [PSCustomObject]@{
-                    Type            = $svc.Type
-                    Name            = $svc.Name
-                    Status          = "$($svc.Type) (Password age: $($svc.PasswordAgeDays) days)"
-                    EncryptionTypes = $svc.EncryptionTypes
-                    EncryptionValue = $svc.EncryptionValue
+                    Type             = $svc.Type
+                    Name             = $svc.Name
+                    Status           = "$($svc.Type) (Password age: $($svc.PasswordAgeDays) days)"
+                    EncryptionTypes  = $svc.EncryptionTypes
+                    EncryptionValue  = $svc.EncryptionValue
+                    LastLogon        = if ($svc.LastLogon) { $svc.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $svc.LastLogonDaysAgo
                 }
             }
             
             # Add RC4-only MSAs
             foreach ($msa in $results.Accounts.RC4OnlyMSAs) {
                 $csvData += [PSCustomObject]@{
-                    Type            = "RC4-Only $($msa.Type)"
-                    Name            = $msa.Name
-                    Status          = "RC4-Only"
-                    EncryptionTypes = $msa.EncryptionTypes
-                    EncryptionValue = $msa.EncryptionValue
+                    Type             = "RC4-Only $($msa.Type)"
+                    Name             = $msa.Name
+                    Status           = "RC4-Only"
+                    EncryptionTypes  = $msa.EncryptionTypes
+                    EncryptionValue  = $msa.EncryptionValue
+                    LastLogon        = if ($msa.LastLogon) { $msa.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $msa.LastLogonDaysAgo
                 }
             }
             
             # Add DES-enabled accounts
             foreach ($des in $results.Accounts.DESEnabledAccounts) {
                 $csvData += [PSCustomObject]@{
-                    Type            = "DES-Enabled $($des.AccountType)"
-                    Name            = $des.Name
-                    Status          = "DES bits enabled (insecure)"
-                    EncryptionTypes = $des.EncryptionTypes
-                    EncryptionValue = $des.EncryptionValue
+                    Type             = "DES-Enabled $($des.AccountType)"
+                    Name             = $des.Name
+                    Status           = "DES bits enabled (insecure)"
+                    EncryptionTypes  = $des.EncryptionTypes
+                    EncryptionValue  = $des.EncryptionValue
+                    LastLogon        = if ($des.LastLogon) { $des.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $des.LastLogonDaysAgo
                 }
             }
             
@@ -3266,11 +3311,13 @@ try {
             foreach ($exc in $results.Accounts.RC4ExceptionAccounts) {
                 $excType = if ($exc.AccountType) { "RC4 Exception $($exc.AccountType)" } else { 'RC4 Exception' }
                 $csvData += [PSCustomObject]@{
-                    Type            = $excType
-                    Name            = $exc.Name
-                    Status          = "Explicit RC4 exception (review and remove RC4 when possible)"
-                    EncryptionTypes = $exc.EncryptionTypes
-                    EncryptionValue = $exc.EncryptionValue
+                    Type             = $excType
+                    Name             = $exc.Name
+                    Status           = "Explicit RC4 exception (review and remove RC4 when possible)"
+                    EncryptionTypes  = $exc.EncryptionTypes
+                    EncryptionValue  = $exc.EncryptionValue
+                    LastLogon        = if ($exc.LastLogon) { $exc.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $exc.LastLogonDaysAgo
                 }
             }
             
