@@ -70,7 +70,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.7.2
+  Version: 2.8.0
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -136,7 +136,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.7.2"
+$script:Version = "2.8.0"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -1760,7 +1760,7 @@ function Get-AccountEncryptionAssessment {
                 # These accounts may have been created before DFL was raised and never had password reset
                 $fiveYearsAgo = (Get-Date).AddYears(-5)
                 $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
-                    -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated @ServerParams -ErrorAction Stop
+                    -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated, lastLogonTimestamp @ServerParams -ErrorAction Stop
                 
                 if ($oldAccounts) {
                     $oldList = @($oldAccounts)
@@ -1772,14 +1772,28 @@ function Get-AccountEncryptionAssessment {
                         # Flag accounts where password hasn't been reset since before AES was available
                         # AND msDS-SupportedEncryptionTypes is not set (meaning no explicit AES bits)
                         if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
+                            # Convert lastLogonTimestamp (FileTime Int64) to DateTime
+                            $lastLogon = $null
+                            $lastLogonDaysAgo = -1
+                            if ($acct.lastLogonTimestamp) {
+                                try {
+                                    $lastLogon = [DateTime]::FromFileTime($acct.lastLogonTimestamp)
+                                    $lastLogonDaysAgo = ((Get-Date) - $lastLogon).Days
+                                }
+                                catch {
+                                    $lastLogon = $null
+                                }
+                            }
                             $acctInfo = @{
-                                Name            = $acct.SamAccountName
-                                DN              = $acct.DistinguishedName
-                                PasswordLastSet = $acct.PasswordLastSet
-                                PasswordAgeDays = $pwdAge
-                                WhenCreated     = $acct.WhenCreated
-                                HasSPN          = [bool]$acct.ServicePrincipalName
-                                Type            = "Missing AES Keys"
+                                Name              = $acct.SamAccountName
+                                DN                = $acct.DistinguishedName
+                                PasswordLastSet   = $acct.PasswordLastSet
+                                PasswordAgeDays   = $pwdAge
+                                WhenCreated       = $acct.WhenCreated
+                                HasSPN            = [bool]$acct.ServicePrincipalName
+                                LastLogon         = $lastLogon
+                                LastLogonDaysAgo  = $lastLogonDaysAgo
+                                Type              = "Missing AES Keys"
                             }
                             $assessment.MissingAESKeyAccounts += $acctInfo
                         }
@@ -1794,7 +1808,8 @@ function Get-AccountEncryptionAssessment {
                         $displayCount = [Math]::Min($assessment.MissingAESKeyAccounts.Count, 10)
                         foreach ($acct in $assessment.MissingAESKeyAccounts | Select-Object -First $displayCount) {
                             $spnStr = if ($acct.HasSPN) { " [HAS SPN]" } else { "" }
-                            Write-Host "    $([char]0x2022) $($acct.Name) - Password age: $($acct.PasswordAgeDays) days$spnStr" -ForegroundColor Yellow
+                            $logonStr = if ($acct.LastLogon) { ", Last logon: $($acct.LastLogon.ToString('yyyy-MM-dd')) ($($acct.LastLogonDaysAgo)d ago)" } else { ", Last logon: Never" }
+                            Write-Host "    $([char]0x2022) $($acct.Name) - Password age: $($acct.PasswordAgeDays) days$logonStr$spnStr" -ForegroundColor Yellow
                         }
                         if ($assessment.MissingAESKeyAccounts.Count -gt 10) {
                             Write-Host "    ... and $($assessment.MissingAESKeyAccounts.Count - 10) more" -ForegroundColor Yellow
@@ -2173,6 +2188,18 @@ function Show-AssessmentSummary {
             }
         }
         
+        # Missing AES key accounts
+        foreach ($acct in $Results.Accounts.MissingAESKeyAccounts) {
+            $logonInfo = if ($acct.LastLogon) { "Last logon: $($acct.LastLogon.ToString('yyyy-MM-dd'))" } else { "Last logon: Never" }
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $acct.Name
+                'Type'             = "Missing AES Keys"
+                'Status'           = 'WARNING'
+                'Password Age'     = "$($acct.PasswordAgeDays) days ($logonInfo)"
+                'Encryption Types' = 'Not Set'
+            }
+        }
+        
         # Display table with color coding
         $krbtgtTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
             if ($_ -match "CRITICAL") {
@@ -2214,6 +2241,9 @@ function Show-AssessmentSummary {
         }
         if ($Results.Accounts.TotalStaleSvc -gt 0) {
             Write-Host "    Stale Password Service Accounts: $($Results.Accounts.TotalStaleSvc)" -ForegroundColor Yellow
+        }
+        if ($Results.Accounts.TotalMissingAES -gt 0) {
+            Write-Host "    Missing AES Key Accounts: $($Results.Accounts.TotalMissingAES)" -ForegroundColor Yellow
         }
     }
     
@@ -2535,22 +2565,86 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    
    Accounts whose password was last set BEFORE the Domain Functional Level
    was raised to Windows Server 2008 will NOT have AES keys generated.
+   The lastLogonTimestamp field helps determine if the account is still in use.
    
-   To remediate:
-   $([char]0x2022) Reset password TWICE (use different or same password)
-   $([char]0x2022) Update services running under these accounts with new password
-   $([char]0x2022) After reset, AES keys are automatically generated
-   
-   Find affected accounts:
+   Find affected accounts (including last logon):
    PS> Get-ADUser -Filter 'Enabled -eq `$true' -Properties PasswordLastSet, `
-       'msDS-SupportedEncryptionTypes' |
+       'msDS-SupportedEncryptionTypes', lastLogonTimestamp |
        Where-Object { `$_.PasswordLastSet -lt (Get-Date).AddYears(-5) -and
                        (-not `$_.'msDS-SupportedEncryptionTypes' -or
                         `$_.'msDS-SupportedEncryptionTypes' -eq 0) } |
-       Select-Object Name, PasswordLastSet
+       Select-Object Name, PasswordLastSet, @{N='LastLogon';E={
+           if (`$_.lastLogonTimestamp) { [DateTime]::FromFileTime(`$_.lastLogonTimestamp) }
+           else { 'Never' }
+       }}
+   
+   $([char]0x2022) Accounts with recent lastLogonTimestamp: actively in use, prioritize
+   $([char]0x2022) Accounts that never logged on or >90 days: consider disabling first
+   
+   Remediation Options:
+   
+   a) Option 1: Reset Password (Simple)
+      $([char]0x2022) Reset password to generate AES keys
+      $([char]0x2022) Update services running under these accounts with new password
+      $([char]0x2022) After reset, AES keys are automatically generated
+   
+   b) Option 2: Fine-Grained Password Policy (Zero-Disruption)
+      Use a temporary FGPP to bypass domain password history requirements,
+      allowing you to reset the password with the SAME value. This avoids
+      service disruption while generating AES keys.
+      
+      Step 1: Create a temporary FGPP (one-time setup):
+      PS> New-ADFineGrainedPasswordPolicy -Name 'Temp_AES_Key_Fix' ``
+            -Precedence 1 ``
+            -PasswordHistoryCount 0 ``
+            -MinPasswordAge  '0.00:00:00' ``
+            -MaxPasswordAge  '0.00:00:00' ``
+            -ComplexityEnabled `$false ``
+            -MinPasswordLength 0 ``
+            -LockoutThreshold 0 ``
+            -ReversibleEncryptionEnabled `$false
+      
+      Step 2: Apply FGPP to the target account:
+      PS> Add-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' ``
+            -Subjects '<AccountName>'
+      
+      Step 3: Reset password with the same value:
+      PS> Set-ADAccountPassword '<AccountName>' -Reset ``
+            -NewPassword (ConvertTo-SecureString '<SamePassword>' -AsPlainText -Force)
+      
+      Step 4: Force replication to all DCs:
+      CMD> repadmin /syncall /AdePq
+      
+      Step 5: Remove FGPP from the account:
+      PS> Remove-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' ``
+            -Subjects '<AccountName>'
+      
+      Step 6: Verify AES keys exist (Event ID 4768 should now show AES):
+      PS> Get-ADUser '<AccountName>' -Properties msDS-SupportedEncryptionTypes
+   
+   c) Option 3: Explicitly Set AES Encryption Types
+      In some cases, resetting the password alone is not enough. If Event ID
+      4768 still shows 'Available Keys: RC4' after the password reset, you
+      must explicitly set the account's msDS-SupportedEncryptionTypes to AES:
+      
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      # 24 = 0x18 = AES128 + AES256
+      PS> Set-ADAccountPassword '<AccountName>' -Reset ``
+            -NewPassword (ConvertTo-SecureString '<Password>' -AsPlainText -Force)
+      CMD> klist purge
+      
+      After this, Event ID 4768 should show:
+        MSDS-SupportedEncryptionTypes: 0x18 (AES128-SHA96, AES256-SHA96)
+        Available Keys: AES-SHA1, RC4
+      
+      $([char]0x26A0) The 'Available Keys' field always lists RC4 as available (AD
+      stores RC4 keys for all accounts). What matters is that AES is
+      listed FIRST and that 0x18 is set on the account.
    
    $([char]0x26A0) For service accounts, coordinate password reset with
    application teams to avoid service disruptions.
+   $([char]0x26A0) For Linux services using keytabs, regenerate keytab files
+   after password reset (see Linux/Kerberos Keytab Impact above).
 
 10. Microsoft Kerberos-Crypto Tools
    $([string]([char]0x2500) * 60)
@@ -2906,14 +3000,23 @@ try {
         
         if ($results.Accounts.TotalMissingAES -gt 0) {
             $warnings++
-            $missingNames = ($results.Accounts.MissingAESKeyAccounts | Select-Object -First 5).Name -join ', '
+            $missingNames = ($results.Accounts.MissingAESKeyAccounts | Select-Object -First 5 | ForEach-Object {
+                $logon = if ($_.LastLogon) { " (last logon: $($_.LastLogon.ToString('yyyy-MM-dd')))" } else { " (never logged on)" }
+                "$($_.Name)$logon"
+            }) -join ', '
             $results.Recommendations += @{
                 Level   = "WARNING"
                 Message = "[$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys: $missingNames"
                 Fix     = @(
-                    "# Reset password TWICE to generate AES keys (use different or same password):"
-                    "Set-ADAccountPassword '<AccountName>' -Reset"
-                    "# Wait a few minutes, then reset again. Update services with new password."
+                    "# Option 1: Reset password to generate AES keys:"
+                    "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                    "# Option 2: Use Fine-Grained Password Policy (FGPP) to re-use same password:"
+                    "# Create a temporary FGPP that disables password history, apply to account,"
+                    "# reset password with the same value, then remove the FGPP."
+                    "# This avoids service disruption while generating AES keys."
+                    "# If AES is still not used after password reset, explicitly set AES:"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
             }
         }
@@ -3177,6 +3280,8 @@ try {
                     Status          = "Password age: $($acct.PasswordAgeDays) days"
                     EncryptionTypes = "Not Set"
                     EncryptionValue = $null
+                    LastLogon       = if ($acct.LastLogon) { $acct.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $acct.LastLogonDaysAgo
                 }
             }
         }

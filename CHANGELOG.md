@@ -2,7 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.7.2 (March 2026) — Current
+## v2.8.0 (March 2026) — Current
+
+- **lastLogonTimestamp for missing AES key accounts**: Accounts detected as missing AES keys now include `lastLogonTimestamp` information to help determine if the account is still actively in use
+  - AD query includes `lastLogonTimestamp` property; converted from FileTime Int64 to DateTime
+  - New fields in assessment output: `LastLogon` (DateTime), `LastLogonDaysAgo` (int)
+  - Inline display shows last logon date and days ago for each flagged account
+  - Summary table includes last logon info in the Password Age column
+  - CSV/JSON export includes `LastLogon` and `LastLogonDaysAgo` fields
+  - Recommendations include last logon date per account for triage prioritization
+- **Fine-Grained Password Policy (FGPP) workaround guidance**: New Section 9b in manual guidance documents the zero-disruption approach to generating AES keys by using a temporary FGPP that disables password history, allowing service account passwords to be reset with the same value
+  - Step-by-step: create temporary FGPP, apply to account, reset password, replicate, remove FGPP
+  - Based on real-world field experience with `sccmservice` and Cluster accounts
+- **Explicit AES enforcement guidance**: New Section 9c documents that in some cases, resetting the password alone is not sufficient — you must explicitly set `msDS-SupportedEncryptionTypes` to `0x18` (AES-only) and then reset the password again to force AES key generation
+  - Before/after Event ID 4768 examples showing the difference between RC4-only and AES-enabled
+  - Clarifies that `Available Keys: AES-SHA1, RC4` is expected (AD always stores RC4 keys)
+- **Missing AES key accounts added to summary table**: These accounts now appear in the KRBTGT & Account Encryption Summary table alongside other account types
+- 2 new Pester tests for lastLogonTimestamp handling (with and without logon data)
+
+## v2.7.2 (March 2026)
 
 - **SYSVOL GPO detection fallback fix**: Fixed `Get-DomainControllerEncryption` SYSVOL fallback path failing silently when `Get-ADObject` was not available as a mockable command in test environments
   - Added `Get-ADObject` stub to Pester test harness alongside existing AD cmdlet stubs

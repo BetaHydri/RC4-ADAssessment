@@ -2363,6 +2363,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
                             'msDS-SupportedEncryptionTypes' = $null
                             ServicePrincipalName            = $null
                             WhenCreated                     = (Get-Date).AddDays(-3000)
+                            lastLogonTimestamp              = (Get-Date).AddDays(-5).ToFileTime()
                         },
                         [PSCustomObject]@{
                             SamAccountName                  = 'old_svc'
@@ -2372,6 +2373,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
                             'msDS-SupportedEncryptionTypes' = 0
                             ServicePrincipalName            = @('HTTP/old.contoso.com')
                             WhenCreated                     = (Get-Date).AddDays(-3000)
+                            lastLogonTimestamp              = $null
                         }
                     )
                 }
@@ -2396,6 +2398,19 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
             $result = Get-AccountEncryptionAssessment -ServerParams @{}
             $result.MissingAESKeyAccounts[0].HasSPN | Should -BeFalse
             $result.MissingAESKeyAccounts[1].HasSPN | Should -BeTrue
+        }
+
+        It 'Includes LastLogon for accounts with lastLogonTimestamp' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.MissingAESKeyAccounts[0].LastLogon | Should -Not -BeNullOrEmpty
+            $result.MissingAESKeyAccounts[0].LastLogonDaysAgo | Should -BeGreaterOrEqual 4
+            $result.MissingAESKeyAccounts[0].LastLogonDaysAgo | Should -BeLessOrEqual 6
+        }
+
+        It 'Sets LastLogon to null for accounts without lastLogonTimestamp' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.MissingAESKeyAccounts[1].LastLogon | Should -BeNullOrEmpty
+            $result.MissingAESKeyAccounts[1].LastLogonDaysAgo | Should -Be -1
         }
     }
 
