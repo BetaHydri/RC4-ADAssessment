@@ -3214,11 +3214,13 @@ try {
         # Add DC details
         foreach ($dc in $results.DomainControllers.Details) {
             $csvData += [PSCustomObject]@{
-                Type            = "Domain Controller"
-                Name            = $dc.Name
-                Status          = $dc.Status
-                EncryptionTypes = $dc.EncryptionTypes
-                EncryptionValue = $dc.EncryptionValue
+                Type             = "Domain Controller"
+                Name             = $dc.Name
+                Status           = $dc.Status
+                EncryptionTypes  = $dc.EncryptionTypes
+                EncryptionValue  = $dc.EncryptionValue
+                LastLogon        = ''
+                LastLogonDaysAgo = ''
             }
         }
         
@@ -3226,33 +3228,39 @@ try {
         if ($results.DomainControllers.AzureADKerberos) {
             $aadK = $results.DomainControllers.AzureADKerberos
             $csvData += [PSCustomObject]@{
-                Type            = "Entra Kerberos Proxy"
-                Name            = $aadK.Name
-                Status          = $aadK.Status
-                EncryptionTypes = $aadK.EncryptionTypes
-                EncryptionValue = $aadK.EncryptionValue
+                Type             = "Entra Kerberos Proxy"
+                Name             = $aadK.Name
+                Status           = $aadK.Status
+                EncryptionTypes  = $aadK.EncryptionTypes
+                EncryptionValue  = $aadK.EncryptionValue
+                LastLogon        = ''
+                LastLogonDaysAgo = ''
             }
         }
         
         # Add trust details
         foreach ($trust in $results.Trusts.Details) {
             $csvData += [PSCustomObject]@{
-                Type            = "Trust"
-                Name            = $trust.Name
-                Status          = $trust.Status
-                EncryptionTypes = $trust.EncryptionTypes
-                EncryptionValue = $trust.EncryptionValue
+                Type             = "Trust"
+                Name             = $trust.Name
+                Status           = $trust.Status
+                EncryptionTypes  = $trust.EncryptionTypes
+                EncryptionValue  = $trust.EncryptionValue
+                LastLogon        = ''
+                LastLogonDaysAgo = ''
             }
         }
         
         # Add KRBTGT details
         if ($results.Accounts) {
             $csvData += [PSCustomObject]@{
-                Type            = "KRBTGT"
-                Name            = "krbtgt"
-                Status          = "$($results.Accounts.KRBTGT.Status) (Password age: $($results.Accounts.KRBTGT.PasswordAgeDays) days)"
-                EncryptionTypes = $results.Accounts.KRBTGT.EncryptionTypes
-                EncryptionValue = $results.Accounts.KRBTGT.EncryptionValue
+                Type             = "KRBTGT"
+                Name             = "krbtgt"
+                Status           = "$($results.Accounts.KRBTGT.Status) (Password age: $($results.Accounts.KRBTGT.PasswordAgeDays) days)"
+                EncryptionTypes  = $results.Accounts.KRBTGT.EncryptionTypes
+                EncryptionValue  = $results.Accounts.KRBTGT.EncryptionValue
+                LastLogon        = ''
+                LastLogonDaysAgo = ''
             }
             
             # Add DES flag accounts
@@ -3338,18 +3346,22 @@ try {
         # Add KDC registry data
         if ($results.KdcRegistry) {
             $csvData += [PSCustomObject]@{
-                Type            = "KDC Registry"
-                Name            = "DefaultDomainSupportedEncTypes"
-                Status          = $results.KdcRegistry.DefaultDomainSupportedEncTypes.Status
-                EncryptionTypes = if ($results.KdcRegistry.DefaultDomainSupportedEncTypes.Types) { $results.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
-                EncryptionValue = $results.KdcRegistry.DefaultDomainSupportedEncTypes.Value
+                Type             = "KDC Registry"
+                Name             = "DefaultDomainSupportedEncTypes"
+                Status           = $results.KdcRegistry.DefaultDomainSupportedEncTypes.Status
+                EncryptionTypes  = if ($results.KdcRegistry.DefaultDomainSupportedEncTypes.Types) { $results.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
+                EncryptionValue  = $results.KdcRegistry.DefaultDomainSupportedEncTypes.Value
+                LastLogon        = ''
+                LastLogonDaysAgo = ''
             }
             $csvData += [PSCustomObject]@{
-                Type            = "KDC Registry"
-                Name            = "RC4DefaultDisablementPhase"
-                Status          = $results.KdcRegistry.RC4DefaultDisablementPhase.Status
-                EncryptionTypes = "N/A"
-                EncryptionValue = $results.KdcRegistry.RC4DefaultDisablementPhase.Value
+                Type             = "KDC Registry"
+                Name             = "RC4DefaultDisablementPhase"
+                Status           = $results.KdcRegistry.RC4DefaultDisablementPhase.Status
+                EncryptionTypes  = "N/A"
+                EncryptionValue  = $results.KdcRegistry.RC4DefaultDisablementPhase.Value
+                LastLogon        = ''
+                LastLogonDaysAgo = ''
             }
         }
         
@@ -3357,11 +3369,13 @@ try {
         if ($results.KdcSvcEvents -and $results.KdcSvcEvents.TotalEvents -gt 0) {
             foreach ($kvp in $results.KdcSvcEvents.EventCounts.GetEnumerator()) {
                 $csvData += [PSCustomObject]@{
-                    Type            = "KDCSVC Event (CVE-2026-20833)"
-                    Name            = "Event ID $($kvp.Key)"
-                    Status          = $results.KdcSvcEvents.Status
-                    EncryptionTypes = "N/A"
-                    EncryptionValue = $kvp.Value
+                    Type             = "KDCSVC Event (CVE-2026-20833)"
+                    Name             = "Event ID $($kvp.Key)"
+                    Status           = $results.KdcSvcEvents.Status
+                    EncryptionTypes  = "N/A"
+                    EncryptionValue  = $kvp.Value
+                    LastLogon        = ''
+                    LastLogonDaysAgo = ''
                 }
             }
         }
