@@ -410,7 +410,17 @@ Resolve-DnsName your-domain.com
 
 ## 🎯 What's New
 
-### v2.7.2 (March 2026) — Current
+> For the complete version history with full details, see [CHANGELOG.md](CHANGELOG.md).
+
+### v2.8.0 (March 2026) — Current
+
+- **lastLogonTimestamp for all flagged accounts** — Last Logon column in summary table, CSV, and JSON for triage prioritization
+- **Fine-Grained Password Policy (FGPP) workaround guidance** — Zero-disruption AES key generation for service accounts
+- **Explicit AES enforcement guidance** — Section 9c for cases where password reset alone doesn't generate AES keys
+- **Missing AES key accounts in summary table** — Now appear alongside other account types
+- **AzureADKerberos key rotation reminder** — `Set-AzureADKerberosServer -RotateServerKey` with module install steps
+
+### v2.7.2 (March 2026)
 
 - **SYSVOL GPO detection fallback fix**: Fixed silent failure in SYSVOL-based GPO encryption detection when GroupPolicy module is broken
 - Fixed Pester test mock parameter type mismatch for `Get-ADComputer` and `Get-ADObject` stubs
