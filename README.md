@@ -118,45 +118,50 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.4.0
+DES/RC4 Kerberos Encryption Assessment v2.8.0
 ================================================================================
 
 Domain Controller Encryption Configuration
 ────────────────────────────────────────────────────────────────
-ℹ️  Found 1 Domain Controller(s)
-✅ All Domain Controllers have AES encryption configured
-⚠️  1 DC(s) have RC4 encryption enabled
+ⓘ  Found 1 Domain Controller(s)
+✓ All Domain Controllers have AES encryption configured
+⚠  1 DC(s) have RC4 encryption enabled
 
 KRBTGT & Service Account Encryption Assessment
 ────────────────────────────────────────────────────────────────
-✅ KRBTGT password age: 21 days
-✅ No accounts with USE_DES_KEY_ONLY flag
-✅ No service accounts with RC4/DES-only encryption
-✅ No accounts found with potentially missing AES keys
+✓ KRBTGT password age: 25 days (last set: 2026-02-27)
+✓ No accounts with USE_DES_KEY_ONLY flag
+✓ No service accounts with RC4/DES-only encryption
+⚠  1 account(s) have explicit RC4 exception (RC4 + AES) - review and remove RC4 when possible
+    • gmsa-ces$ (gMSA) - RC4-HMAC, AES128-HMAC, AES256-HMAC, Last logon: 2026-03-05
+✓ No accounts found with potentially missing AES keys
 
 KDC Registry Configuration Assessment
 ────────────────────────────────────────────────────────────────
-ℹ️  DefaultDomainSupportedEncTypes: Not set (uses OS defaults)
-⚠️  RC4DefaultDisablementPhase not set
-   Deploy January 2026+ security updates, then set to 1 to enable KDCSVC audit events
+ⓘ  DefaultDomainSupportedEncTypes: Not set (uses OS defaults)
+✓ RC4DefaultDisablementPhase = 1 (Audit mode active)
+
+KRBTGT & ACCOUNT ENCRYPTION SUMMARY
+────────────────────────────────────────────────────────────────
+
+Account    Type               Status  Password Age Last Logon       Encryption Types
+-------    ----               ------  ------------ ----------       ----------------
+krbtgt     KRBTGT             OK      25 days      N/A              Not Set (Default)
+gmsa-ces$  RC4 Exception gMSA WARNING 20 days      2026-03-05 (19d) RC4-HMAC, AES128-HMAC, AES256-HMAC
 
 Overall Security Assessment
 ────────────────────────────────────────────────────────────────
-⚠️  Security warnings detected - remediation recommended
+⚠  Security warnings detected - remediation recommended
 
   Recommendations & Remediation:
-    • WARNING: [contoso.com] Remove RC4 encryption from 1 Domain Controller(s): DC01
-      # Or configure via GPO: 'Network security: Configure encryption types
-      #   allowed for Kerberos' = AES128 + AES256
-      PS> Set-ADComputer DC01 -Replace @{'msDS-SupportedEncryptionTypes'=24}
+    • WARNING: [contoso.com] 1 account(s) have explicit RC4 exception (0x1C)
+      # To harden: remove RC4 and set AES-only:
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+      # Test application access - if it breaks, re-add RC4 exception
 
-    • WARNING: [contoso.com] RC4DefaultDisablementPhase not set
-      # Step 1: Deploy January 2026+ security updates on all DCs
-      # Step 2: Enable KDCSVC audit events (System log events 201-209):
-      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
-            -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
-      # Step 3: Monitor KDCSVC events and remediate any RC4 dependencies
-      # Step 4: When audit events are clear, enable Enforcement mode (value 2)
+    • WARNING: [contoso.com] Remove RC4 encryption from 1 Domain Controller(s): DC01
+      PS> Set-ADComputer DC01 -Replace @{'msDS-SupportedEncryptionTypes'=24}
 
   💡 Tip: Use -IncludeGuidance for the full reference manual
      (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline).
@@ -171,16 +176,16 @@ Overall Security Assessment
 ```
 Kerberos Audit Policy Verification
 ────────────────────────────────────────────────────────────────
-✅ Kerberos auditing is enabled (Authentication Service + Ticket Operations)
+✓ Kerberos auditing is enabled (Authentication Service + Ticket Operations)
 
 Event Log Analysis - Actual DES/RC4 Usage
 ────────────────────────────────────────────────────────────────
-ℹ️  Querying event logs from 3 Domain Controller(s)...
-  • DC01... ✅ 12,543 events
-  • DC02... ✅ 11,892 events
-  • DC03... ❌ RPC server unavailable
+ⓘ  Querying event logs from 3 Domain Controller(s)...
+  • DC01... ✓ 12,543 events
+  • DC02... ✓ 11,892 events
+  • DC03... ✗ RPC server unavailable
 
-❌ RC4 tickets detected in active use!
+✗ RC4 tickets detected in active use!
   RC4 accounts: LEGACY-APP$, SQL2008-SRV$
 
   Recommendations & Remediation:
@@ -405,6 +410,21 @@ Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 ```
 
 After the password reset, AES keys will be generated automatically (assuming DFL ≥ 2008).
+
+## Last Logon Timestamp
+
+All flagged accounts include `lastLogonTimestamp` data to help determine if the account is still actively in use. This appears in the console summary table (`Last Logon` column), CSV export (`LastLogon`, `LastLogonDaysAgo` columns), and JSON export.
+
+### Why `lastLogonTimestamp` and not `lastLogon`?
+
+| Attribute | Replicated | Accuracy | Query cost |
+|-----------|-----------|----------|------------|
+| `lastLogonTimestamp` | Yes (all DCs) | ~9-14 day lag | Single DC query |
+| `lastLogon` | No (per-DC only) | Exact | Must query **every** DC |
+
+The assessment identifies accounts with passwords >5 years old or >365 days stale — a 9-14 day lag is negligible for that purpose. Querying all DCs for `lastLogon` would significantly slow down the script, especially in large environments with many DCs.
+
+> **Note:** The `lastLogonTimestamp` value could be off by up to ~14 days (controlled by `ms-DS-Logon-Time-Sync-Interval`, default 14 days minus random 0-5 days). This does not change the remediation decision for accounts flagged by this assessment.
 
 ## Compare-Assessments
 
