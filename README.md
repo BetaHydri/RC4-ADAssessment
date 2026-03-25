@@ -333,7 +333,7 @@ This object is **not a real Domain Controller**. It is a read-only proxy object 
 |--------|--------|
 | **What it does** | Enables Entra ID to issue partial TGTs so users can access on-premises resources via Cloud Kerberos Trust |
 | **Encryption settings** | Managed by Entra ID — `msDS-SupportedEncryptionTypes` is typically not set (shows "Not Set (Default)") |
-| **Should you change it?** | **No.** Do not manually set encryption types on this object. Entra ID rotates its keys automatically via `Set-AzureADKerberosServer` / `Set-EntraKerberosServer` |
+| **Should you change it?** | **No.** Do not manually set encryption types on this object. Its `krbtgt` keys must be rotated regularly using `Set-AzureADKerberosServer -RotateServerKey` (keys are **not** auto-rotated) |
 | **Impact on assessment** | If counted as a DC, it inflates the "Not Configured" count and can trigger false positive warnings |
 
 Starting in **v2.5.0** (refined in **v2.5.1**), the assessment automatically detects this object, excludes it from all DC metrics (Total DCs, AES Configured, etc.), and displays it separately in the summary as an informational note.
