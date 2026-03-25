@@ -1984,9 +1984,10 @@ function Show-AssessmentSummary {
             Write-Host "    Encryption Types: $($aadK.EncryptionTypes)" -ForegroundColor DarkCyan
             Write-Host "    Status:           $($aadK.Status)" -ForegroundColor DarkCyan
             Write-Host "    $([char]0x24D8)  This is a Microsoft Entra ID (Azure AD) Kerberos proxy object." -ForegroundColor Gray
-            Write-Host "    It is NOT a real Domain Controller and is managed entirely by Entra ID." -ForegroundColor Gray
+            Write-Host "    It is NOT a real Domain Controller. Its encryption settings are managed by Entra ID." -ForegroundColor Gray
             Write-Host "    Do not manually modify its encryption settings." -ForegroundColor Gray
-            Write-Host "    $([char]0x26A0) Rotate its krbtgt keys regularly using Set-AzureADKerberosServer -RotateServerKey" -ForegroundColor Gray
+            Write-Host "    $([char]0x26A0) Its krbtgt keys are NOT auto-rotated! Rotate regularly using:" -ForegroundColor Yellow
+            Write-Host "    Set-AzureADKerberosServer -Domain <domain> -DomainCredential (Get-Credential) -RotateServerKey" -ForegroundColor Gray
             Write-Host "    See: https://learn.microsoft.com/en-us/entra/identity/authentication/howto-authentication-passwordless-security-key-on-premises" -ForegroundColor Gray
         }
     }

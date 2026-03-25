@@ -391,11 +391,13 @@ If `msDS-SupportedEncryptionTypes` has a non-zero value (e.g. `0x27`, `0x18`, `0
 | `PasswordLastSet` | 2300 days ago |
 | `msDS-SupportedEncryptionTypes` | `0x27` (DES-CBC-CRC + DES-CBC-MD5 + RC4 + AES256) |
 | Event 4768 Available Keys | AES-SHA1, RC4 |
-| **Flagged?** | **No** — `0x27` is non-zero, so the check is skipped |
+| **Flagged as Missing AES Keys?** | **No** — `0x27` is non-zero, so the Missing AES Keys check is skipped |
+| **Flagged as DES-Enabled?** | **Yes** — DES bits (`0x3`) are set alongside AES (DES is removed in Server 2025) |
+| **Flagged as RC4 Exception?** | **Yes** — RC4 bit (`0x4`) is set alongside AES |
 
-This account has AES keys available (confirmed by the event log). The old password is not a concern because the DFL was already 2008+ when the password was last set, so AES keys were generated at that time.
+This account has AES keys available (confirmed by the event log). It is not flagged as "Missing AES Keys", but it **is** flagged by the DES-enabled and RC4-exception checks because it still has insecure encryption types configured.
 
-> **Tip:** If you see an account with `msDS-SupportedEncryptionTypes = 0x27` and want to prepare for July 2026, remove the DES and RC4 bits:
+> **Tip:** Remove the DES and RC4 bits to prepare for July 2026:
 > ```powershell
 > Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
 > Set-ADAccountPassword '<AccountName>' -Reset; klist purge

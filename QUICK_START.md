@@ -268,6 +268,8 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 ### AzureADKerberos (v2.5.0+)
 - **Entra Kerberos proxy** object in DC OU is auto-detected and excluded from DC counts
 - Separate informational display in summary tables and exports
+- Its `krbtgt` keys are **not** auto-rotated — rotate regularly using `Set-AzureADKerberosServer -RotateServerKey`
+- Key rotation invalidates Kerberos keytab files for Linux services — regenerate keytabs after rotation
 
 ### RC4 Exception Accounts (v2.6.0+)
 - Accounts with explicit RC4 + AES (`0x1C`) flagged as WARNING
