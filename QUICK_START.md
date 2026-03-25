@@ -1,6 +1,6 @@
-# RC4_DES_Assessment.ps1 v2.8.0 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.8.1 - Quick Start Guide
 
-> **✨ New in v2.8.0:** `lastLogonTimestamp` for all flagged accounts, FGPP zero-disruption password reset guidance, explicit AES enforcement (`0x18`) documentation. See also v2.7.x: DC Locator-based discovery (`Get-ADDomainController -Filter *`). v2.6.0: AES-first hardening, RC4 exception detection. v2.5.x: AzureADKerberos auto-exclusion, DES/dMSA support. v2.4.0: CVE-2026-20833 KDCSVC events, `RC4DefaultDisablementPhase` workflow.
+> **✨ New in v2.8.1:** Guidance text file export (`-ExportResults -IncludeGuidance`), per-DC event count fix in summary table. See also v2.8.0: `lastLogonTimestamp` for all flagged accounts, FGPP zero-disruption password reset guidance, explicit AES enforcement (`0x18`) documentation. v2.7.x: DC Locator-based discovery. v2.6.0: AES-first hardening, RC4 exception detection.
 
 ## 🔐 Using with Active Directory
 
@@ -412,7 +412,12 @@ Resolve-DnsName your-domain.com
 
 > For the complete version history with full details, see [CHANGELOG.md](CHANGELOG.md).
 
-### v2.8.0 (March 2026) — Current
+### v2.8.1 (March 2026) — Current
+
+- **Guidance text file export** — `-ExportResults -IncludeGuidance` generates a plain-text guidance file in `Exports/`
+- **Per-DC event count fix** — Summary table now shows correct per-DC counts instead of aggregate totals
+
+### v2.8.0 (March 2026)
 
 - **lastLogonTimestamp for all flagged accounts** — Last Logon column in summary table, CSV, and JSON for triage prioritization
 - **Fine-Grained Password Policy (FGPP) workaround guidance** — Zero-disruption AES key generation for service accounts

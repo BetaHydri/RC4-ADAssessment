@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.8.0-orange)
+![Version](https://img.shields.io/badge/version-2.8.1-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -74,9 +74,9 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 | Script | Purpose |
 |--------|---------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.8.0) |
+| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.8.1) |
 | `Assess-ADForest.ps1` | Forest-wide wrapper — runs assessment per domain |
-| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.8.0) |
+| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.8.1) |
 | `Test-EventLogFailureHandling.ps1` | Test script for event log error handling |
 | `Tests/` | 204 Pester unit tests |
 
@@ -90,7 +90,7 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 | `-Server` | Specific DC to query | Auto-discovered |
 | `-AnalyzeEventLogs` | Analyze events 4768/4769 for actual RC4/DES usage | Off |
 | `-EventLogHours` | Hours of events to analyze (1-168) | 24 |
-| `-ExportResults` | Export to JSON + CSV in `.\Exports\` | Off |
+| `-ExportResults` | Export to JSON + CSV (+ guidance .txt with `-IncludeGuidance`) in `.\Exports\` | Off |
 | `-IncludeGuidance` | Show full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline) | Off |
 | `-QuickScan` | Config-only scan (no event logs) | Default mode |
 
@@ -118,7 +118,7 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.8.0
+DES/RC4 Kerberos Encryption Assessment v2.8.1
 ================================================================================
 
 Domain Controller Encryption Configuration

@@ -2,7 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.8.0 (March 2026) — Current
+## v2.8.1 (March 2026) — Current
+
+- **Guidance text file export**: When both `-ExportResults` and `-IncludeGuidance` are used together, a plain-text guidance file (`DES_RC4_Guidance_<domain>_<timestamp>.txt`) is exported alongside JSON and CSV
+  - Clean plain text without Unicode decorators — suitable for sharing, tickets, or offline reference
+  - Includes assessment context header (domain, date, tool version)
+  - All 11 guidance sections: audit setup, SIEM queries, GPO validation, KRBTGT rotation, RC4 exception workflow, FGPP workaround, keytab impact, monitoring schedule, and reference links
+  - Exported to the same `Exports/` folder as JSON/CSV files
+- **Per-DC event counts in summary table**: Fixed EVENT LOG ANALYSIS SUMMARY table displaying aggregate totals on every DC row instead of per-DC counts
+  - New `PerDcStats` hashtable tracks EventsAnalyzed, RC4Tickets, DESTickets, AESTickets per Domain Controller
+  - Aggregate totals in summary line and JSON export remain unchanged
+  - `Compare-Assessments.ps1` unaffected (uses aggregate totals only)
+
+## v2.8.0 (March 2026)
 
 - **lastLogonTimestamp for all flagged accounts**: All detected accounts (Missing AES keys, RC4-only, DES-only, DES-enabled, RC4 exception, stale password, USE_DES_KEY_ONLY, RC4-only MSAs) now include `lastLogonTimestamp` to determine if accounts are still actively in use
   - New `ConvertFrom-LastLogonTimestamp` helper function (FileTime Int64 to DateTime conversion)

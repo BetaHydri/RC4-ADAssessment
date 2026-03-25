@@ -1686,6 +1686,61 @@ Describe 'Show-AssessmentSummary' {
 }
 
 # ============================================================
+# Get-GuidancePlainText
+# ============================================================
+
+Describe 'Get-GuidancePlainText' {
+    It 'Returns non-empty string' {
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result | Should -Not -BeNullOrEmpty
+    }
+
+    It 'Includes domain in header' {
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result | Should -Match 'contoso\.com'
+    }
+
+    It 'Includes version in header' {
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result | Should -Match 'v2\.8\.1'
+    }
+
+    It 'Includes assessment date in header' {
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result | Should -Match '2026-03-25 12:00:00'
+    }
+
+    It 'Contains all 11 guidance sections' {
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result | Should -Match '1\. Event Log Monitoring Setup'
+        $result | Should -Match '2\. Splunk/SIEM Query Examples'
+        $result | Should -Match '3\. GPO Validation'
+        $result | Should -Match '4\. Computer Object Assessment'
+        $result | Should -Match '5\. Trust Validation'
+        $result | Should -Match '6\. KRBTGT Account'
+        $result | Should -Match '7\. RC4 Disablement Timeline'
+        $result | Should -Match '8\. Explicit RC4 Exception Workflow'
+        $result | Should -Match '9\. Accounts Missing AES Keys'
+        $result | Should -Match '10\. Microsoft Kerberos-Crypto Tools'
+        $result | Should -Match '11\. Recommended Monitoring Schedule'
+    }
+
+    It 'Does not contain Unicode decorators' {
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        # Should not contain emoji or special Unicode characters used in console output
+        $result | Should -Not -Match ([char]0x2713)  # checkmark
+        $result | Should -Not -Match ([char]0x2717)  # cross
+        $result | Should -Not -Match ([char]0x26A0)  # warning sign
+    }
+
+    It 'Contains reference documentation links' {
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result | Should -Match 'support\.microsoft\.com'
+        $result | Should -Match 'github\.com/microsoft/Kerberos-Crypto'
+    }
+}
+
+# ============================================================
 # Write-Finding (display helper)
 # ============================================================
 
