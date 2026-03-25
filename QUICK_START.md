@@ -268,7 +268,7 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 ### AzureADKerberos (v2.5.0+)
 - **Entra Kerberos proxy** object in DC OU is auto-detected and excluded from DC counts
 - Separate informational display in summary tables and exports
-- Its `krbtgt` keys are **not** auto-rotated — rotate regularly using `Set-AzureADKerberosServer -RotateServerKey`
+- Its `krbtgt` keys are **not** auto-rotated — rotate regularly using `Set-AzureADKerberosServer -Domain <domain> -CloudCredential $cloudCred -DomainCredential $domainCred -RotateServerKey` (requires `AzureADHybridAuthenticationManagement` module)
 - Key rotation invalidates Kerberos keytab files for Linux services — regenerate keytabs after rotation
 
 ### RC4 Exception Accounts (v2.6.0+)

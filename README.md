@@ -341,12 +341,25 @@ Starting in **v2.5.0** (refined in **v2.5.1**), the assessment automatically det
 If you need to manage the AzureADKerberos object (e.g., key rotation), use:
 
 ```powershell
+# First, ensure TLS 1.2 for PowerShell gallery access
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+# Install the Azure AD Kerberos PowerShell module (one-time)
+Install-Module -Name AzureADHybridAuthenticationManagement -AllowClobber
+Import-Module -Name AzureADHybridAuthenticationManagement
+
+# Authenticate
+$cloudCred = Get-Credential -Message 'UPN of Hybrid Identity Administrator'
+$domainCred = Get-Credential -Message 'Domain\User of Domain Admins group'
+
 # Check current status
-Get-AzureADKerberosServer -Domain contoso.com -DomainCredential (Get-Credential)
+Get-AzureADKerberosServer -Domain contoso.com -CloudCredential $cloudCred -DomainCredential $domainCred
+
+# Set up (if not yet configured)
+Set-AzureADKerberosServer -Domain contoso.com -CloudCredential $cloudCred -DomainCredential $domainCred
 
 # Rotate keys (recommended periodically)
-Set-AzureADKerberosServer -Domain contoso.com -DomainCredential (Get-Credential) `
-  -RotateServerKey
+Set-AzureADKerberosServer -Domain contoso.com -CloudCredential $cloudCred -DomainCredential $domainCred -RotateServerKey
 ```
 
 > **Key rotation:** The Microsoft Entra Kerberos server encryption `krbtgt` keys should be rotated on a regular basis. We recommend that you follow the same schedule you use to rotate all other Active Directory DC `krbtgt` keys.
