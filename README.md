@@ -351,6 +351,8 @@ Set-AzureADKerberosServer -Domain contoso.com -DomainCredential (Get-Credential)
 
 > **Key rotation:** The Microsoft Entra Kerberos server encryption `krbtgt` keys should be rotated on a regular basis. We recommend that you follow the same schedule you use to rotate all other Active Directory DC `krbtgt` keys.
 
+> **Keytab impact:** Rotating any `krbtgt` or service account password **invalidates existing Kerberos keytab files**. Linux services using AD-based Kerberos authentication (Apache, Nginx, SSSD, Samba, PostgreSQL, IBM WebSphere, etc.) will fail to authenticate until their keytab files are regenerated. After rotation, regenerate keytabs with `ktpass` (Windows) or `ktutil` (Linux) and verify with `kinit -kt /etc/krb5.keytab <principal>`. See the `-IncludeGuidance` output (Section 6) for detailed keytab regeneration commands.
+
 For more information, see:
 - [Windows Hello for Business cloud Kerberos trust deployment guide](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/deploy/hybrid-cloud-kerberos-trust)
 - [Passwordless security key sign-in to on-premises resources](https://learn.microsoft.com/en-us/entra/identity/authentication/howto-authentication-passwordless-security-key-on-premises) (includes key rotation steps)
