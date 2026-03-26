@@ -2533,12 +2533,12 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) References:
      - Active Directory Hardening Series Part 4 - Enforcing AES:
        https://techcommunity.microsoft.com/blog/yourwindowsserverpodcast/active-directory-hardening-series---part-4---enforcing-aes-for-kerberos/4260477
-     - Creating a Keytab File for Kerberos Authentication:
-       https://woshub.com/creating-keytab-file-kerberos-authentication-active-directory/
      - ktpass command reference:
        https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ktpass
-     - Kerberos disabling RC4 - Moving from RC4 to AES:
-       https://www.samuraj-cz.com/en/clanek/kerberos-disabling-rc4-part-2-moving-from-rc4-to-aes/
+     - Kerberos SSO with Apache on Linux (keytab creation):
+       https://docs.active-directory-wp.com/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html
+     - Configure AD authentication with SQL Server on Linux (keytab tutorial):
+       https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-ad-auth-adutil-tutorial
 
    Check KRBTGT:
    PS> Get-ADUser krbtgt -Properties PasswordLastSet, msDS-SupportedEncryptionTypes |
@@ -2796,12 +2796,12 @@ function Get-GuidancePlainText {
 1. Event Log Monitoring Setup
    ------------------------------------------------------------
    Enable advanced Kerberos auditing on Domain Controllers:
-
-   * Group Policy > Computer Configuration > Policies > Windows Settings
-     > Security Settings > Advanced Audit Policy Configuration
-     > Audit Policies > Account Logon
-
-   [x] Audit Kerberos Authentication Service: Success and Failure
+ktpass command reference:
+       https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ktpass
+     - Kerberos SSO with Apache on Linux (keytab creation):
+       https://docs.active-directory-wp.com/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html
+     - Configure AD authentication with SQL Server on Linux (keytab tutorial):
+       https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-ad-auth-adutil-tutorial
    [x] Audit Kerberos Service Ticket Operations: Success and Failure
 
    Event IDs to monitor:
@@ -2965,12 +2965,12 @@ function Get-GuidancePlainText {
    * References:
      - AD Hardening Series Part 4 - Enforcing AES:
        https://techcommunity.microsoft.com/blog/yourwindowsserverpodcast/active-directory-hardening-series---part-4---enforcing-aes-for-kerberos/4260477
-     - Creating a Keytab File for Kerberos Authentication:
-       https://woshub.com/creating-keytab-file-kerberos-authentication-active-directory/
      - ktpass command reference:
        https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ktpass
-     - Kerberos disabling RC4 - Moving from RC4 to AES:
-       https://www.samuraj-cz.com/en/clanek/kerberos-disabling-rc4-part-2-moving-from-rc4-to-aes/
+     - Kerberos SSO with Apache on Linux (keytab creation):
+       https://docs.active-directory-wp.com/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html
+     - Configure AD authentication with SQL Server on Linux (keytab tutorial):
+       https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-ad-auth-adutil-tutorial
 
    Check KRBTGT:
    PS> Get-ADUser krbtgt -Properties PasswordLastSet, msDS-SupportedEncryptionTypes |
@@ -3311,12 +3311,12 @@ try {
                 $rc4EventAccounts = $results.EventLogs.RC4Accounts
                 foreach ($acctName in $rc4EventAccounts) {
                     # Check if this account is NOT in the RC4-only lists (those are expected to use RC4)
-                    $isRC4OnlySvc = $acctName -in $results.Accounts.RC4OnlyServiceAccounts.Name
-                    $isRC4OnlyMSA = $acctName -in $results.Accounts.RC4OnlyMSAs.Name
-                    $isDESFlag = $acctName -in $results.Accounts.DESFlagAccounts.Name
-                    
-                    if (-not $isRC4OnlySvc -and -not $isRC4OnlyMSA -and -not $isDESFlag) {
-                        # This account uses RC4 in event logs but is NOT flagged as RC4-only
+       ktpass command reference:
+       https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ktpass
+     - Kerberos SSO with Apache on Linux (keytab creation):
+       https://docs.active-directory-wp.com/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html
+     - Configure AD authentication with SQL Server on Linux (keytab tutorial):
+       https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-ad-auth-adutil-tutorial
                         # Look up the account in AD to check its msDS-SupportedEncryptionTypes
                         try {
                             # Try as user first, then computer

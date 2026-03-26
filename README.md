@@ -729,14 +729,10 @@ klist
 
 References:
 - [Active Directory Hardening Series Part 4 — Enforcing AES for Kerberos](https://techcommunity.microsoft.com/blog/yourwindowsserverpodcast/active-directory-hardening-series---part-4---enforcing-aes-for-kerberos/4260477)
-- [Creating a Keytab File for Kerberos Authentication in Active Directory](https://woshub.com/creating-keytab-file-kerberos-authentication-active-directory/)
 - [ktpass command reference](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ktpass)
-- [Kerberos disabling RC4 — Moving from RC4 to AES](https://www.samuraj-cz.com/en/clanek/kerberos-disabling-rc4-part-2-moving-from-rc4-to-aes/)
-- [Kerberos deactivation RC4 — Protocol Principle and Encryption Types](https://www.samuraj-cz.com/en/clanek/kerberos-deactivation-rc4-part-1-protocol-principle-and-encryption-types/)
-- [Create Keytab for Kerberos Authentication in Linux](https://www.techjogging.com/create-keytab-for-kerberos-authentication-in-linux.html)
-- [Creating a Kerberos Service Principal and Keytab File — IBM Documentation](https://www.ibm.com/docs/en/was/9.0.5?topic=SSEQTP_9.0.5/com.ibm.websphere.base.doc/ae/tsec_kerb_create_spn.htm)
 - [Kerberos SSO with Apache on Linux](https://docs.active-directory-wp.com/Networking/Single_Sign_On/Kerberos_SSO_with_Apache_on_Linux.html)
-- [AES-256 Keytab troubleshooting — Stack Overflow](https://stackoverflow.com/questions/36475536/kerberos-aes-256-keytab-does-not-work)
+- [Tutorial: Configure AD authentication with SQL Server on Linux (keytab creation)](https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-ad-auth-adutil-tutorial)
+- [Detect and Remediate RC4 Usage in Kerberos](https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4)
 
 ## Version History
 
