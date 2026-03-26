@@ -841,6 +841,23 @@ function Get-KdcSvcEventAssessment {
         
         Write-Finding -Status "INFO" -Message "Checking KDCSVC events 201-209 on $($dcs.Count) Domain Controller(s)"
         Write-Host "  These events indicate RC4 risks related to CVE-2026-20833" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  KDCSVC Event Reference (Provider: KDCSVC, Log: System)" -ForegroundColor White
+        Write-Host "  $([char]0x250C)$([string]::new([char]0x2500, 8))$([char]0x252C)$([string]::new([char]0x2500, 14))$([char]0x252C)$([string]::new([char]0x2500, 72))$([char]0x2510)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) Event  $([char]0x2502) RC4 Relation $([char]0x2502) Description                                                              $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x251C)$([string]::new([char]0x2500, 8))$([char]0x253C)$([string]::new([char]0x2500, 14))$([char]0x253C)$([string]::new([char]0x2500, 72))$([char]0x2524)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 201    $([char]0x2502) Direct       $([char]0x2502) KDC rejects request - client only offers RC4, which is not allowed       $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 202    $([char]0x2502) Direct       $([char]0x2502) Client requests unsupported encryption type (RC4 after it was disabled)  $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 203    $([char]0x2502) Direct       $([char]0x2502) Account supports RC4 but not AES, while the KDC requires AES            $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 204    $([char]0x2502) Indirect     $([char]0x2502) SPN cannot use the requested encryption type (RC4 often the root cause)  $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 205    $([char]0x2502) Direct       $([char]0x2502) DefaultDomainSupportedEncTypes is configured insecurely (includes RC4)  $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 206    $([char]0x2502) Direct       $([char]0x2502) Ticket generation failed because RC4 is disabled on the KDC             $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 207    $([char]0x2502) Contextual   $([char]0x2502) Internal KDC error (often appears together with 201-206 events)         $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 208    $([char]0x2502) Direct       $([char]0x2502) Client explicitly requested RC4, and it was rejected                    $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 209    $([char]0x2502) Direct       $([char]0x2502) Ticket cannot be issued because RC4 is no longer allowed by policy      $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2514)$([string]::new([char]0x2500, 8))$([char]0x2534)$([string]::new([char]0x2500, 14))$([char]0x2534)$([string]::new([char]0x2500, 72))$([char]0x2518)" -ForegroundColor DarkGray
+        Write-Host "  Ref: https://support.microsoft.com/help/5073381 (CVE-2026-20833)" -ForegroundColor DarkGray
+        Write-Host ""
         
         foreach ($dc in $dcs) {
             $dcName = $dc.HostName
@@ -925,15 +942,15 @@ function Get-KdcSvcEventAssessment {
             Write-Host "  Event breakdown:" -ForegroundColor Yellow
             foreach ($kvp in $assessment.EventCounts.GetEnumerator()) {
                 $eventDesc = switch ($kvp.Key) {
-                    "201" { "RC4 service ticket requested for account with default encryption" }
-                    "202" { "RC4 TGT requested for account with default encryption" }
-                    "203" { "RC4 session key used for account with default encryption" }
-                    "204" { "Account has explicit RC4 in msDS-SupportedEncryptionTypes" }
-                    "205" { "DefaultDomainSupportedEncTypes includes insecure RC4 configuration" }
-                    "206" { "RC4 service ticket blocked (Enforcement mode)" }
-                    "207" { "RC4 TGT blocked (Enforcement mode)" }
-                    "208" { "RC4 session key blocked (Enforcement mode)" }
-                    "209" { "Domain functional level prevents AES-only operation" }
+                    "201" { "KDC rejects request - client only offers RC4" }
+                    "202" { "Client requests unsupported encryption type (RC4 after disabled)" }
+                    "203" { "Account supports RC4 but not AES, KDC requires AES" }
+                    "204" { "SPN cannot use requested encryption type (RC4 often root cause)" }
+                    "205" { "DefaultDomainSupportedEncTypes configured insecurely (includes RC4)" }
+                    "206" { "Ticket generation failed - RC4 disabled on KDC (Enforcement)" }
+                    "207" { "Internal KDC error (contextual, accompanies 201-206)" }
+                    "208" { "Client explicitly requested RC4, rejected (Enforcement)" }
+                    "209" { "RC4 no longer allowed by policy (Enforcement)" }
                     default { "KDCSVC event" }
                 }
                 Write-Host "    Event $($kvp.Key): $($kvp.Value) occurrence(s) - $eventDesc" -ForegroundColor Yellow
