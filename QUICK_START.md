@@ -1,6 +1,6 @@
-# RC4_DES_Assessment.ps1 v2.8.3 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.9.0 - Quick Start Guide
 
-> **✨ New in v2.8.3:** Event log deserialization fix — event analysis now correctly reports AES/RC4/DES ticket counts. v2.8.2: Guidance text file export (`-ExportResults -IncludeGuidance`), per-DC event count fix. v2.8.1: AES/RC4 correlation for password-reset-needed detection. v2.8.0: `lastLogonTimestamp` for all flagged accounts, FGPP guidance.
+> **✨ New in v2.9.0:** AES/RC4 correlation — detects accounts with AES configured but still issuing RC4 tickets (password reset needed). Event log deserialization fix, guidance text file export, per-DC event count fix, KDCSVC event reference table, gMSA/sMSA creation guide.
 
 ## 🔐 Using with Active Directory
 
@@ -412,18 +412,14 @@ Resolve-DnsName your-domain.com
 
 > For the complete version history with full details, see [CHANGELOG.md](CHANGELOG.md).
 
-### v2.8.3 (March 2026) — Current
+### v2.9.0 (March 2026) — Current
 
+- **AES/RC4 correlation** (major) — Detects accounts with AES configured but still issuing RC4 tickets (password reset needed)
 - **Event log deserialization fix** — Event analysis now correctly reports AES/RC4/DES ticket counts via remote XML parsing
-
-### v2.8.2 (March 2026)
-
 - **Guidance text file export** — `-ExportResults -IncludeGuidance` generates a plain-text guidance file in `Exports/`
 - **Per-DC event count fix** — Summary table now shows correct per-DC counts instead of aggregate totals
-
-### v2.8.1 (March 2026)
-
-- **AES/RC4 correlation** — Detects accounts with AES configured but still issuing RC4 tickets (password reset needed)
+- **KDCSVC event reference table** — Event IDs 201–209 with descriptions and recommended actions
+- **gMSA/sMSA creation guide** — Step-by-step Managed Service Account creation guidance
 
 ### v2.8.0 (March 2026)
 
