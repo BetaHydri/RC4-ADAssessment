@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.8.1 (March 2026) — Current
+## v2.8.2 (March 2026) — Current
+
+- **Event log deserialization fix**: Fixed critical bug where `Invoke-Command` returned deserialized `EventLogRecord` objects that lost their `ToXml()` method, causing event log analysis to report 0 AES/RC4/DES tickets despite retrieving thousands of events
+  - Event XML is now parsed inside the `Invoke-Command` scriptblock on the remote DC where `ToXml()` is available
+  - Returns lightweight `PSCustomObject`s with pre-extracted `TargetUserName`, `TicketEncryptionType`, and `ServiceName` fields
+  - RPC fallback path continues to use native `ToXml()` on local `EventLogRecord` objects
+
+## v2.8.1 (March 2026)
 
 - **Guidance text file export**: When both `-ExportResults` and `-IncludeGuidance` are used together, a plain-text guidance file (`DES_RC4_Guidance_<domain>_<timestamp>.txt`) is exported alongside JSON and CSV
   - Clean plain text without Unicode decorators — suitable for sharing, tickets, or offline reference

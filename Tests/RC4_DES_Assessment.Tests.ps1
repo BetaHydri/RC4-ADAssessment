@@ -1669,27 +1669,27 @@ Describe 'Show-AssessmentSummary' {
 
 Describe 'Get-GuidancePlainText' {
     It 'Returns non-empty string' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
         $result | Should -Not -BeNullOrEmpty
     }
 
     It 'Includes domain in header' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
         $result | Should -Match 'contoso\.com'
     }
 
     It 'Includes version in header' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
-        $result | Should -Match 'v2\.8\.1'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
+        $result | Should -Match 'v2\.8\.2'
     }
 
     It 'Includes assessment date in header' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
         $result | Should -Match '2026-03-25 12:00:00'
     }
 
     It 'Contains all 11 guidance sections' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
         $result | Should -Match '1\. Event Log Monitoring Setup'
         $result | Should -Match '2\. Splunk/SIEM Query Examples'
         $result | Should -Match '3\. GPO Validation'
@@ -1704,7 +1704,7 @@ Describe 'Get-GuidancePlainText' {
     }
 
     It 'Does not contain Unicode decorators' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
         # Should not contain emoji or special Unicode characters used in console output
         $result | Should -Not -Match ([char]0x2713)  # checkmark
         $result | Should -Not -Match ([char]0x2717)  # cross
@@ -1712,7 +1712,7 @@ Describe 'Get-GuidancePlainText' {
     }
 
     It 'Contains reference documentation links' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.1'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
         $result | Should -Match 'support\.microsoft\.com'
         $result | Should -Match 'github\.com/microsoft/Kerberos-Crypto'
     }

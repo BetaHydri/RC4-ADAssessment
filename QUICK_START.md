@@ -1,6 +1,6 @@
-# RC4_DES_Assessment.ps1 v2.8.1 - Quick Start Guide
+# RC4_DES_Assessment.ps1 v2.8.2 - Quick Start Guide
 
-> **✨ New in v2.8.1:** Guidance text file export (`-ExportResults -IncludeGuidance`), per-DC event count fix in summary table. See also v2.8.0: `lastLogonTimestamp` for all flagged accounts, FGPP zero-disruption password reset guidance, explicit AES enforcement (`0x18`) documentation. v2.7.x: DC Locator-based discovery. v2.6.0: AES-first hardening, RC4 exception detection.
+> **✨ New in v2.8.2:** Event log deserialization fix — event analysis now correctly reports AES/RC4/DES ticket counts. v2.8.1: Guidance text file export (`-ExportResults -IncludeGuidance`), per-DC event count fix. v2.8.0: `lastLogonTimestamp` for all flagged accounts, FGPP guidance.
 
 ## 🔐 Using with Active Directory
 
@@ -412,7 +412,11 @@ Resolve-DnsName your-domain.com
 
 > For the complete version history with full details, see [CHANGELOG.md](CHANGELOG.md).
 
-### v2.8.1 (March 2026) — Current
+### v2.8.2 (March 2026) — Current
+
+- **Event log deserialization fix** — Event analysis now correctly reports AES/RC4/DES ticket counts via remote XML parsing
+
+### v2.8.1 (March 2026)
 
 - **Guidance text file export** — `-ExportResults -IncludeGuidance` generates a plain-text guidance file in `Exports/`
 - **Per-DC event count fix** — Summary table now shows correct per-DC counts instead of aggregate totals
