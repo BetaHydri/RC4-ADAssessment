@@ -845,17 +845,17 @@ function Get-KdcSvcEventAssessment {
         Write-Host ""
         Write-Host "  KDCSVC Event Reference (Provider: KDCSVC, Log: System)" -ForegroundColor White
         Write-Host "  $([char]0x250C)$([string]::new([char]0x2500, 8))$([char]0x252C)$([string]::new([char]0x2500, 14))$([char]0x252C)$([string]::new([char]0x2500, 72))$([char]0x2510)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) Event  $([char]0x2502) RC4 Relation $([char]0x2502) Description                                                              $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) Event  $([char]0x2502) RC4 Relation $([char]0x2502) Description                                                            $([char]0x2502)" -ForegroundColor DarkGray
         Write-Host "  $([char]0x251C)$([string]::new([char]0x2500, 8))$([char]0x253C)$([string]::new([char]0x2500, 14))$([char]0x253C)$([string]::new([char]0x2500, 72))$([char]0x2524)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 201    $([char]0x2502) Direct       $([char]0x2502) KDC rejects request - client only offers RC4, which is not allowed       $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 202    $([char]0x2502) Direct       $([char]0x2502) Client requests unsupported encryption type (RC4 after it was disabled)  $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 203    $([char]0x2502) Direct       $([char]0x2502) Account supports RC4 but not AES, while the KDC requires AES            $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 204    $([char]0x2502) Indirect     $([char]0x2502) SPN cannot use the requested encryption type (RC4 often the root cause)  $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 205    $([char]0x2502) Direct       $([char]0x2502) DefaultDomainSupportedEncTypes is configured insecurely (includes RC4)  $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 206    $([char]0x2502) Direct       $([char]0x2502) Ticket generation failed because RC4 is disabled on the KDC             $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 207    $([char]0x2502) Contextual   $([char]0x2502) Internal KDC error (often appears together with 201-206 events)         $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 208    $([char]0x2502) Direct       $([char]0x2502) Client explicitly requested RC4, and it was rejected                    $([char]0x2502)" -ForegroundColor DarkGray
-        Write-Host "  $([char]0x2502) 209    $([char]0x2502) Direct       $([char]0x2502) Ticket cannot be issued because RC4 is no longer allowed by policy      $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 201    $([char]0x2502) Direct       $([char]0x2502) KDC rejects request - client only offers RC4, which is not allowed     $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 202    $([char]0x2502) Direct       $([char]0x2502) Client requests unsupported encryption type (RC4 after it was disabled)$([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 203    $([char]0x2502) Direct       $([char]0x2502) Account supports RC4 but not AES, while the KDC requires AES           $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 204    $([char]0x2502) Indirect     $([char]0x2502) SPN cannot use the requested encryption type (RC4 often the root cause)$([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 205    $([char]0x2502) Direct       $([char]0x2502) DefaultDomainSupportedEncTypes is configured insecurely (includes RC4) $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 206    $([char]0x2502) Direct       $([char]0x2502) Ticket generation failed because RC4 is disabled on the KDC            $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 207    $([char]0x2502) Contextual   $([char]0x2502) Internal KDC error (often appears together with 201-206 events)        $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 208    $([char]0x2502) Direct       $([char]0x2502) Client explicitly requested RC4, and it was rejected                   $([char]0x2502)" -ForegroundColor DarkGray
+        Write-Host "  $([char]0x2502) 209    $([char]0x2502) Direct       $([char]0x2502) Ticket cannot be issued because RC4 is no longer allowed by policy     $([char]0x2502)" -ForegroundColor DarkGray
         Write-Host "  $([char]0x2514)$([string]::new([char]0x2500, 8))$([char]0x2534)$([string]::new([char]0x2500, 14))$([char]0x2534)$([string]::new([char]0x2500, 72))$([char]0x2518)" -ForegroundColor DarkGray
         Write-Host "  Ref: https://support.microsoft.com/help/5073381 (CVE-2026-20833)" -ForegroundColor DarkGray
         Write-Host ""
