@@ -2,14 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.8.2 (March 2026) — Current
+## v2.8.3 (March 2026) — Current
 
 - **Event log deserialization fix**: Fixed critical bug where `Invoke-Command` returned deserialized `EventLogRecord` objects that lost their `ToXml()` method, causing event log analysis to report 0 AES/RC4/DES tickets despite retrieving thousands of events
   - Event XML is now parsed inside the `Invoke-Command` scriptblock on the remote DC where `ToXml()` is available
   - Returns lightweight `PSCustomObject`s with pre-extracted `TargetUserName`, `TicketEncryptionType`, and `ServiceName` fields
   - RPC fallback path continues to use native `ToXml()` on local `EventLogRecord` objects
 
-## v2.8.1 (March 2026)
+## v2.8.2 (March 2026)
 
 - **Guidance text file export**: When both `-ExportResults` and `-IncludeGuidance` are used together, a plain-text guidance file (`DES_RC4_Guidance_<domain>_<timestamp>.txt`) is exported alongside JSON and CSV
   - Clean plain text without Unicode decorators — suitable for sharing, tickets, or offline reference
@@ -20,6 +20,21 @@ All notable changes to this project will be documented in this file.
   - New `PerDcStats` hashtable tracks EventsAnalyzed, RC4Tickets, DESTickets, AESTickets per Domain Controller
   - Aggregate totals in summary line and JSON export remain unchanged
   - `Compare-Assessments.ps1` unaffected (uses aggregate totals only)
+
+## v2.8.1 (March 2026)
+
+- **AES-configured but RC4-used correlation**: New `PasswordResetNeeded` detection cross-references event log RC4 accounts (Event IDs 4768/4769) with AD account `msDS-SupportedEncryptionTypes` to identify accounts that have AES configured but are still issuing RC4 tickets because their password was never reset to generate AES keys
+  - Accounts using RC4 tickets that are NOT in the RC4-only/DES-only/DES-flag lists are looked up in AD
+  - If account has AES bits set (0x8/0x10) or inherits AES default (attribute not set), flagged as "Password Reset Needed"
+  - New `PasswordResetNeeded` array in `EventLogs` assessment output with account name, encryption config, password age, and reason
+  - Inline display during event log analysis with actionable password reset command
+  - `Show-AssessmentSummary` displays PasswordResetNeeded accounts in EVENT LOG ANALYSIS SUMMARY section
+  - Overall assessment generates WARNING recommendation with FGPP workaround reference
+  - `Compare-Assessments.ps1` tracks `PasswordResetNeeded` count changes between assessments (v2.8.1+ data)
+  - `Assess-ADForest.ps1` aggregates PasswordResetNeeded counts in forest-wide event statistics
+  - JSON export includes full PasswordResetNeeded details (no CSV change — event log data remains JSON-only)
+  - New Pester test: verifies `PasswordResetNeeded` property is initialized as empty array
+  - Compare-Assessments tests updated with PasswordResetNeeded test data and reduction detection test
 
 ## v2.8.0 (March 2026)
 

@@ -292,6 +292,17 @@ function Show-ForestSummary {
         if ($failedDCs -gt 0) {
             Write-Host "    Failed Queries: $failedDCs" -ForegroundColor Yellow
         }
+        
+        # Password Reset Needed correlation (v2.8.1+)
+        $totalPRN = 0
+        foreach ($domainResult in $DomainResults) {
+            if ($domainResult.Data.EventLogs.PasswordResetNeeded) {
+                $totalPRN += @($domainResult.Data.EventLogs.PasswordResetNeeded).Count
+            }
+        }
+        if ($totalPRN -gt 0) {
+            Write-Host "    Password Reset Needed: $totalPRN account(s) have AES configured but use RC4" -ForegroundColor Yellow
+        }
     }
     
     # 3. Trust Summary (grouped by domain)

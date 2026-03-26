@@ -19,6 +19,7 @@
   - Accounts missing AES keys (password set before DFL raised to 2008)
   - AzureADKerberos (Entra Kerberos) object detection and exclusion from DC assessment
   - Realistic computer object assessment: Only flags actual RC4 fallback scenarios
+  - AES-configured but RC4-used correlation (password reset needed detection)
   - Actionable guidance for manual validation and monitoring setup
   - CVE-2026-20833 RC4 KDC service ticket issuance assessment
   - January/April/July 2026 RC4 removal timeline and explicit RC4 exception workflow
@@ -75,7 +76,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.8.2
+  Version: 2.8.3
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -141,7 +142,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.8.2"
+$script:Version = "2.8.3"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -1090,18 +1091,19 @@ function Get-EventLogEncryptionAnalysis {
     Write-Section "Event Log Analysis - Actual DES/RC4 Usage"
     
     $assessment = @{
-        EventsAnalyzed = 0
-        DESTickets     = 0
-        RC4Tickets     = 0
-        AESTickets     = 0
-        UnknownTickets = 0
-        TimeRange      = $Hours
-        DESAccounts    = @()
-        RC4Accounts    = @()
-        Details        = @()
-        FailedDCs      = @()  # Track DCs that couldn't be queried
-        QueriedDCs     = @()  # Track DCs that were successfully queried
-        PerDcStats     = @{}  # Per-DC event counts keyed by hostname
+        EventsAnalyzed      = 0
+        DESTickets          = 0
+        RC4Tickets          = 0
+        AESTickets          = 0
+        UnknownTickets      = 0
+        TimeRange           = $Hours
+        DESAccounts         = @()
+        RC4Accounts         = @()
+        PasswordResetNeeded = @()  # Accounts with AES configured but using RC4 (need password reset)
+        Details             = @()
+        FailedDCs           = @()  # Track DCs that couldn't be queried
+        QueriedDCs          = @()  # Track DCs that were successfully queried
+        PerDcStats          = @{}  # Per-DC event counts keyed by hostname
     }
     
     try {
@@ -1243,6 +1245,8 @@ function Get-EventLogEncryptionAnalysis {
                         if ($null -eq $encType) {
                             continue
                         }
+                        
+                        # Categorize by encryption type
                         switch ($encType) {
                             { $_ -in @(0x1, 0x3) } {
                                 # DES
@@ -2110,6 +2114,13 @@ function Show-AssessmentSummary {
             if ($Results.EventLogs.FailedDCs.Count -gt 0) {
                 Write-Host "    Failed DC Queries: $($Results.EventLogs.FailedDCs.Count)" -ForegroundColor Yellow
             }
+            if ($Results.EventLogs.PasswordResetNeeded -and $Results.EventLogs.PasswordResetNeeded.Count -gt 0) {
+                Write-Host "    Password Reset Needed: $($Results.EventLogs.PasswordResetNeeded.Count) account(s) have AES configured but use RC4" -ForegroundColor Yellow
+                foreach ($prn in $Results.EventLogs.PasswordResetNeeded) {
+                    $pwdAge = if ($prn.PasswordAgeDays -ge 0) { "$($prn.PasswordAgeDays)d" } else { "?" }
+                    Write-Host "      $([char]0x2022) $($prn.Name) ($($prn.EncryptionTypes), pwd age: $pwdAge)" -ForegroundColor DarkYellow
+                }
+            }
         }
         else {
             # Event logs section exists but no data - likely DC discovery failed
@@ -2882,13 +2893,13 @@ function Get-GuidancePlainText {
       * Confirm ALL Domain Controllers are online and replicating
         PS> repadmin /replsummary
         PS> Get-ADDomainController -Filter * | ForEach-Object {
-              Test-Connection `$_.HostName -Count 1 -Quiet }
+              Test-Connection ``$_.HostName -Count 1 -Quiet }
       * Note the current password age:
         PS> Get-ADUser krbtgt -Properties PasswordLastSet |
             Select-Object Name, PasswordLastSet
 
    b) First Rotation:
-      PS> Reset-ADAccountPassword -Identity krbtgt -NewPassword `
+      PS> Reset-ADAccountPassword -Identity krbtgt -NewPassword ``
             (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset
       * Alternative using AD Users & Computers:
         Right-click krbtgt > Reset Password > enter random complex password
@@ -2900,8 +2911,8 @@ function Get-GuidancePlainText {
         which defaults to 10 hours) so all outstanding TGTs expire.
       * Verify the password change has replicated to ALL DCs:
         PS> Get-ADDomainController -Filter * | ForEach-Object {
-              Get-ADUser krbtgt -Server `$_.HostName -Properties PasswordLastSet |
-              Select-Object @{N='DC';E={`$_.DistinguishedName.Split(',')[1]}},
+              Get-ADUser krbtgt -Server ``$_.HostName -Properties PasswordLastSet |
+              Select-Object @{N='DC';E={``$_.DistinguishedName.Split(',')[1]}},
                             PasswordLastSet }
       * Monitor for Kerberos errors (Event IDs 4768/4769 failures,
         Event ID 4771 with failure code 0x18 = bad password).
@@ -2909,19 +2920,19 @@ function Get-GuidancePlainText {
         proceed with the second rotation; investigate first.
 
    d) Second Rotation:
-      PS> Reset-ADAccountPassword -Identity krbtgt -NewPassword `
+      PS> Reset-ADAccountPassword -Identity krbtgt -NewPassword ``
             (ConvertTo-SecureString (New-Guid).Guid -AsPlainText -Force) -Reset
       * After this, only the two newest passwords are valid.
         Any tickets from the original (pre-rotation) key are now invalid.
       * Wait for replication again and monitor for errors.
 
    e) Post-Rotation Validation:
-      PS> Get-ADUser krbtgt -Properties PasswordLastSet, `
+      PS> Get-ADUser krbtgt -Properties PasswordLastSet, ``
             'msDS-SupportedEncryptionTypes' |
             Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
       PS> Get-WinEvent -FilterHashtable @{LogName='Security';Id=4771;
             StartTime=(Get-Date).AddHours(-2)} -ErrorAction SilentlyContinue |
-            Where-Object { `$_.Message -match 'krbtgt' }
+            Where-Object { ``$_.Message -match 'krbtgt' }
 
    Important Caveats:
    * NEVER rotate KRBTGT more than twice in quick succession
@@ -2941,13 +2952,13 @@ function Get-GuidancePlainText {
      to authenticate until their keytab files are regenerated.
    * After password rotation, regenerate keytabs:
      # From Windows (for a service account, e.g. HTTP/linux.domain.com):
-     PS> ktpass -princ HTTP/linux.domain.com@DOMAIN.COM `
-           -mapuser DOMAIN\svc_linux -pass <NewPassword> `
-           -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL `
+     PS> ktpass -princ HTTP/linux.domain.com@DOMAIN.COM ``
+           -mapuser DOMAIN\svc_linux -pass <NewPassword> ``
+           -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL ``
            -out c:\temp\linux.keytab
      # From Linux:
      $ ktutil
-     ktutil: addent -password -p HTTP/linux.domain.com@DOMAIN.COM `
+     ktutil: addent -password -p HTTP/linux.domain.com@DOMAIN.COM ``
               -k 1 -e aes256-cts-hmac-sha1-96
      ktutil: wkt /etc/krb5.keytab
    * Always test with: kinit -kt /etc/krb5.keytab <principal>
@@ -2966,15 +2977,15 @@ function Get-GuidancePlainText {
        Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
 
    Service Accounts with RC4/DES:
-   PS> Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Properties `
+   PS> Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Properties ``
        msDS-SupportedEncryptionTypes, PasswordLastSet, ServicePrincipalName |
-       Where-Object { `$_.'msDS-SupportedEncryptionTypes' -band 4 -and
-                       -not (`$_.'msDS-SupportedEncryptionTypes' -band 0x18) } |
+       Where-Object { ``$_.'msDS-SupportedEncryptionTypes' -band 4 -and
+                       -not (``$_.'msDS-SupportedEncryptionTypes' -band 0x18) } |
        Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
 
    Remove USE_DES_KEY_ONLY flag:
    PS> Get-ADUser -Filter 'UserAccountControl -band 2097152' |
-       ForEach-Object { Set-ADAccountControl `$_ -UseDESKeyOnly `$false }
+       ForEach-Object { Set-ADAccountControl ``$_ -UseDESKeyOnly ``$false }
 
    Update service accounts to AES:
    PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=24}
@@ -3005,7 +3016,7 @@ function Get-GuidancePlainText {
       * Value = 1: Audit mode only (logs KDCSVC events but allows RC4)
       * Value = 2: Enforcement mode (blocks RC4 for default accounts)
       * Deploy to ALL Domain Controllers after January 2026 updates
-      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' ``
             -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord
 
    b) DefaultDomainSupportedEncTypes (DWORD):
@@ -3016,7 +3027,7 @@ function Get-GuidancePlainText {
         - this leaves ALL accounts vulnerable to CVE-2026-20833
         - use per-account msDS-SupportedEncryptionTypes = 0x1C instead
       PS> # Check current value:
-      PS> Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+      PS> Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' ``
             -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
 
    * GPO Preference path for DefaultDomainSupportedEncTypes:
@@ -3059,7 +3070,7 @@ function Get-GuidancePlainText {
 
    c) Last Resort: Domain-Wide RC4 Fallback (INSECURE)
       If per-account exceptions are not feasible:
-      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' ``
             -Name 'DefaultDomainSupportedEncTypes' -Value 0x1C -Type DWord
       WARNING: This leaves ALL accounts vulnerable to CVE-2026-20833!
       * Only use as temporary measure while migrating to AES
@@ -3080,13 +3091,13 @@ function Get-GuidancePlainText {
    The lastLogonTimestamp field helps determine if the account is still in use.
 
    Find affected accounts (including last logon):
-   PS> Get-ADUser -Filter 'Enabled -eq `$true' -Properties PasswordLastSet, `
+   PS> Get-ADUser -Filter 'Enabled -eq ``$true' -Properties PasswordLastSet, ``
        'msDS-SupportedEncryptionTypes', lastLogonTimestamp |
-       Where-Object { `$_.PasswordLastSet -lt (Get-Date).AddYears(-5) -and
-                       (-not `$_.'msDS-SupportedEncryptionTypes' -or
-                        `$_.'msDS-SupportedEncryptionTypes' -eq 0) } |
+       Where-Object { ``$_.PasswordLastSet -lt (Get-Date).AddYears(-5) -and
+                       (-not ``$_.'msDS-SupportedEncryptionTypes' -or
+                        ``$_.'msDS-SupportedEncryptionTypes' -eq 0) } |
        Select-Object Name, PasswordLastSet, @{N='LastLogon';E={
-           if (`$_.lastLogonTimestamp) { [DateTime]::FromFileTime(`$_.lastLogonTimestamp) }
+           if (``$_.lastLogonTimestamp) { [DateTime]::FromFileTime(``$_.lastLogonTimestamp) }
            else { 'Never' }
        }}
 
@@ -3105,29 +3116,29 @@ function Get-GuidancePlainText {
       allowing you to reset the password with the SAME value.
 
       Step 1: Create a temporary FGPP (one-time setup):
-      PS> New-ADFineGrainedPasswordPolicy -Name 'Temp_AES_Key_Fix' `
-            -Precedence 1 `
-            -PasswordHistoryCount 0 `
-            -MinPasswordAge  '0.00:00:00' `
-            -MaxPasswordAge  '0.00:00:00' `
-            -ComplexityEnabled `$false `
-            -MinPasswordLength 0 `
-            -LockoutThreshold 0 `
-            -ReversibleEncryptionEnabled `$false
+      PS> New-ADFineGrainedPasswordPolicy -Name 'Temp_AES_Key_Fix' ``
+            -Precedence 1 ``
+            -PasswordHistoryCount 0 ``
+            -MinPasswordAge  '0.00:00:00' ``
+            -MaxPasswordAge  '0.00:00:00' ``
+            -ComplexityEnabled ``$false ``
+            -MinPasswordLength 0 ``
+            -LockoutThreshold 0 ``
+            -ReversibleEncryptionEnabled ``$false
 
       Step 2: Apply FGPP to the target account:
-      PS> Add-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' `
+      PS> Add-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' ``
             -Subjects '<AccountName>'
 
       Step 3: Reset password with the same value:
-      PS> Set-ADAccountPassword '<AccountName>' -Reset `
+      PS> Set-ADAccountPassword '<AccountName>' -Reset ``
             -NewPassword (ConvertTo-SecureString '<SamePassword>' -AsPlainText -Force)
 
       Step 4: Force replication to all DCs:
       CMD> repadmin /syncall /AdePq
 
       Step 5: Remove FGPP from the account:
-      PS> Remove-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' `
+      PS> Remove-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' ``
             -Subjects '<AccountName>'
 
       Step 6: Verify AES keys exist (Event ID 4768 should now show AES):
@@ -3139,7 +3150,7 @@ function Get-GuidancePlainText {
       must explicitly set the account's msDS-SupportedEncryptionTypes to AES:
 
       PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
-      PS> Set-ADAccountPassword '<AccountName>' -Reset `
+      PS> Set-ADAccountPassword '<AccountName>' -Reset ``
             -NewPassword (ConvertTo-SecureString '<Password>' -AsPlainText -Force)
       CMD> klist purge
 
@@ -3288,6 +3299,80 @@ try {
         
         # 5b. Analyze event logs
         $results.EventLogs = Get-EventLogEncryptionAnalysis -ServerParams $serverParams -Hours $EventLogHours
+        
+        # 5c. Correlate: accounts with AES configured in AD but using RC4 tickets (need password reset)
+        if ($results.EventLogs.RC4Accounts.Count -gt 0 -and $results.Accounts) {
+            # Build lookup of all known account encryption configs from AD
+            $allAccountConfigs = @{}
+            
+            # Service accounts with SPNs (RC4-only ones wouldn't have AES, skip them)
+            # We want accounts that HAVE AES configured but are still issuing RC4 tickets
+            try {
+                $rc4EventAccounts = $results.EventLogs.RC4Accounts
+                foreach ($acctName in $rc4EventAccounts) {
+                    # Check if this account is NOT in the RC4-only lists (those are expected to use RC4)
+                    $isRC4OnlySvc = $acctName -in $results.Accounts.RC4OnlyServiceAccounts.Name
+                    $isRC4OnlyMSA = $acctName -in $results.Accounts.RC4OnlyMSAs.Name
+                    $isDESFlag = $acctName -in $results.Accounts.DESFlagAccounts.Name
+                    
+                    if (-not $isRC4OnlySvc -and -not $isRC4OnlyMSA -and -not $isDESFlag) {
+                        # This account uses RC4 in event logs but is NOT flagged as RC4-only
+                        # Look up the account in AD to check its msDS-SupportedEncryptionTypes
+                        try {
+                            # Try as user first, then computer
+                            $adAccount = $null
+                            try {
+                                $adAccount = Get-ADUser -Identity $acctName -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled @serverParams -ErrorAction Stop
+                            }
+                            catch {
+                                try {
+                                    $adAccount = Get-ADComputer -Identity $acctName -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled @serverParams -ErrorAction Stop
+                                }
+                                catch {
+                                    # Account not found by either type - skip
+                                    continue
+                                }
+                            }
+                            
+                            if ($adAccount) {
+                                $encValue = $adAccount.'msDS-SupportedEncryptionTypes'
+                                # Account has AES configured (bits 0x8 or 0x10) but is using RC4 tickets
+                                # OR account has no encryption type set (inherits from GPO/domain default which is AES)
+                                $hasAES = $encValue -and ($encValue -band 0x18)
+                                $inheritsDefault = -not $encValue -or $encValue -eq 0
+                                
+                                if ($hasAES -or $inheritsDefault) {
+                                    $results.EventLogs.PasswordResetNeeded += @{
+                                        Name            = $acctName
+                                        EncryptionValue = if ($encValue) { $encValue } else { 0 }
+                                        EncryptionTypes = if ($encValue) { Get-EncryptionTypeString -Value $encValue } else { "Not Set (inherits AES default)" }
+                                        PasswordLastSet = $adAccount.PasswordLastSet
+                                        PasswordAgeDays = if ($adAccount.PasswordLastSet) { [int]((Get-Date) - $adAccount.PasswordLastSet).TotalDays } else { -1 }
+                                        Enabled         = $adAccount.Enabled
+                                        Reason          = if ($inheritsDefault) { "Inherits AES default but using RC4 - password predates AES key generation" } else { "AES configured (0x$($encValue.ToString('X'))) but using RC4 - password reset needed to generate AES keys" }
+                                    }
+                                }
+                            }
+                        }
+                        catch {
+                            Write-Verbose "Could not look up account '$acctName' for correlation: $($_.Exception.Message)"
+                        }
+                    }
+                }
+                
+                if ($results.EventLogs.PasswordResetNeeded.Count -gt 0) {
+                    Write-Finding -Status "WARNING" -Message "$($results.EventLogs.PasswordResetNeeded.Count) account(s) have AES configured but are still using RC4 tickets (password reset needed)"
+                    foreach ($acct in $results.EventLogs.PasswordResetNeeded) {
+                        $pwdAge = if ($acct.PasswordAgeDays -ge 0) { "pwd: $($acct.PasswordAgeDays)d" } else { "pwd: unknown" }
+                        Write-Host "    $([char]0x2022) $($acct.Name) ($($acct.EncryptionTypes), $pwdAge)" -ForegroundColor Yellow
+                    }
+                    Write-Host "    $([char]0x2192) Reset passwords to generate AES keys: Set-ADAccountPassword '<Account>' -Reset" -ForegroundColor Cyan
+                }
+            }
+            catch {
+                Write-Verbose "AES/RC4 correlation failed: $($_.Exception.Message)"
+            }
+        }
     }
     elseif (-not $QuickScan) {
         Write-Section "Event Log Analysis" -Color "Yellow"
@@ -3384,6 +3469,22 @@ try {
                 "# If AES fails, add explicit RC4 exception (CVE-2026-20833 safe):"
                 "# Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
                 "# 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10) - allows RC4 tickets with AES support"
+            )
+        }
+    }
+    
+    if ($results.EventLogs -and $results.EventLogs.PasswordResetNeeded.Count -gt 0) {
+        $warnings++
+        $prnList = ($results.EventLogs.PasswordResetNeeded | Select-Object -First 5).Name -join ', '
+        $results.Recommendations += @{
+            Level   = "WARNING"
+            Message = "[$($results.Domain)] $($results.EventLogs.PasswordResetNeeded.Count) account(s) have AES configured but are using RC4 tickets - password reset needed: $prnList"
+            Fix     = @(
+                "# These accounts have AES in msDS-SupportedEncryptionTypes but lack AES keys"
+                "# (password was never reset after AES was configured)"
+                "Set-ADAccountPassword '<AccountName>' -Reset -NewPassword (ConvertTo-SecureString '<NewPassword>' -AsPlainText -Force)"
+                "klist purge"
+                "# For service accounts, use FGPP workaround to reset with same password (see -IncludeGuidance, Section 9b)"
             )
         }
     }

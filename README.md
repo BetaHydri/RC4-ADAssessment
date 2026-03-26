@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.8.2-orange)
+![Version](https://img.shields.io/badge/version-2.8.3-orange)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
@@ -29,6 +29,7 @@ This toolkit helps you:
 | **KDCSVC Event Scan** | Queries System log events 201-209 for RC4 risks (CVE-2026-20833) |
 | **Audit Policy Verification** | Checks if Kerberos auditing (4768/4769) is enabled before event log analysis |
 | **Event Log Analysis** | Queries events 4768/4769 from all DCs to find actual RC4/DES ticket usage |
+| **AES/RC4 Correlation** | Cross-references event log RC4 accounts with AD encryption config to detect accounts needing password reset |
 | **KRBTGT Assessment** | Password age, encryption types, rotation guidance |
 | **Service Account Scan** | SPN accounts, gMSA/sMSA, and delegated Managed Service Accounts (dMSA) with RC4/DES-only encryption |
 | **USE_DES_KEY_ONLY Detection** | Accounts with the UserAccountControl flag forcing DES |
@@ -74,9 +75,9 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 | Script | Purpose |
 |--------|---------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.8.2) |
+| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.8.3) |
 | `Assess-ADForest.ps1` | Forest-wide wrapper — runs assessment per domain |
-| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.8.2) |
+| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.8.3) |
 | `Test-EventLogFailureHandling.ps1` | Test script for event log error handling |
 | `Tests/` | 204 Pester unit tests |
 
@@ -118,7 +119,7 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.8.2
+DES/RC4 Kerberos Encryption Assessment v2.8.3
 ================================================================================
 
 Domain Controller Encryption Configuration
@@ -188,6 +189,10 @@ Event Log Analysis - Actual DES/RC4 Usage
 ✗ RC4 tickets detected in active use!
   RC4 accounts: LEGACY-APP$, SQL2008-SRV$
 
+⚠ 1 account(s) have AES configured but are still using RC4 tickets (password reset needed)
+    • SQL2008-SRV$ (AES128-HMAC, AES256-HMAC, RC4-HMAC, pwd: 1200d)
+    → Reset passwords to generate AES keys: Set-ADAccountPassword '<Account>' -Reset
+
   Recommendations & Remediation:
     • CRITICAL: [contoso.com] RC4 tickets detected (8 tickets,
         accounts: LEGACY-APP$, SQL2008-SRV$)
@@ -197,6 +202,8 @@ Event Log Analysis - Actual DES/RC4 Usage
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES fails, add explicit RC4 exception:
       #   -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+    • WARNING: [contoso.com] 1 account(s) have AES configured but are
+        using RC4 tickets - password reset needed: SQL2008-SRV$
 ```
 
 ## Recommended Workflow
@@ -572,6 +579,37 @@ Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 ```
 
 After the password reset, AES keys will be generated automatically (assuming DFL ≥ 2008).
+
+## AES-Configured but RC4-Used Correlation
+
+When event log analysis is enabled (`-AnalyzeEventLogs`), the tool cross-references accounts found using RC4 tickets (Event IDs 4768/4769) with their `msDS-SupportedEncryptionTypes` in AD. This detects a common gap: accounts that have AES **configured** but are still obtaining RC4 tickets because their password was never reset to generate AES keys.
+
+### How It Works
+
+1. Event logs identify accounts receiving RC4 tickets (`TicketEncryptionType = 0x17`)
+2. Accounts already flagged as RC4-only, DES-only, or USE_DES_KEY_ONLY are excluded (those are expected)
+3. Remaining RC4 accounts are looked up in AD via `Get-ADUser` / `Get-ADComputer`
+4. If the account has AES bits set (0x8 or 0x10) or inherits AES default (attribute not set/zero), it is flagged as **Password Reset Needed**
+
+### Example
+
+| Attribute | Value |
+|-----------|-------|
+| Account | `sccmservice` |
+| `msDS-SupportedEncryptionTypes` | `0x27` (DES, RC4, AES-Sk) |
+| Event 4768 TicketEncryptionType | `0x17` (RC4) |
+| **Diagnosis** | AES is configured but password was never reset — only RC4 keys exist |
+| **Fix** | `Set-ADAccountPassword 'sccmservice' -Reset; klist purge` |
+
+### Why Not Parse "Available Keys" from Event 4768?
+
+The "Available Keys" field in Event 4768 provides similar information, but it is **not** a named XML `EventData` field — it only appears in the rendered `Message` text. Parsing it would be fragile:
+
+- **Locale-dependent**: "Verfügbare Schlüssel" (German), "Clés disponibles" (French), etc.
+- **Remote unreliable**: `Message` property may be `$null` on deserialized remote events
+- **Version-variant**: Message template can change between Windows Server versions
+
+The correlation approach is locale-independent, works reliably with remoted events, and provides the same actionable insight.
 
 ## Last Logon Timestamp
 

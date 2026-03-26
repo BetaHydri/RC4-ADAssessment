@@ -1391,6 +1391,12 @@ Describe 'Get-EventLogEncryptionAnalysis' {
             $result.DESTickets | Should -Be 0
             $result.AESTickets | Should -Be 0
         }
+
+        It 'Initializes PasswordResetNeeded as empty array' {
+            $result = Get-EventLogEncryptionAnalysis -ServerParams @{} -Hours 24
+            $result.ContainsKey('PasswordResetNeeded') | Should -BeTrue
+            @($result.PasswordResetNeeded).Count | Should -Be 0
+        }
     }
 
     Context 'When DC is unreachable' {
@@ -1586,13 +1592,14 @@ Describe 'Show-AssessmentSummary' {
                     )
                 }
                 EventLogs         = @{
-                    EventsAnalyzed = 100
-                    RC4Tickets     = 0
-                    DESTickets     = 0
-                    AESTickets     = 100
-                    QueriedDCs     = @('dc01.contoso.com', 'dc02.contoso.com')
-                    FailedDCs      = @()
-                    PerDcStats     = @{
+                    EventsAnalyzed      = 100
+                    RC4Tickets          = 0
+                    DESTickets          = 0
+                    AESTickets          = 100
+                    QueriedDCs          = @('dc01.contoso.com', 'dc02.contoso.com')
+                    FailedDCs           = @()
+                    PasswordResetNeeded = @()
+                    PerDcStats          = @{
                         'dc01.contoso.com' = @{ EventsAnalyzed = 50; RC4Tickets = 0; DESTickets = 0; AESTickets = 50 }
                         'dc02.contoso.com' = @{ EventsAnalyzed = 50; RC4Tickets = 0; DESTickets = 0; AESTickets = 50 }
                     }
@@ -1645,14 +1652,15 @@ Describe 'Show-AssessmentSummary' {
             $results = @{
                 DomainControllers = @{ TotalDCs = 0; Details = @(); GPOConfigured = $false; GPOEncryptionTypes = $null; AESConfigured = 0; RC4Configured = 0; DESConfigured = 0 }
                 EventLogs         = @{
-                    EventsAnalyzed = 0
-                    RC4Tickets     = 0
-                    DESTickets     = 0
-                    AESTickets     = 0
-                    QueriedDCs     = @()
-                    FailedDCs      = @(
+                    EventsAnalyzed      = 0
+                    RC4Tickets          = 0
+                    DESTickets          = 0
+                    AESTickets          = 0
+                    QueriedDCs          = @()
+                    FailedDCs           = @(
                         @{ Name = 'dc01.contoso.com'; Error = 'WinRM failed' }
                     )
+                    PasswordResetNeeded = @()
                 }
                 Trusts            = @{ TotalTrusts = 0; Details = @() }
                 Accounts          = $null
@@ -1669,27 +1677,27 @@ Describe 'Show-AssessmentSummary' {
 
 Describe 'Get-GuidancePlainText' {
     It 'Returns non-empty string' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.3'
         $result | Should -Not -BeNullOrEmpty
     }
 
     It 'Includes domain in header' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.3'
         $result | Should -Match 'contoso\.com'
     }
 
     It 'Includes version in header' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
-        $result | Should -Match 'v2\.8\.2'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.3'
+        $result | Should -Match 'v2\.8\.3'
     }
 
     It 'Includes assessment date in header' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.3'
         $result | Should -Match '2026-03-25 12:00:00'
     }
 
     It 'Contains all 11 guidance sections' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.3'
         $result | Should -Match '1\. Event Log Monitoring Setup'
         $result | Should -Match '2\. Splunk/SIEM Query Examples'
         $result | Should -Match '3\. GPO Validation'
@@ -1704,15 +1712,14 @@ Describe 'Get-GuidancePlainText' {
     }
 
     It 'Does not contain Unicode decorators' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
-        # Should not contain emoji or special Unicode characters used in console output
-        $result | Should -Not -Match ([char]0x2713)  # checkmark
-        $result | Should -Not -Match ([char]0x2717)  # cross
-        $result | Should -Not -Match ([char]0x26A0)  # warning sign
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.3'
+        $result | Should -Not -Match ([char]0x2713)
+        $result | Should -Not -Match ([char]0x2717)
+        $result | Should -Not -Match ([char]0x26A0)
     }
 
     It 'Contains reference documentation links' {
-        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.2'
+        $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.8.3'
         $result | Should -Match 'support\.microsoft\.com'
         $result | Should -Match 'github\.com/microsoft/Kerberos-Crypto'
     }
