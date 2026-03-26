@@ -1420,21 +1420,12 @@ Describe 'Get-EventLogEncryptionAnalysis' {
             }
             Mock Test-Connection { $true }
             Mock Invoke-Command {
-                # Simulate event objects with XML containing AES256 encryption
-                # Use ScriptMethod so $event.ToXml() works correctly
-                $evt1 = New-Object PSObject
-                $evt1 | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
-                    '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="TargetUserName">user1</Data><Data Name="TicketEncryptionType">0x12</Data></EventData></Event>'
-                }
-                $evt1 | Add-Member -MemberType NoteProperty -Name Properties -Value @()
-
-                $evt2 = New-Object PSObject
-                $evt2 | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
-                    '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="TargetUserName">user2</Data><Data Name="TicketEncryptionType">0x12</Data></EventData></Event>'
-                }
-                $evt2 | Add-Member -MemberType NoteProperty -Name Properties -Value @()
-
-                @($evt1, $evt2)
+                # Invoke-Command now returns pre-parsed PSCustomObjects
+                # (event XML is parsed on the remote side to avoid deserialization issues)
+                @(
+                    [PSCustomObject]@{ EventId = 4768; TargetUserName = 'user1'; TicketEncryptionType = '0x12'; ServiceName = 'krbtgt' },
+                    [PSCustomObject]@{ EventId = 4768; TargetUserName = 'user2'; TicketEncryptionType = '0x12'; ServiceName = 'krbtgt' }
+                )
             }
         }
 
@@ -1470,28 +1461,15 @@ Describe 'Get-EventLogEncryptionAnalysis' {
             }
             Mock Test-Connection { $true }
             Mock Invoke-Command {
-                # RC4 ticket
-                $evt1 = New-Object PSObject
-                $evt1 | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
-                    '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="TargetUserName">legacy_app</Data><Data Name="TicketEncryptionType">0x17</Data></EventData></Event>'
-                }
-                $evt1 | Add-Member -MemberType NoteProperty -Name Properties -Value @()
-
-                # DES ticket
-                $evt2 = New-Object PSObject
-                $evt2 | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
-                    '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="TargetUserName">ancient_app</Data><Data Name="TicketEncryptionType">0x1</Data></EventData></Event>'
-                }
-                $evt2 | Add-Member -MemberType NoteProperty -Name Properties -Value @()
-
-                # Another RC4 ticket (same account)
-                $evt3 = New-Object PSObject
-                $evt3 | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
-                    '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="TargetUserName">legacy_app</Data><Data Name="TicketEncryptionType">0x17</Data></EventData></Event>'
-                }
-                $evt3 | Add-Member -MemberType NoteProperty -Name Properties -Value @()
-
-                @($evt1, $evt2, $evt3)
+                # Invoke-Command now returns pre-parsed PSCustomObjects
+                @(
+                    # RC4 ticket
+                    [PSCustomObject]@{ EventId = 4769; TargetUserName = 'legacy_app'; TicketEncryptionType = '0x17'; ServiceName = 'svc1' },
+                    # DES ticket
+                    [PSCustomObject]@{ EventId = 4769; TargetUserName = 'ancient_app'; TicketEncryptionType = '0x1'; ServiceName = 'svc2' },
+                    # Another RC4 ticket (same account)
+                    [PSCustomObject]@{ EventId = 4769; TargetUserName = 'legacy_app'; TicketEncryptionType = '0x17'; ServiceName = 'svc3' }
+                )
             }
         }
 

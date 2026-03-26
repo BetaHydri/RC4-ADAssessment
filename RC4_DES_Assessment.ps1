@@ -75,7 +75,7 @@
 
 .NOTES
   Author: Jan Tiedemann
-  Version: 2.8.1
+  Version: 2.8.2
   Requirements: 
     - PowerShell 5.1 or later
     - Active Directory PowerShell module (RSAT-AD-PowerShell)
@@ -141,7 +141,7 @@ catch {
 }
 
 # Script version and metadata
-$script:Version = "2.8.1"
+$script:Version = "2.8.2"
 $script:AssessmentTimestamp = Get-Date
 
 #region Helper Functions
@@ -1149,11 +1149,29 @@ function Get-EventLogEncryptionAnalysis {
                 
                 # Try Invoke-Command first (WinRM - more reliable for remote DCs)
                 $events = $null
+                $usedWinRM = $false
                 try {
+                    # Parse event XML on the remote side to avoid deserialization issues.
+                    # Deserialized EventLogRecord objects lose their ToXml() method, making
+                    # it impossible to extract EventData fields on the caller side.
                     $events = Invoke-Command -ComputerName $dcName -ScriptBlock {
                         param($FilterXml, $MaxEvents)
-                        Get-WinEvent -FilterXml $FilterXml -MaxEvents $MaxEvents -ErrorAction Stop
+                        $rawEvents = Get-WinEvent -FilterXml $FilterXml -MaxEvents $MaxEvents -ErrorAction Stop
+                        foreach ($evt in $rawEvents) {
+                            $xml = [xml]$evt.ToXml()
+                            $data = @{}
+                            foreach ($d in $xml.Event.EventData.Data) {
+                                $data[$d.Name] = $d.'#text'
+                            }
+                            [PSCustomObject]@{
+                                EventId              = $evt.Id
+                                TargetUserName       = $data['TargetUserName']
+                                TicketEncryptionType = $data['TicketEncryptionType']
+                                ServiceName          = $data['ServiceName']
+                            }
+                        }
                     } -ArgumentList $filterXml, 1000 -ErrorAction Stop
+                    $usedWinRM = $true
                 }
                 catch {
                     # WinRM failed, try RPC as fallback
@@ -1181,41 +1199,33 @@ function Get-EventLogEncryptionAnalysis {
                     $dcStats = @{ EventsAnalyzed = $events.Count; RC4Tickets = 0; DESTickets = 0; AESTickets = 0 }
                     
                     foreach ($event in $events) {
-                        # Handle both direct and remoted event objects
-                        $eventXml = if ($event.ToXml) { 
-                            $event.ToXml() 
-                        } 
-                        else { 
-                            # For deserialized objects from Invoke-Command, reconstruct XML manually
-                            $event | ConvertTo-Xml -As String -Depth 3
+                        $encType = $null
+                        $account = $null
+                        
+                        if ($usedWinRM) {
+                            # Events were pre-parsed on the remote side
+                            if ($event.TicketEncryptionType) {
+                                $encType = [int]$event.TicketEncryptionType
+                                $account = $event.TargetUserName
+                            }
                         }
-                        
-                        $xml = [xml]$eventXml
-                        $eventData = @{}
-                        
-                        # Handle both native EventLogRecord and deserialized objects
-                        if ($xml.Event.EventData.Data) {
+                        else {
+                            # RPC fallback: events are native EventLogRecord objects
+                            $eventXml = $event.ToXml()
+                            $xml = [xml]$eventXml
+                            $eventData = @{}
                             foreach ($data in $xml.Event.EventData.Data) {
                                 $eventData[$data.Name] = $data.'#text'
                             }
-                        }
-                        elseif ($event.Properties) {
-                            # Fallback: Use Properties collection for deserialized events
-                            # Event 4768/4769 property indexes (may vary, use properties by name if available)
-                            if ($event.Properties.Count -ge 10) {
-                                $eventData['TargetUserName'] = $event.Properties[0].Value
-                                $eventData['TicketEncryptionType'] = $event.Properties[7].Value
+                            if ($eventData['TicketEncryptionType']) {
+                                $encType = [int]$eventData['TicketEncryptionType']
+                                $account = $eventData['TargetUserName']
                             }
                         }
                         
-                        if (-not $eventData['TicketEncryptionType']) {
+                        if ($null -eq $encType) {
                             continue
                         }
-                        
-                        $encType = [int]$eventData['TicketEncryptionType']
-                        $account = $eventData['TargetUserName']
-                        
-                        # Categorize by encryption type
                         switch ($encType) {
                             { $_ -in @(0x1, 0x3) } {
                                 # DES
