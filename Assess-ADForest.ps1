@@ -26,6 +26,9 @@
 .PARAMETER ExportResults
   Export individual domain results and forest summary to JSON/CSV files.
 
+.PARAMETER IncludeGuidance
+  Include full reference manual and export guidance text file (requires -ExportResults for file export).
+
 .PARAMETER Parallel
   Process domains in parallel (faster but requires PowerShell 7+).
 
@@ -39,6 +42,10 @@
 .EXAMPLE
   .\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults
   Full assessment with event logs and export results.
+
+.EXAMPLE
+  .\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults -IncludeGuidance
+  Full assessment with event logs, export results, and guidance text file per domain.
 
 .EXAMPLE
   .\Assess-ADForest.ps1 -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs
@@ -73,6 +80,9 @@ param(
     
     [Parameter()]
     [switch]$ExportResults,
+    
+    [Parameter()]
+    [switch]$IncludeGuidance,
     
     [Parameter()]
     [switch]$Parallel,
@@ -423,7 +433,8 @@ function Invoke-DomainAssessment {
         [string]$ScriptPath,
         [bool]$AnalyzeLogs,
         [int]$Hours,
-        [bool]$Export
+        [bool]$Export,
+        [bool]$Guidance
     )
     
     Write-Host "`n$("=" * 80)" -ForegroundColor Yellow
@@ -473,6 +484,10 @@ function Invoke-DomainAssessment {
     
     if ($Export) {
         $params['ExportResults'] = $true
+    }
+    
+    if ($Guidance) {
+        $params['IncludeGuidance'] = $true
     }
     
     try {
@@ -555,6 +570,10 @@ if ($Parallel -and $PSVersionTable.PSVersion.Major -ge 7) {
             $params['ExportResults'] = $true
         }
         
+        if ($using:IncludeGuidance) {
+            $params['IncludeGuidance'] = $true
+        }
+        
         # Run assessment with splatted parameters and capture returned results object
         $assessmentResults = & $using:assessmentScript @params
         
@@ -577,7 +596,7 @@ else {
     foreach ($domain in $domainList) {
         $result = Invoke-DomainAssessment -DomainName $domain -ScriptPath $assessmentScript `
             -AnalyzeLogs $AnalyzeEventLogs -Hours $EventLogHours `
-            -Export $ExportResults
+            -Export $ExportResults -Guidance $IncludeGuidance
         $forestResults.DomainResults += $result
     }
 }
