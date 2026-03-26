@@ -321,6 +321,28 @@ This toolkit implements the full [CVE-2026-20833 deployment guidance](https://su
 | **Events 206-208** (Enforcement blocking) | Detected with recommendation to migrate to AES (0x18) or add per-account `0x1C` exception as last resort |
 | **Installing updates alone doesn't fix CVE** | Recommendations explicitly guide to enable Enforcement (value 2) |
 
+### KDCSVC Event Reference (System Log, Provider: KDCSVC)
+
+These events are logged on Windows Server 2012+ domain controllers after installing the January 2026+ security updates. They require `RC4DefaultDisablementPhase >= 1` to appear.
+
+| Event ID | RC4 Relation | Description | Phase |
+|----------|-------------|-------------|-------|
+| **201** | Direct | KDC **rejects the request** — client only offers RC4, which is not allowed | Audit |
+| **202** | Direct | Client requests an **unsupported encryption type** (typically RC4 after it has been disabled) | Audit |
+| **203** | Direct | Account (user/computer/gMSA) **supports RC4 but not AES**, while the KDC requires AES | Audit |
+| **204** | Indirect | **SPN cannot use the requested encryption type** (RC4 is often the root cause) | Audit |
+| **205** | Direct | `DefaultDomainSupportedEncTypes` **registry is configured insecurely** (includes RC4) | Audit |
+| **206** | Direct | Ticket generation **failed because RC4 is disabled** on the KDC | Enforcement |
+| **207** | Contextual | **Internal KDC error** (often appears together with 201–206 events) | Both |
+| **208** | Direct | Client **explicitly requested RC4**, and it was rejected | Enforcement |
+| **209** | Direct | Ticket **cannot be issued** because RC4 is **no longer allowed by policy** | Enforcement |
+
+> **Audit events (201–205):** Logged when `RC4DefaultDisablementPhase = 1`. These are warnings — no tickets are blocked yet. Use them to discover RC4 dependencies before enabling Enforcement.
+>
+> **Enforcement events (206–209):** Logged when `RC4DefaultDisablementPhase = 2` or after April/July 2026 updates. These indicate **active blocking** — affected accounts need migration to AES (`0x18`) or explicit RC4 exception (`0x1C`) as last resort.
+>
+> **Source:** [KB5073381 — How to manage Kerberos KDC usage of RC4 for service account ticket issuance (CVE-2026-20833)](https://support.microsoft.com/help/5073381)
+
 ## AzureADKerberos (Entra Kerberos Proxy)
 
 If your environment uses **Microsoft Entra ID** (formerly Azure AD) features such as **Windows Hello for Business Cloud Kerberos Trust** or **FIDO2 security key sign-in**, you will have a computer object named `AzureADKerberos` in your Domain Controllers OU.
@@ -369,6 +391,112 @@ Set-AzureADKerberosServer -Domain contoso.com -CloudCredential $cloudCred -Domai
 For more information, see:
 - [Windows Hello for Business cloud Kerberos trust deployment guide](https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/deploy/hybrid-cloud-kerberos-trust)
 - [Passwordless security key sign-in to on-premises resources](https://learn.microsoft.com/en-us/entra/identity/authentication/howto-authentication-passwordless-security-key-on-premises) (includes key rotation steps)
+
+## Creating Managed Service Accounts with AES-Only Encryption
+
+When creating new Managed Service Accounts, always specify `-KerberosEncryptionType AES128,AES256` to avoid RC4 dependencies from the start.
+
+### Group Managed Service Account (gMSA)
+
+gMSAs are the recommended approach — password rotation is handled automatically by AD, and multiple servers can share the same account.
+
+**Create gMSA with a security group for authorized servers:**
+
+```powershell
+# Step 1: Create a security group containing the servers allowed to use this gMSA
+New-ADGroup -Name 'GR-gMSA-AppServers' -GroupScope Global -GroupCategory Security `
+    -Description 'Servers authorized to retrieve gMSA-App password'
+Add-ADGroupMember -Identity 'GR-gMSA-AppServers' -Members 'SRV01$','SRV02$'
+
+# Step 2: Create the gMSA (group-based authorization)
+New-ADServiceAccount `
+    -Name 'gMSA-App' `
+    -DNSHostName 'gMSA-App.contoso.com' `
+    -PrincipalsAllowedToRetrieveManagedPassword 'GR-gMSA-AppServers' `
+    -Description 'gMSA for application services' `
+    -ManagedPasswordIntervalInDays 30 `
+    -KerberosEncryptionType AES128,AES256 `
+    -Enabled $true
+```
+
+**Create gMSA with individual computer accounts (no group):**
+
+```powershell
+New-ADServiceAccount `
+    -Name 'gMSA-App' `
+    -DNSHostName 'gMSA-App.contoso.com' `
+    -PrincipalsAllowedToRetrieveManagedPassword @('SRV01$','SRV02$') `
+    -Description 'gMSA for application services' `
+    -ManagedPasswordIntervalInDays 30 `
+    -KerberosEncryptionType AES128,AES256 `
+    -Enabled $true
+```
+
+> **Note:** Using a security group is recommended over listing individual computer accounts — it makes adding/removing servers easier without modifying the gMSA object.
+
+### Standalone Managed Service Account (sMSA)
+
+sMSAs are restricted to a single computer. Use these when only one server needs the account.
+
+```powershell
+# Create the sMSA
+New-ADServiceAccount -Name 'msa-AppSrv01' `
+    -RestrictToSingleComputer `
+    -Description 'sMSA dedicated to SRV01' `
+    -KerberosEncryptionType AES128,AES256 `
+    -PassThru
+
+# On the target server: install the sMSA (requires ActiveDirectory module)
+Install-ADServiceAccount -Identity 'msa-AppSrv01'
+
+# Verify it works
+Test-ADServiceAccount 'msa-AppSrv01'
+# Returns True if the server can retrieve the managed password
+```
+
+### Verify Managed Service Account Configuration
+
+```powershell
+# Check gMSA: authorized principals, encryption types, password age
+Get-ADServiceAccount -Identity 'gMSA-App' -Properties `
+    PrincipalsAllowedToRetrieveManagedPassword, KerberosEncryptionType, PasswordLastSet
+
+# Check sMSA: host binding, encryption types, password age
+Get-ADServiceAccount -Identity 'msa-AppSrv01' -Properties `
+    msDS-HostServiceAccountBL, KerberosEncryptionType, PasswordLastSet
+
+# Test on the target server (must be run locally)
+Test-ADServiceAccount 'gMSA-App'
+```
+
+### Refresh Kerberos Tickets After Changes
+
+After creating or modifying a managed service account, refresh tickets on the target server without restarting:
+
+```powershell
+# Purge cached Kerberos tickets for the SYSTEM account
+klist -li 0x3e7 purge
+
+# Force Group Policy update to apply any policy-based changes
+gpupdate /force
+```
+
+### Unlock a Service for Managed Account Changes
+
+If a Windows service is already configured with a managed account and you need to modify it:
+
+```powershell
+# Release the service from managed account control
+sc.exe managedaccount <ServiceName> false
+
+# After making changes, re-enable managed account
+sc.exe managedaccount <ServiceName> true
+```
+
+> **References:**
+> - [gMSA overview](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/group-managed-service-accounts/group-managed-service-accounts-overview)
+> - [Getting started with gMSA](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/group-managed-service-accounts/getting-started-with-group-managed-service-accounts)
+> - [Delegated Managed Service Accounts (dMSA)](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/delegated-managed-service-accounts/delegated-managed-service-accounts-overview) — Windows Server 2025+ feature for migrating from traditional service accounts
 
 ## Post-November 2022 Logic
 
