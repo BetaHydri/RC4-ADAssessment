@@ -7,7 +7,7 @@
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
 
-A PowerShell toolkit for assessing DES and RC4 Kerberos encryption usage in Active Directory — with inline remediation commands, event log analysis, KDC registry checks, and forest-wide scanning. Built for the **July 2026 RC4 removal deadline**.
+A PowerShell toolkit for assessing DES and RC4 Kerberos encryption usage in Active Directory. Scans DC encryption, trusts, KRBTGT, service accounts (SPN/gMSA/sMSA/dMSA), KDC registry keys, KDCSVC events 201–209 (CVE-2026-20833), and Security event logs (4768/4769) for actual RC4/DES ticket usage — with AES/RC4 correlation to detect accounts needing password reset, inline remediation commands, forest-wide scanning, assessment comparison, and a full reference manual. Built for the **July 2026 RC4 removal deadline**.
 
 ## Why This Toolkit?
 
