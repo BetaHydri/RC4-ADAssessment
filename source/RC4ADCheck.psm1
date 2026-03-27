@@ -2,7 +2,7 @@
 # This file is populated by ModuleBuilder during the build process.
 # For development, it dot-sources all public and private functions.
 
-$script:Version = '0.0.1'
+$script:Version = (Import-PowerShellDataFile -Path "$PSScriptRoot\RC4ADCheck.psd1").ModuleVersion
 $script:AssessmentTimestamp = Get-Date
 
 $privatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'
