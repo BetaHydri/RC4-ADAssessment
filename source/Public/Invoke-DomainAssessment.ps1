@@ -1,7 +1,6 @@
 function Invoke-DomainAssessment {
     param(
         [string]$DomainName,
-        [string]$ScriptPath,
         [bool]$AnalyzeLogs,
         [int]$Hours,
         [bool]$Export,
@@ -63,7 +62,7 @@ function Invoke-DomainAssessment {
     
     try {
         # Run assessment and capture returned results object
-        $assessmentResults = & $ScriptPath @params
+        $assessmentResults = Invoke-RC4Assessment @params
         
         # Parse results (if exported)
         if ($Export) {
@@ -119,3 +118,4 @@ function Invoke-DomainAssessment {
         }
     }
 }
+
