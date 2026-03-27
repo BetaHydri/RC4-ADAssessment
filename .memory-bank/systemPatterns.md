@@ -2,35 +2,51 @@
 
 ## Architecture
 
-The project is structured as three standalone PowerShell scripts with embedded functions:
+Sampler-based PowerShell module with dot-sourced function files:
 
-### Scripts
+### Module Structure
 
-| Script | Role | Functions |
-|--------|------|-----------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool | 16 functions + 800-line main execution block |
-| `Assess-ADForest.ps1` | Forest-wide wrapper | 2 functions (Show-ForestSummary, Invoke-DomainAssessment) |
-| `Compare-Assessments.ps1` | Assessment comparison | 3 functions (Write-ComparisonHeader, Write-ComparisonSection, Get-ChangeIndicator) |
+| Directory | Role | Count |
+|-----------|------|-------|
+| `source/Public/` | Exported functions | 16 |
+| `source/Private/` | Internal helpers | 8 |
+| `source/RC4ADCheck.psd1` | Module manifest | - |
+| `source/RC4ADCheck.psm1` | Dot-source loader | - |
+
+### Orchestration Commands (replace standalone scripts)
+
+| v2.x Script | v3.0 Command |
+|---|---|
+| `RC4_DES_Assessment.ps1` | `Invoke-RC4Assessment` |
+| `Assess-ADForest.ps1` | `Invoke-ForestAssessment` |
+| `Compare-Assessments.ps1` | `Invoke-AssessmentComparison` |
 
 ### Function Categories
 
-**Private/Helper Functions** (6):
+**Private/Helper Functions** (8):
 - `Write-Header`, `Write-Section`, `Write-Finding` — Console output formatting
+- `Write-ComparisonHeader`, `Write-ComparisonSection` — Comparison display
 - `Get-EncryptionTypeString` — Encryption value to human-readable string
 - `Get-TicketEncryptionType` — Event log encryption type to name mapping
 - `ConvertFrom-LastLogonTimestamp` — FileTime Int64 to DateTime conversion
 
-**Public/Assessment Functions** (10):
+**Public/Assessment Functions** (16):
 - `Get-DomainControllerEncryption` — DC encryption + GPO assessment
 - `Get-TrustEncryptionAssessment` — Trust encryption evaluation
 - `Get-KdcRegistryAssessment` — KDC registry key checks
 - `Get-KdcSvcEventAssessment` — KDCSVC event scanning
 - `Get-AuditPolicyCheck` — Audit policy verification
-- `Get-EventLogEncryptionAnalysis` — 4768/4769 event analysis
+- `Get-EventLogEncryptionAnalysis` — 4768/4769 event analysis with WinRM/RPC fallback
 - `Get-AccountEncryptionAssessment` — Account encryption status
 - `Show-AssessmentSummary` — Results display
+- `Show-ForestSummary` — Forest-wide results display
 - `Show-ManualValidationGuidance` — Guidance display
 - `Get-GuidancePlainText` — Plain text guidance generation
+- `Get-ChangeIndicator` — Comparison change markers
+- `Invoke-RC4Assessment` — Main single-domain orchestrator
+- `Invoke-ForestAssessment` — Forest-wide orchestrator
+- `Invoke-DomainAssessment` — Per-domain assessment wrapper
+- `Invoke-AssessmentComparison` — Compare two assessment exports
 
 ## Design Patterns
 

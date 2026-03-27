@@ -23,3 +23,7 @@
 ## 2026-03-27 (session 6)
 **Request**: Are docs and Memory Bank up to date?
 **Actions**: Audited all MB files — found stale counts (204→407 tests, 21→24 functions), pre-migration architecture descriptions, outdated progress. Updated all 5 core MB files.
+
+## 2026-03-27 (session 7)
+**Request**: Update docs with module usage guidance and old→new function/script mapping.
+**Actions**: Updated README.md (header, badges, Quick Start, Module Commands table, Parameters, Workflow diagram, Compare section, Export section, Troubleshooting, added Migrating from v2.x section with script→command and internal function mapping tables). Updated QUICK_START.md (header, all script references → module commands, workflows, troubleshooting, additional resources). Fixed systemPatterns.md stale pre-migration architecture.

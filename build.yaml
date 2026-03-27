@@ -54,7 +54,7 @@ Pester:
     Output:
       Verbosity: Detailed
     CodeCoverage:
-      CoveragePercentTarget: 0
+      CoveragePercentTarget: 75
       OutputPath: JaCoCo_coverage.xml
       OutputEncoding: ascii
     TestResult:

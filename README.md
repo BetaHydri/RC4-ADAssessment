@@ -1,13 +1,14 @@
-# DES/RC4 Kerberos Encryption Assessment
+# RC4ADCheck — DES/RC4 Kerberos Encryption Assessment
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-2.9.0-orange)
+![Build](https://img.shields.io/badge/build-Sampler-blueviolet)
 
-> **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.
+> **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.  
+> **📌 v3.0 Migration:** This version migrates from standalone scripts to the **RC4ADCheck** PowerShell module built with [Sampler](https://github.com/gaelcolas/Sampler). See [Migrating from v2.x](#migrating-from-v2x-standalone-scripts) for the old→new mapping.
 
-A PowerShell toolkit for assessing DES and RC4 Kerberos encryption usage in Active Directory. Scans DC encryption, trusts, KRBTGT, service accounts (SPN/gMSA/sMSA/dMSA), KDC registry keys, KDCSVC events 201–209 (CVE-2026-20833), and Security event logs (4768/4769) for actual RC4/DES ticket usage — with AES/RC4 correlation to detect accounts needing password reset, inline remediation commands, forest-wide scanning, assessment comparison, and a full reference manual. Built for the **July 2026 RC4 removal deadline**.
+A PowerShell module for assessing DES and RC4 Kerberos encryption usage in Active Directory. Scans DC encryption, trusts, KRBTGT, service accounts (SPN/gMSA/sMSA/dMSA), KDC registry keys, KDCSVC events 201–209 (CVE-2026-20833), and Security event logs (4768/4769) for actual RC4/DES ticket usage — with AES/RC4 correlation to detect accounts needing password reset, inline remediation commands, forest-wide scanning, assessment comparison, and a full reference manual. Built for the **July 2026 RC4 removal deadline**.
 
 ## Why This Toolkit?
 
@@ -48,20 +49,26 @@ This toolkit helps you:
 Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0
 Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
+# Install the module (once published to PSGallery)
+Install-Module -Name RC4ADCheck
+
+# Import the module
+Import-Module RC4ADCheck
+
 # Quick scan (config only, ~30 seconds)
-.\RC4_DES_Assessment.ps1 -QuickScan
+Invoke-RC4Assessment -QuickScan
 
 # Full scan with event logs (~3-5 minutes)
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168
+Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168
 
 # Full scan + export + reference manual
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults -IncludeGuidance
+Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults -IncludeGuidance
 
 # Entire forest (parallel, PS 7+)
-.\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 5
+Invoke-ForestAssessment -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 5
 
 # Compare two runs
-.\Compare-Assessments.ps1 -BaselineFile before.json -CurrentFile after.json -ShowDetails
+Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
 ```
 
 ## Prerequisites
@@ -71,19 +78,30 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 - **Permissions:** Domain Admin or equivalent (Event Log Readers for event analysis)
 - **Network:** WinRM (5985) or RPC (135) to DCs for event log and registry queries
 
-## Scripts
+## Module Commands
 
-| Script | Purpose |
-|--------|---------|
-| `RC4_DES_Assessment.ps1` | Main assessment tool (v2.9.0) |
-| `Assess-ADForest.ps1` | Forest-wide wrapper — runs assessment per domain |
-| `Compare-Assessments.ps1` | Compare two JSON exports to track progress (v2.9.0) |
-| `Test-EventLogFailureHandling.ps1` | Test script for event log error handling |
-| `Tests/` | 204 Pester unit tests |
+| Command | Purpose |
+|---------|---------|
+| `Invoke-RC4Assessment` | Main assessment for a single domain (replaces `RC4_DES_Assessment.ps1`) |
+| `Invoke-ForestAssessment` | Forest-wide assessment across all domains (replaces `Assess-ADForest.ps1`) |
+| `Invoke-AssessmentComparison` | Compare two JSON exports to track progress (replaces `Compare-Assessments.ps1`) |
+| `Get-DomainControllerEncryption` | DC encryption + GPO assessment |
+| `Get-TrustEncryptionAssessment` | Trust encryption evaluation |
+| `Get-KdcRegistryAssessment` | KDC registry key checks |
+| `Get-KdcSvcEventAssessment` | KDCSVC event scanning (CVE-2026-20833) |
+| `Get-AuditPolicyCheck` | Audit policy verification |
+| `Get-EventLogEncryptionAnalysis` | Event log 4768/4769 analysis |
+| `Get-AccountEncryptionAssessment` | Account encryption status |
+| `Show-AssessmentSummary` | Display assessment results |
+| `Show-ForestSummary` | Display forest-wide results |
+| `Show-ManualValidationGuidance` | Display reference manual |
+| `Get-GuidancePlainText` | Export guidance as plain text |
+| `Get-ChangeIndicator` | Change markers for comparison display |
+| `Invoke-DomainAssessment` | Per-domain wrapper used by forest assessment |
 
 ## Parameters
 
-### RC4_DES_Assessment.ps1
+### Invoke-RC4Assessment
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
@@ -95,7 +113,7 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 | `-IncludeGuidance` | Show full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline) | Off |
 | `-QuickScan` | Config-only scan (no event logs) | Default mode |
 
-### Assess-ADForest.ps1
+### Invoke-ForestAssessment
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
@@ -103,6 +121,7 @@ Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 | `-AnalyzeEventLogs` | Include event log analysis per domain | Off |
 | `-EventLogHours` | Hours of events (1-168) | 24 |
 | `-ExportResults` | Export per-domain + forest summary | Off |
+| `-IncludeGuidance` | Include reference manual per domain | Off |
 | `-Parallel` | Process domains concurrently (PS 7+) | Off |
 | `-MaxParallelDomains` | Max concurrent domains (1-10) | 3 |
 
@@ -210,7 +229,7 @@ Event Log Analysis - Actual DES/RC4 Usage
 
 ```
 Phase 1: Discovery                    Phase 2: Deep Analysis
-.\RC4_DES_Assessment.ps1              .\RC4_DES_Assessment.ps1 `
+Invoke-RC4Assessment `                Invoke-RC4Assessment `
     -QuickScan                            -AnalyzeEventLogs `
                                           -EventLogHours 168 `
          │                                -ExportResults
@@ -218,9 +237,9 @@ Phase 1: Discovery                    Phase 2: Deep Analysis
          └── ⚠ Issues → ─────────────────────┘
                                               │
 Phase 3: Remediate                    Phase 4: Validate
-Follow inline fix commands            .\RC4_DES_Assessment.ps1 `
+Follow inline fix commands            Invoke-RC4Assessment `
   • Set-ADComputer for DCs                -AnalyzeEventLogs -ExportResults
-  • Set RC4DefaultDisablementPhase    .\Compare-Assessments.ps1 `
+  • Set RC4DefaultDisablementPhase    Invoke-AssessmentComparison `
   • Reset service account passwords       -BaselineFile before.json `
   • klist purge after changes             -CurrentFile after.json -ShowDetails
          │                                    │
@@ -626,12 +645,12 @@ The assessment identifies accounts with passwords >5 years old or >365 days stal
 
 > **Note:** The `lastLogonTimestamp` value could be off by up to ~14 days (controlled by `ms-DS-Logon-Time-Sync-Interval`, default 14 days minus random 0-5 days). This does not change the remediation decision for accounts flagged by this assessment.
 
-## Compare-Assessments
+## Compare Assessments
 
 Track remediation progress by comparing two exported JSON files:
 
 ```powershell
-.\Compare-Assessments.ps1 -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
+Invoke-AssessmentComparison -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
 ```
 
 **Example: Before and after setting `RC4DefaultDisablementPhase = 1`:**
@@ -665,7 +684,7 @@ Compares:
 Results are exported to `.\Exports\` as JSON (full data) and CSV (summary table).
 
 ```powershell
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults
 # Creates:
 #   Exports\DES_RC4_Assessment_contoso_com_20260321_143015.json
 #   Exports\DES_RC4_Assessment_contoso_com_20260321_143015.csv
@@ -685,7 +704,7 @@ When event log queries fail, the script shows detailed troubleshooting:
 ### Child Domain Access
 ```powershell
 # If auto-discovery fails, specify a DC directly:
-.\RC4_DES_Assessment.ps1 -Server DC01.child.contoso.com -AnalyzeEventLogs
+Invoke-RC4Assessment -Server DC01.child.contoso.com -AnalyzeEventLogs
 ```
 
 ### No Events Found
@@ -694,6 +713,112 @@ Verify Kerberos auditing is enabled (the script checks this automatically with `
 auditpol /get /subcategory:"Kerberos Authentication Service"
 auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 ```
+
+## Migrating from v2.x (Standalone Scripts)
+
+v3.0 replaces the standalone `.ps1` scripts with the **RC4ADCheck** PowerShell module. All parameters are preserved — only the invocation changes.
+
+### Script → Command Mapping
+
+| v2.x (Standalone Script) | v3.0 (Module Command) | Notes |
+|---|---|---|
+| `.\RC4_DES_Assessment.ps1` | `Invoke-RC4Assessment` | All parameters identical |
+| `.\Assess-ADForest.ps1` | `Invoke-ForestAssessment` | Added `-IncludeGuidance` parameter |
+| `.\Compare-Assessments.ps1` | `Invoke-AssessmentComparison` | All parameters identical |
+| `.\Test-EventLogFailureHandling.ps1` | *(removed)* | Replaced by Pester unit tests |
+
+### Usage Examples — Before and After
+
+```powershell
+# v2.x: Quick scan
+.\RC4_DES_Assessment.ps1 -QuickScan
+
+# v3.0: Quick scan
+Import-Module RC4ADCheck
+Invoke-RC4Assessment -QuickScan
+```
+
+```powershell
+# v2.x: Full assessment with export
+.\RC4_DES_Assessment.ps1 -Domain contoso.com -AnalyzeEventLogs -EventLogHours 48 -ExportResults
+
+# v3.0: Identical parameters
+Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs -EventLogHours 48 -ExportResults
+```
+
+```powershell
+# v2.x: Forest-wide parallel assessment
+.\Assess-ADForest.ps1 -AnalyzeEventLogs -Parallel -MaxParallelDomains 5
+
+# v3.0: Same parameters
+Invoke-ForestAssessment -AnalyzeEventLogs -Parallel -MaxParallelDomains 5
+```
+
+```powershell
+# v2.x: Compare assessments
+.\Compare-Assessments.ps1 -BaselineFile before.json -CurrentFile after.json -ShowDetails
+
+# v3.0: Same parameters
+Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
+```
+
+### Internal Function Mapping
+
+Functions that were embedded inside the standalone scripts are now individual files in the module:
+
+| v2.x Location | v3.0 Module Function | Visibility |
+|---|---|---|
+| `RC4_DES_Assessment.ps1` → `Get-DomainControllerEncryption` | `Get-DomainControllerEncryption` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-TrustEncryptionAssessment` | `Get-TrustEncryptionAssessment` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-KdcRegistryAssessment` | `Get-KdcRegistryAssessment` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-KdcSvcEventAssessment` | `Get-KdcSvcEventAssessment` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-AuditPolicyCheck` | `Get-AuditPolicyCheck` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-EventLogEncryptionAnalysis` | `Get-EventLogEncryptionAnalysis` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-AccountEncryptionAssessment` | `Get-AccountEncryptionAssessment` | Public |
+| `RC4_DES_Assessment.ps1` → `Show-AssessmentSummary` | `Show-AssessmentSummary` | Public |
+| `RC4_DES_Assessment.ps1` → `Show-ManualValidationGuidance` | `Show-ManualValidationGuidance` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-GuidancePlainText` | `Get-GuidancePlainText` | Public |
+| `RC4_DES_Assessment.ps1` → main execution block (~800 lines) | `Invoke-RC4Assessment` | Public |
+| `Assess-ADForest.ps1` → `Show-ForestSummary` | `Show-ForestSummary` | Public |
+| `Assess-ADForest.ps1` → `Invoke-DomainAssessment` | `Invoke-DomainAssessment` | Public |
+| `Assess-ADForest.ps1` → main execution block | `Invoke-ForestAssessment` | Public |
+| `Compare-Assessments.ps1` → `Write-ComparisonHeader` | `Write-ComparisonHeader` | Private |
+| `Compare-Assessments.ps1` → `Write-ComparisonSection` | `Write-ComparisonSection` | Private |
+| `Compare-Assessments.ps1` → `Get-ChangeIndicator` | `Get-ChangeIndicator` | Public |
+| `Compare-Assessments.ps1` → main execution block | `Invoke-AssessmentComparison` | Public |
+| `RC4_DES_Assessment.ps1` → `Write-Header` | `Write-Header` | Private |
+| `RC4_DES_Assessment.ps1` → `Write-Section` | `Write-Section` | Private |
+| `RC4_DES_Assessment.ps1` → `Write-Finding` | `Write-Finding` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-EncryptionTypeString` | `Get-EncryptionTypeString` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-TicketEncryptionType` | `Get-TicketEncryptionType` | Private |
+| `RC4_DES_Assessment.ps1` → `ConvertFrom-LastLogonTimestamp` | `ConvertFrom-LastLogonTimestamp` | Private |
+
+### Project Structure Change
+
+```
+v2.x (Standalone)                    v3.0 (Sampler Module)
+─────────────────                    ────────────────────
+RC4_DES_Assessment.ps1 (4006 lines)  source/
+Assess-ADForest.ps1 (749 lines)        Public/  (16 files)
+Compare-Assessments.ps1 (353 lines)    Private/ (8 files)
+Tests/ (4 files, 204 tests)             RC4ADCheck.psd1
+                                         RC4ADCheck.psm1
+                                       tests/
+                                         Unit/ (29 files)
+                                         QA/   (module quality)
+                                       build.ps1
+                                       build.yaml
+                                       GitVersion.yml
+```
+
+### What Changed
+
+- **Installation**: `Install-Module RC4ADCheck` instead of downloading scripts
+- **Invocation**: `Import-Module RC4ADCheck; Invoke-RC4Assessment` instead of `.\RC4_DES_Assessment.ps1`
+- **Versioning**: Managed by GitVersion (SemVer) instead of manual version strings
+- **Testing**: 407 tests across 29 files (up from 204 across 4 files)
+- **Build**: Sampler pipeline (`build.ps1`) for automated build, test, and package
+- **All parameters preserved**: Every parameter from v2.x works identically in v3.0
 
 ## Reference Documentation
 
