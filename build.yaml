@@ -1,0 +1,74 @@
+---
+BuildWorkflow:
+  '.':
+    - build
+    - test
+
+  build:
+    - Clean
+    - Build_Module_ModuleBuilder
+    - Build_NestedModules_ModuleBuilder
+    - Create_Changelog_Release_Output
+
+  pack:
+    - build
+    - package_module_nupkg
+
+  test:
+    - Pester_Tests_Stop_On_Fail
+    - Convert_Pester_Coverage
+    - Pester_If_Code_Coverage_Under_Threshold
+
+  publish:
+    - Publish_Release_To_GitHub
+    - Publish_Module_To_gallery
+
+CopyPaths: []
+Encoding: UTF8
+VersionedOutputDirectory: true
+BuiltModuleSubdirectory: builtModule
+
+ModuleBuildTasks:
+  Sampler:
+    - '*.build.Sampler.ib.tasks'
+  Sampler.GitHubTasks:
+    - '*.ib.tasks'
+
+TaskHeader: |
+  param($Path)
+  ""
+  "=" * 79
+  Write-Build Cyan "`t`t`t$($Task.Name.replace("_"," "))"
+  Write-Build DarkGray  "$(Get-BuildSynopsis $Task)"
+  "-" * 79
+  Write-Build DarkGray "  $Path"
+  Write-Build DarkGray "  $($Task.InvocationInfo.ScriptName):$($Task.InvocationInfo.ScriptLineNumber)"
+  ""
+
+Pester:
+  Configuration:
+    Run:
+      Path:
+        - tests/Unit
+    Output:
+      Verbosity: Detailed
+    CodeCoverage:
+      CoveragePercentTarget: 0
+      OutputPath: JaCoCo_coverage.xml
+      OutputEncoding: ascii
+    TestResult:
+      OutputFormat: NUnitXML
+      OutputEncoding: ascii
+      Enabled: true
+
+Resolve-Dependency:
+  Gallery: 'PSGallery'
+  AllowPrerelease: false
+  Verbose: false
+
+GitHubConfig:
+  GitHubFilesToAdd:
+    - 'CHANGELOG.md'
+  GitHubConfigUserName: dscbot
+  GitHubConfigUserEmail: dsccommunity@outlook.com
+  UpdateChangelogOnPrerelease: false
