@@ -69,13 +69,7 @@ PowerShellVersion = '5.1'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = 'Get-AccountEncryptionAssessment', 'Get-AuditPolicyCheck', 
-               'Get-ChangeIndicator', 'Get-DomainControllerEncryption', 
-               'Get-EventLogEncryptionAnalysis', 'Get-GuidancePlainText', 
-               'Get-KdcRegistryAssessment', 'Get-KdcSvcEventAssessment', 
-               'Get-TrustEncryptionAssessment', 'Invoke-DomainAssessment', 
-               'Show-AssessmentSummary', 'Show-ForestSummary', 
-               'Show-ManualValidationGuidance'
+FunctionsToExport = @()
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
@@ -132,7 +126,3 @@ PrivateData = @{
 # DefaultCommandPrefix = ''
 
 }
-
-
-
-
