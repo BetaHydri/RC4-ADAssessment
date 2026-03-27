@@ -2,23 +2,24 @@
 
 ## What Works
 
-- **v2.9.0** (current) — Full assessment toolkit with 12+ check categories
-- **204 Pester 5 tests** passing across 4 test files
+- **v3.0.0-preview** (Sampler module) — Full assessment toolkit with 16 public + 8 private functions
+- **407 Pester 5 tests** (383 passed, 24 skipped) across 29 test files
+- **Sampler build pipeline** — `build.ps1 -Tasks test` succeeds (9 tasks, 0 errors)
 - **AES/RC4 correlation** — Password reset detection for accounts with AES config but RC4 usage
 - **Forest-wide scanning** — Parallel domain assessment with PS 7+
 - **Assessment comparison** — JSON-based progress tracking
 - **Inline remediation** — Copy-paste fix commands for every finding
-- **Event log analysis** — Real-world RC4/DES ticket usage detection
+- **Event log analysis** — Real-world RC4/DES ticket usage detection with WinRM/RPC fallback
 - **KDCSVC events** — CVE-2026-20833 assessment
 - **Guidance export** — Plain text reference manual
 
-## What's In Progress
+## What's Left
 
-- **Sampler migration** — Converting from standalone scripts to Sampler module structure
-  - Extract functions into individual files (source/Public/, source/Private/)
-  - Create module manifest and build infrastructure
-  - Set up GitVersion, PSScriptAnalyzer, CI/CD pipeline
-  - Adapt existing tests to module-based imports
+- Update README.md and QUICK_START.md for module-based usage (still reference standalone scripts)
+- Add PSScriptAnalyzer custom rules
+- Set up Azure Pipelines CI/CD
+- Consider code coverage targets
+- PR review and merge to main
 
 ## Version History
 
@@ -35,8 +36,7 @@
 
 ## Known Issues
 
-- Version string duplicated across multiple files (script metadata, README, CHANGELOG, tests)
-- No automated build/release pipeline
-- Tests use regex function extraction instead of module imports
-- No PSScriptAnalyzer enforcement
-- No code coverage tracking
+- README.md and QUICK_START.md still reference standalone scripts (pre-migration)
+- 24 QA tests skipped (expected — module not published to gallery yet)
+- No code coverage tracking enabled yet
+- No CI/CD pipeline configured yet

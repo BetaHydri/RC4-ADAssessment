@@ -3,8 +3,9 @@
 ## Tech Stack
 
 - **Language**: PowerShell 5.1+ (7+ for parallel features)
+- **Build Framework**: Sampler (ModuleBuilder, InvokeBuild, GitVersion)
 - **Dependencies**: ActiveDirectory module, GroupPolicy module
-- **Testing**: Pester 5.x (204 tests across 4 files)
+- **Testing**: Pester 5.x (407 tests across 29 files)
 - **Version Control**: Git, hosted on GitHub (BetaHydri/RC4_AD_Check)
 - **License**: MIT
 
@@ -12,35 +13,68 @@
 
 1. Clone the repository
 2. Ensure RSAT tools installed (`ActiveDirectory`, `GroupPolicy` modules)
-3. Pester 5.x for testing: `Install-Module Pester -Force -SkipPublisherCheck`
-4. Run tests: `Invoke-Pester -Path .\Tests\ -Output Detailed`
+3. First build: `pwsh -NoProfile -NonInteractive -Command './build.ps1 -ResolveDependency'` (in external terminal)
+4. Subsequent builds: use `Start-Process` detached (see below)
 
-## Build System (Target: Sampler)
+## CRITICAL: Running Builds and Tests
 
-Migration to Sampler build framework planned:
-- ModuleBuilder for module compilation
-- InvokeBuild for task automation
-- GitVersion for semantic versioning
-- PSScriptAnalyzer for code quality
-- Pester 5 for testing (already in use)
+**NEVER** run `build.ps1`, `Invoke-Pester`, or any long-running command directly in the
+VS Code integrated terminal. Even `pwsh -Command '...'` can hang VS Code.
 
-## Repository Structure (Pre-Migration)
+**ALWAYS use `Start-Process` (fully detached) with log polling:**
+
+```powershell
+$logPath = Join-Path $PWD 'output\test.log'
+Remove-Item $logPath -ErrorAction SilentlyContinue
+Start-Process -FilePath pwsh -ArgumentList @(
+    '-NoProfile', '-NonInteractive', '-Command',
+    "Set-Location '$PWD'; .\build.ps1 -Tasks test *>&1 | Out-File -FilePath '$logPath' -Encoding utf8"
+) -WindowStyle Hidden -PassThru
+
+for ($i = 0; $i -lt 60; $i++) {
+    Start-Sleep 3
+    if (Test-Path $logPath) {
+        $c = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
+        if ($c -match 'Build (FAILED|succeeded)') {
+            Get-Content $logPath -Tail 30
+            break
+        }
+    }
+}
+```
+
+## Build System (Sampler — Active)
+
+Sampler build framework fully operational:
+- **ModuleBuilder** for module compilation (source/ → output/builtModule/)
+- **InvokeBuild** for task automation (`build.ps1 -Tasks test|build|pack`)
+- **GitVersion** for semantic versioning (ContinuousDelivery mode, next-version: 3.0.0)
+- **PSScriptAnalyzer** for code quality
+- **Pester 5** for testing (407 tests, 0 failures)
+
+## Repository Structure (Post-Migration)
 
 ```
 RC4_AD_Check/
-├── RC4_DES_Assessment.ps1      # Main assessment (4006 lines, 16 functions)
-├── Assess-ADForest.ps1         # Forest wrapper (750 lines, 2 functions)
-├── Compare-Assessments.ps1     # Comparison tool (354 lines, 3 functions)
-├── Tests/
-│   ├── RC4_DES_Assessment.Tests.ps1     # 2501 lines
-│   ├── Assess-ADForest.Tests.ps1        # 487 lines
-│   ├── Compare-Assessments.Tests.ps1    # 455 lines
-│   └── Test-EventLogFailureHandling.ps1 # 252 lines
-├── archive/                    # Legacy v1.0 files
-├── docs/                       # Screenshots
+├── source/
+│   ├── Public/          # 16 exported functions
+│   ├── Private/         # 8 internal helpers
+│   ├── RC4ADCheck.psd1  # Module manifest
+│   └── RC4ADCheck.psm1  # Module loader
+├── tests/
+│   ├── Unit/            # 29 test files (259 passed)
+│   └── QA/              # Module quality tests (124 passed, 24 skipped)
+├── output/              # Build output (gitignored)
+│   ├── builtModule/     # Compiled module
+│   ├── RequiredModules/ # Build dependencies
+│   └── testResults/     # NUnit XML + Pester objects
+├── archive/             # Legacy v1.0 files
+├── build.ps1            # Sampler bootstrap
+├── build.yaml           # Build configuration
+├── GitVersion.yml       # Versioning config
 ├── CHANGELOG.md
-├── QUICK_START.md
-├── README.md
+├── QUICK_START.md       # (needs update for module usage)
+├── README.md            # (needs update for module usage)
 └── LICENSE
 ```
 

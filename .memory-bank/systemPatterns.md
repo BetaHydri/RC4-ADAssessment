@@ -38,20 +38,28 @@ The project is structured as three standalone PowerShell scripts with embedded f
 - **Progressive disclosure**: QuickScan (config only) vs FullScan (with event logs)
 - **Export pattern**: JSON for machine consumption, CSV for spreadsheet analysis
 - **Comparison pattern**: Baseline vs current JSON files for progress tracking
-- **Mock-friendly design**: All AD cmdlets are mockable; tests use regex extraction
+- **WinRM/RPC fallback**: Event log queries try Invoke-Command first, fall back to Get-WinEvent -ComputerName
+- **PS 5.1 safety**: Always wrap collections in `@()` before using `.Count` (no intrinsic `.Count` on scalars in 5.1)
 
 ## Testing Pattern
 
-Tests use Pester 5 with a regex-based function extraction pattern:
-1. Read script content as raw string
-2. Extract function block using regex
-3. Dot-source the extracted functions via `ScriptBlock::Create()`
-4. Mock AD/GP cmdlets with parameter-compatible stubs
-5. Test functions in isolation
+Pester 5 tests dot-source functions from `source/` directories:
+1. `BeforeAll` creates global stubs for AD/GP cmdlets (parameter-compatible)
+2. `BeforeEach` mocks specific cmdlets per context
+3. Functions tested in isolation with structured hashtable assertions
+4. Build runs tests via Sampler `Pester_Tests_Stop_On_Fail` task
+
+## Build Pattern (Sampler)
+
+- `build.ps1 -ResolveDependency` — first-time setup
+- `build.ps1 -Tasks build` — compile module to output/builtModule/
+- `build.ps1 -Tasks test` — build + run all tests
+- GitVersion drives versioning (ContinuousDelivery, next-version: 3.0.0)
 
 ## Key Conventions
 
-- Version tracked in script metadata, README, CHANGELOG, and test files
+- Version managed by GitVersion (no manual version strings)
 - Assessment results are structured hashtables with consistent property names
 - Console output uses `Write-Host` with color coding (Green=OK, Yellow=WARNING, Red=CRITICAL)
-- All AD queries use `@serverParams` splatting for DC targeting
+- All AD queries use `@ServerParams` splatting for DC targeting
+- Functions use `[CmdletBinding()]` with proper parameter declarations
