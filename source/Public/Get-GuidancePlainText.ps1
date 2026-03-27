@@ -1,4 +1,29 @@
 function Get-GuidancePlainText {
+    <#
+    .SYNOPSIS
+        Generates a plain-text remediation guidance document for the RC4/DES assessment.
+
+    .DESCRIPTION
+        Builds and returns a formatted plain-text string containing the complete set of
+        manual validation steps, remediation guidance, and reference documentation links for
+        addressing DES and RC4 Kerberos encryption issues in Active Directory. The output
+        includes domain name, generation date, and tool version in the header, and covers all
+        11 standard guidance sections without Unicode decorators so the text is safe for
+        plain-text file export.
+
+    .PARAMETER Domain
+        The Active Directory domain name to include in the guidance document header.
+
+    .PARAMETER AssessmentDate
+        The date/time string to include in the guidance document header.
+
+    .PARAMETER Version
+        The module version string to include in the guidance document header.
+
+    .EXAMPLE
+        $text = Get-GuidancePlainText -Domain "contoso.com" -AssessmentDate (Get-Date -Format "yyyy-MM-dd") -Version "1.0.0"
+        $text | Out-File -FilePath "C:\Reports\guidance.txt"
+    #>
     param(
         [string]$Domain,
         [string]$AssessmentDate,

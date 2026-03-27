@@ -1,4 +1,24 @@
 function Get-DomainControllerEncryption {
+    <#
+    .SYNOPSIS
+        Assesses the Kerberos encryption configuration on all Domain Controllers in a domain.
+
+    .DESCRIPTION
+        Queries Active Directory for all Domain Controllers and reads their
+        msDS-SupportedEncryptionTypes attribute to determine whether each DC is configured for
+        AES, RC4, DES, or the platform default. Also checks Group Policy for domain-level
+        encryption type settings. Returns a detailed hashtable with per-DC findings and
+        aggregate counts.
+
+    .PARAMETER ServerParams
+        A hashtable of parameters passed through to Active Directory cmdlets. Supports a
+        'Server' key to target a specific Domain Controller.
+
+    .EXAMPLE
+        $params = @{ Server = 'dc01.contoso.com' }
+        $result = Get-DomainControllerEncryption -ServerParams $params
+        $result.DESConfigured
+    #>
     param(
         [hashtable]$ServerParams
     )

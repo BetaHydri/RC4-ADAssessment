@@ -1,4 +1,24 @@
 function Get-TrustEncryptionAssessment {
+    <#
+    .SYNOPSIS
+        Assesses Kerberos encryption configuration on Active Directory trust relationships.
+
+    .DESCRIPTION
+        Queries Active Directory for all domain and forest trust objects and evaluates their
+        msDS-SupportedEncryptionTypes attribute. Following the post-November 2022 behaviour,
+        an empty or zero value is treated as AES default. Trusts explicitly configured for
+        RC4 or DES are flagged as risks. Returns a detailed hashtable with per-trust findings
+        and aggregate counts.
+
+    .PARAMETER ServerParams
+        A hashtable of parameters passed through to Active Directory cmdlets. Supports a
+        'Server' key to target a specific Domain Controller.
+
+    .EXAMPLE
+        $params = @{ Server = 'dc01.contoso.com' }
+        $result = Get-TrustEncryptionAssessment -ServerParams $params
+        $result.RC4Risk
+    #>
     param(
         [hashtable]$ServerParams
     )

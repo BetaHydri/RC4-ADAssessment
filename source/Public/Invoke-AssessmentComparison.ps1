@@ -12,6 +12,8 @@ function Invoke-AssessmentComparison {
   Path to the current (newer) assessment JSON file.
 .PARAMETER ShowDetails
   Show detailed per-DC and per-trust changes.
+.EXAMPLE
+  Invoke-AssessmentComparison -BaselineFile "C:\Reports\assessment-2025-01.json" -CurrentFile "C:\Reports\assessment-2025-03.json"
 #>
     [CmdletBinding()]
     param(

@@ -1,4 +1,21 @@
 function Get-EncryptionTypeString {
+    <#
+    .SYNOPSIS
+        Converts a msDS-SupportedEncryptionTypes bitmask integer to a human-readable string.
+
+    .DESCRIPTION
+        Interprets the integer bitmask stored in the msDS-SupportedEncryptionTypes Active
+        Directory attribute and returns a comma-separated string listing each enabled encryption
+        type (DES-CBC-CRC, DES-CBC-MD5, RC4-HMAC, AES128-HMAC, AES256-HMAC).
+        Returns "Not Set (Default)" when the value is 0 or $null.
+
+    .PARAMETER Value
+        The integer bitmask value from msDS-SupportedEncryptionTypes.
+
+    .EXAMPLE
+        Get-EncryptionTypeString -Value 24
+        # Returns "AES128-HMAC, AES256-HMAC"
+    #>
     param([int]$Value)
     
     if (-not $Value -or $Value -eq 0) {

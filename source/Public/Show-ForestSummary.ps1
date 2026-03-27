@@ -1,4 +1,21 @@
 function Show-ForestSummary {
+    <#
+    .SYNOPSIS
+        Displays forest-wide summary tables aggregating assessment results across all domains.
+
+    .DESCRIPTION
+        Renders consolidated console-formatted summary tables from a forest-level assessment
+        result, combining Domain Controller, event log, and trust data across all assessed
+        domains. Provides a cross-domain view of RC4/DES exposure within the Active Directory
+        forest.
+
+    .PARAMETER ForestResults
+        The forest assessment results hashtable returned by Invoke-ForestAssessment.
+
+    .EXAMPLE
+        $forestResults = Invoke-ForestAssessment
+        Show-ForestSummary -ForestResults $forestResults
+    #>
     param(
         [Parameter(Mandatory = $true)]
         [hashtable]$ForestResults

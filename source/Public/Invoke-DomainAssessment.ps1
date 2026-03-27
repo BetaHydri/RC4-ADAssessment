@@ -1,4 +1,36 @@
 function Invoke-DomainAssessment {
+    <#
+    .SYNOPSIS
+        Runs the full RC4/DES Kerberos encryption assessment against a single Active Directory domain.
+
+    .DESCRIPTION
+        Discovers a Domain Controller for the specified domain and orchestrates the complete
+        assessment pipeline, including DC encryption, KDC registry settings, KDCSVC events,
+        account encryption, trust encryption, and audit policy checks. Optionally analyses
+        event logs for actual RC4/DES ticket usage and exports results to JSON and guidance to
+        a text file. Returns a hashtable containing all assessment results and an overall score.
+
+    .PARAMETER DomainName
+        The fully qualified DNS name of the Active Directory domain to assess.
+
+    .PARAMETER AnalyzeLogs
+        When $true, includes event log analysis for actual RC4/DES Kerberos ticket usage.
+
+    .PARAMETER Hours
+        The number of hours of event log history to analyse when AnalyzeLogs is $true.
+
+    .PARAMETER Export
+        When $true, exports the assessment results to a JSON file and guidance to a text file.
+
+    .PARAMETER Guidance
+        When $true, displays the manual validation guidance section in the console output.
+
+    .EXAMPLE
+        Invoke-DomainAssessment -DomainName "contoso.com" -AnalyzeLogs $true -Hours 48
+
+    .EXAMPLE
+        Invoke-DomainAssessment -DomainName "contoso.com" -Export $true
+    #>
     param(
         [string]$DomainName,
         [bool]$AnalyzeLogs,

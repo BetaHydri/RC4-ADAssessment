@@ -1,4 +1,22 @@
 function Show-AssessmentSummary {
+    <#
+    .SYNOPSIS
+        Displays formatted summary tables for a completed RC4/DES domain assessment.
+
+    .DESCRIPTION
+        Renders console-formatted summary tables from a completed assessment results hashtable,
+        including Domain Controller encryption status, account findings (KRBTGT, DES-flag
+        accounts, RC4-only service accounts), event log statistics, trust encryption status,
+        and KDC registry configuration. Failed DC lists are shown when present.
+
+    .PARAMETER Results
+        The assessment results hashtable returned by Invoke-DomainAssessment or
+        Invoke-RC4Assessment.
+
+    .EXAMPLE
+        $results = Invoke-RC4Assessment -DomainName "contoso.com"
+        Show-AssessmentSummary -Results $results
+    #>
     param(
         [Parameter(Mandatory = $true)]
         [hashtable]$Results

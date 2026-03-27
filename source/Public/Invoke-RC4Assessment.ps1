@@ -20,6 +20,11 @@ function Invoke-RC4Assessment {
     Show full reference manual and export guidance text file when combined with -ExportResults.
 .PARAMETER QuickScan
     Fast scan mode - DC/GPO/Trust assessment only, no event log analysis.
+.EXAMPLE
+    Invoke-RC4Assessment
+
+.EXAMPLE
+    Invoke-RC4Assessment -Domain "contoso.com" -AnalyzeEventLogs -EventLogHours 48 -ExportResults
 #>
 [CmdletBinding(DefaultParameterSetName = 'QuickScan')]
 param(
