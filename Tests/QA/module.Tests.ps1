@@ -1,191 +1,215 @@
-#Requires -Modules Pester
+BeforeDiscovery {
+    $projectPath = "$($PSScriptRoot)\..\.." | Convert-Path
 
-<#
-.SYNOPSIS
-    Quality assurance tests for the RC4ADCheck module.
-.DESCRIPTION
-    Tests module manifest, function exports, and basic code quality.
-.NOTES
-    Requires: Pester 5.x
-#>
+    <#
+        If the QA tests are run outside of the build script (e.g with Invoke-Pester)
+        the parent scope has not set the variable $ProjectName.
+    #>
+    if (-not $ProjectName)
+    {
+        # Assuming project folder name is project name.
+        $ProjectName = Get-SamplerProjectName -BuildRoot $projectPath
+    }
+
+    $script:moduleName = $ProjectName
+
+    Remove-Module -Name $script:moduleName -Force -ErrorAction SilentlyContinue
+
+    $mut = Get-Module -Name $script:moduleName -ListAvailable |
+        Select-Object -First 1 |
+            Import-Module -Force -ErrorAction Stop -PassThru
+}
 
 BeforeAll {
-    $projectRoot = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-    $sourceRoot = Join-Path -Path $projectRoot -ChildPath 'source'
-    $manifestPath = Join-Path -Path $sourceRoot -ChildPath 'RC4ADCheck.psd1'
+    # Convert-Path required for PS7 or Join-Path fails
+    $projectPath = "$($PSScriptRoot)\..\.." | Convert-Path
+
+    <#
+        If the QA tests are run outside of the build script (e.g with Invoke-Pester)
+        the parent scope has not set the variable $ProjectName.
+    #>
+    if (-not $ProjectName)
+    {
+        # Assuming project folder name is project name.
+        $ProjectName = Get-SamplerProjectName -BuildRoot $projectPath
+    }
+
+    $script:moduleName = $ProjectName
+
+    $sourcePath = (
+        Get-ChildItem -Path $projectPath\*\*.psd1 |
+            Where-Object -FilterScript {
+                ($_.Directory.Name -match 'source|src' -or $_.Directory.Name -eq $_.BaseName) `
+                    -and $(
+                    try
+                    {
+                        Test-ModuleManifest -Path $_.FullName -ErrorAction Stop
+                    }
+                    catch
+                    {
+                        $false
+                    }
+                )
+            }
+    ).Directory.FullName
 }
 
-Describe 'Module Manifest' -Tag 'QA' {
-    It 'Has a valid module manifest' {
-        $manifestPath | Should -Exist
+Describe 'Changelog Management' -Tag 'Changelog' {
+
+    It 'Changelog format compliant with keepachangelog format' -Skip:(![bool](Get-Command git -EA SilentlyContinue)) {
+        { Get-ChangelogData -Path (Join-Path $ProjectPath 'CHANGELOG.md') -ErrorAction Stop } | Should -Not -Throw
     }
 
-    It 'Manifest passes Test-ModuleManifest' {
-        { Test-ModuleManifest -Path $manifestPath -ErrorAction Stop } | Should -Not -Throw
-    }
-
-    It 'Has a valid root module' {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $manifest.RootModule | Should -Be 'RC4ADCheck.psm1'
-    }
-
-    It 'Has a valid GUID' {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $manifest.Guid | Should -Not -BeNullOrEmpty
-    }
-
-    It 'Has a description' {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $manifest.Description | Should -Not -BeNullOrEmpty
-    }
-
-    It 'Has an author' {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $manifest.Author | Should -Not -BeNullOrEmpty
-    }
-
-    It 'Has project URI' {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $manifest.PrivateData.PSData.ProjectUri | Should -Not -BeNullOrEmpty
-    }
-
-    It 'Has license URI' {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $manifest.PrivateData.PSData.LicenseUri | Should -Not -BeNullOrEmpty
-    }
-
-    It 'Requires PowerShell 5.1 or later' {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $manifest.PowerShellVersion | Should -Be '5.1'
+    It 'Changelog should have an Unreleased header' -Skip:$skipTest {
+            (Get-ChangelogData -Path (Join-Path -Path $ProjectPath -ChildPath 'CHANGELOG.md') -ErrorAction Stop).Unreleased | Should -Not -BeNullOrEmpty
     }
 }
 
-Describe 'Module Function Exports' -Tag 'QA' {
-    BeforeAll {
-        $manifest = Test-ModuleManifest -Path $manifestPath
-        $publicFunctions = Get-ChildItem -Path (Join-Path $sourceRoot 'Public') -Filter '*.ps1' -Recurse |
-            Select-Object -ExpandProperty BaseName
+Describe 'General module control' -Tags 'FunctionalQuality' {
+    It 'Should import without errors' {
+        { Import-Module -Name $script:moduleName -Force -ErrorAction Stop } | Should -Not -Throw
+
+        Get-Module -Name $script:moduleName | Should -Not -BeNullOrEmpty
     }
 
-    It 'Exports all public functions' {
-        foreach ($function in $publicFunctions) {
-            $manifest.ExportedFunctions.Keys | Should -Contain $function `
-                -Because "$function is in source/Public/ and should be exported"
-        }
-    }
+    It 'Should remove without error' {
+        { Remove-Module -Name $script:moduleName -ErrorAction Stop } | Should -Not -Throw
 
-    It 'Does not export private functions' {
-        $privateFunctions = Get-ChildItem -Path (Join-Path $sourceRoot 'Private') -Filter '*.ps1' -Recurse -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty BaseName
-
-        foreach ($function in $privateFunctions) {
-            $manifest.ExportedFunctions.Keys | Should -Not -Contain $function `
-                -Because "$function is in source/Private/ and should not be exported"
-        }
-    }
-
-    It 'Does not export variables' {
-        $manifest.ExportedVariables.Count | Should -Be 0
-    }
-
-    It 'Does not export cmdlets' {
-        $manifest.ExportedCmdlets.Count | Should -Be 0
+        Get-Module $script:moduleName | Should -BeNullOrEmpty
     }
 }
 
-Describe 'Source File Quality' -Tag 'QA' {
-    BeforeAll {
-        $allSourceFiles = Get-ChildItem -Path $sourceRoot -Filter '*.ps1' -Recurse
-    }
+BeforeDiscovery {
+    # Must use the imported module to build test cases.
+    $allModuleFunctions = & $mut { Get-Command -Module $args[0] -CommandType Function } $script:moduleName
 
-    It 'Each public function file contains exactly one function matching the filename' {
-        $publicFiles = Get-ChildItem -Path (Join-Path $sourceRoot 'Public') -Filter '*.ps1'
-        foreach ($file in $publicFiles) {
-            $content = Get-Content -Path $file.FullName -Raw
-            $functionMatches = [regex]::Matches($content, '(?m)^function\s+(\S+)')
-            $functionMatches.Count | Should -BeGreaterOrEqual 1 `
-                -Because "$($file.Name) should contain at least one function"
-            $functionMatches[0].Groups[1].Value | Should -Be $file.BaseName `
-                -Because "$($file.Name) function name should match filename"
-        }
-    }
+    # Build test cases.
+    $testCases = @()
 
-    It 'Each private function file contains exactly one function matching the filename' {
-        $privateFiles = Get-ChildItem -Path (Join-Path $sourceRoot 'Private') -Filter '*.ps1'
-        foreach ($file in $privateFiles) {
-            $content = Get-Content -Path $file.FullName -Raw
-            $functionMatches = [regex]::Matches($content, '(?m)^function\s+(\S+)')
-            $functionMatches.Count | Should -BeGreaterOrEqual 1 `
-                -Because "$($file.Name) should contain at least one function"
-            $functionMatches[0].Groups[1].Value | Should -Be $file.BaseName `
-                -Because "$($file.Name) function name should match filename"
-        }
-    }
-
-    It 'All source files have valid PowerShell syntax' {
-        foreach ($file in $allSourceFiles) {
-            $errors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile(
-                $file.FullName,
-                [ref]$null,
-                [ref]$errors
-            ) | Out-Null
-            $errors | Should -HaveCount 0 `
-                -Because "$($file.Name) should have no syntax errors"
-        }
-    }
-
-    It 'No source file contains #Requires statements' {
-        foreach ($file in $allSourceFiles) {
-            $content = Get-Content -Path $file.FullName -Raw
-            $content | Should -Not -Match '#Requires' `
-                -Because "Dependencies should be declared in the module manifest, not in individual source files"
+    foreach ($function in $allModuleFunctions)
+    {
+        $testCases += @{
+            Name = $function.Name
         }
     }
 }
 
-Describe 'Project Structure' -Tag 'QA' {
-    It 'Has source/Public directory' {
-        Join-Path $sourceRoot 'Public' | Should -Exist
+Describe 'Quality for module' -Tags 'TestQuality' {
+    BeforeDiscovery {
+        if (Get-Command -Name Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue)
+        {
+            $scriptAnalyzerRules = Get-ScriptAnalyzerRule
+        }
+        else
+        {
+            if ($ErrorActionPreference -ne 'Stop')
+            {
+                Write-Warning -Message 'ScriptAnalyzer not found!'
+            }
+            else
+            {
+                throw 'ScriptAnalyzer not found!'
+            }
+        }
     }
 
-    It 'Has source/Private directory' {
-        Join-Path $sourceRoot 'Private' | Should -Exist
+    It 'Should have a unit test for <Name>' -ForEach $testCases {
+        Get-ChildItem -Path 'tests\' -Recurse -Include "$Name.Tests.ps1" | Should -Not -BeNullOrEmpty
     }
 
-    It 'Has module manifest' {
-        $manifestPath | Should -Exist
+    It 'Should pass Script Analyzer for <Name>' -ForEach $testCases -Skip:(-not $scriptAnalyzerRules) {
+        $functionFile = Get-ChildItem -Path $sourcePath -Recurse -Include "$Name.ps1"
+
+        $pssaResult = (Invoke-ScriptAnalyzer -Path $functionFile.FullName)
+        $report = $pssaResult | Format-Table -AutoSize | Out-String -Width 110
+        $pssaResult | Should -BeNullOrEmpty -Because `
+            "some rule triggered.`r`n`r`n $report"
+    }
+}
+
+Describe 'Help for module' -Tags 'helpQuality' {
+    It 'Should have .SYNOPSIS for <Name>' -ForEach $testCases {
+        $functionFile = Get-ChildItem -Path $sourcePath -Recurse -Include "$Name.ps1"
+
+        $scriptFileRawContent = Get-Content -Raw -Path $functionFile.FullName
+
+        $abstractSyntaxTree = [System.Management.Automation.Language.Parser]::ParseInput($scriptFileRawContent, [ref] $null, [ref] $null)
+
+        $astSearchDelegate = { $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }
+
+        $parsedFunction = $abstractSyntaxTree.FindAll( $astSearchDelegate, $true ) |
+            Where-Object -FilterScript {
+                $_.Name -eq $Name
+            }
+
+        $functionHelp = $parsedFunction.GetHelpContent()
+
+        $functionHelp.Synopsis | Should -Not -BeNullOrEmpty
     }
 
-    It 'Has module script' {
-        Join-Path $sourceRoot 'RC4ADCheck.psm1' | Should -Exist
+    It 'Should have a .DESCRIPTION with length greater than 40 characters for <Name>' -ForEach $testCases {
+        $functionFile = Get-ChildItem -Path $sourcePath -Recurse -Include "$Name.ps1"
+
+        $scriptFileRawContent = Get-Content -Raw -Path $functionFile.FullName
+
+        $abstractSyntaxTree = [System.Management.Automation.Language.Parser]::ParseInput($scriptFileRawContent, [ref] $null, [ref] $null)
+
+        $astSearchDelegate = { $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }
+
+        $parsedFunction = $abstractSyntaxTree.FindAll($astSearchDelegate, $true) |
+            Where-Object -FilterScript {
+                $_.Name -eq $Name
+            }
+
+        $functionHelp = $parsedFunction.GetHelpContent()
+
+        $functionHelp.Description.Length | Should -BeGreaterThan 40
     }
 
-    It 'Has build.yaml' {
-        Join-Path $projectRoot 'build.yaml' | Should -Exist
+    It 'Should have at least one (1) example for <Name>' -ForEach $testCases {
+        $functionFile = Get-ChildItem -Path $sourcePath -Recurse -Include "$Name.ps1"
+
+        $scriptFileRawContent = Get-Content -Raw -Path $functionFile.FullName
+
+        $abstractSyntaxTree = [System.Management.Automation.Language.Parser]::ParseInput($scriptFileRawContent, [ref] $null, [ref] $null)
+
+        $astSearchDelegate = { $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }
+
+        $parsedFunction = $abstractSyntaxTree.FindAll( $astSearchDelegate, $true ) |
+            Where-Object -FilterScript {
+                $_.Name -eq $Name
+            }
+
+        $functionHelp = $parsedFunction.GetHelpContent()
+
+        $functionHelp.Examples.Count | Should -BeGreaterThan 0
+        $functionHelp.Examples[0] | Should -Match ([regex]::Escape($function.Name))
+        $functionHelp.Examples[0].Length | Should -BeGreaterThan ($function.Name.Length + 10)
+
     }
 
-    It 'Has build.ps1' {
-        Join-Path $projectRoot 'build.ps1' | Should -Exist
-    }
+    It 'Should have described all parameters for <Name>' -ForEach $testCases {
+        $functionFile = Get-ChildItem -Path $sourcePath -Recurse -Include "$Name.ps1"
 
-    It 'Has RequiredModules.psd1' {
-        Join-Path $projectRoot 'RequiredModules.psd1' | Should -Exist
-    }
+        $scriptFileRawContent = Get-Content -Raw -Path $functionFile.FullName
 
-    It 'Has GitVersion.yml' {
-        Join-Path $projectRoot 'GitVersion.yml' | Should -Exist
-    }
+        $abstractSyntaxTree = [System.Management.Automation.Language.Parser]::ParseInput($scriptFileRawContent, [ref] $null, [ref] $null)
 
-    It 'Has tests directory' {
-        Join-Path $projectRoot 'tests' | Should -Exist
-    }
+        $astSearchDelegate = { $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }
 
-    It 'Has CHANGELOG.md' {
-        Join-Path $projectRoot 'CHANGELOG.md' | Should -Exist
-    }
+        $parsedFunction = $abstractSyntaxTree.FindAll( $astSearchDelegate, $true ) |
+            Where-Object -FilterScript {
+                $_.Name -eq $Name
+            }
 
-    It 'Has LICENSE' {
-        Join-Path $projectRoot 'LICENSE' | Should -Exist
+        $functionHelp = $parsedFunction.GetHelpContent()
+
+        $parameters = $parsedFunction.Body.ParamBlock.Parameters.Name.VariablePath.ForEach({ $_.ToString() })
+
+        foreach ($parameter in $parameters)
+        {
+            $functionHelp.Parameters.($parameter.ToUpper()) | Should -Not -BeNullOrEmpty -Because ('the parameter {0} must have a description' -f $parameter)
+            $functionHelp.Parameters.($parameter.ToUpper()).Length | Should -BeGreaterThan 25 -Because ('the parameter {0} must have descriptive description' -f $parameter)
+        }
     }
 }
