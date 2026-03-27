@@ -1,0 +1,198 @@
+---
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - CHANGELOG.md
+  tags:
+    include:
+      - "v*"
+    exclude:
+      - "*-*"
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - CHANGELOG.md
+
+variables:
+  buildFolderName: output
+  buildArtifactName: output
+  testResultFolderName: testResults
+  defaultBranch: main
+  Agent.Source.Git.ShallowFetchDepth: 0
+
+stages:
+  # ---------------------------------------------------------------------------
+  # Stage 1: Build
+  # ---------------------------------------------------------------------------
+  - stage: Build
+    jobs:
+      - job: Package_Module
+        displayName: 'Package Module'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - pwsh: |
+              dotnet tool install --global GitVersion.Tool --version 5.*
+              $gitVersionObject = dotnet-gitversion | ConvertFrom-Json
+              $gitVersionObject.PSObject.Properties.ForEach{
+                  Write-Host "Setting Task Variable '$($_.Name)' with value '$($_.Value)'."
+                  Write-Host "##vso[task.setvariable variable=$($_.Name);]$($_.Value)"
+              }
+              Write-Host "##vso[build.updatebuildnumber]$($gitVersionObject.FullSemVer)"
+            displayName: Calculate ModuleVersion (GitVersion)
+
+          - task: PowerShell@2
+            name: package
+            displayName: 'Build & Package Module'
+            inputs:
+              filePath: './build.ps1'
+              arguments: '-ResolveDependency -tasks pack'
+              pwsh: true
+            env:
+              ModuleVersion: $(NuGetVersionV2)
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Build Artifact'
+            inputs:
+              targetPath: '$(buildFolderName)/'
+              artifact: $(buildArtifactName)
+              publishLocation: 'pipeline'
+              parallel: true
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: Test
+  # ---------------------------------------------------------------------------
+  - stage: Test
+    dependsOn: Build
+    jobs:
+      - job: test_windows_ps7
+        displayName: 'Windows (PowerShell 7)'
+        pool:
+          vmImage: 'windows-latest'
+        steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Artifact'
+            inputs:
+              buildType: 'current'
+              artifactName: $(buildArtifactName)
+              targetPath: '$(Build.SourcesDirectory)/$(buildFolderName)'
+
+          - task: PowerShell@2
+            name: test
+            displayName: 'Run Tests'
+            inputs:
+              filePath: './build.ps1'
+              arguments: '-tasks test'
+              pwsh: true
+
+          - task: PublishTestResults@2
+            displayName: 'Publish Test Results'
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: 'NUnit'
+              testResultsFiles: '$(buildFolderName)/$(testResultFolderName)/NUnit*.xml'
+              testRunTitle: 'Windows (PS7)'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Test Artifact'
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: '$(buildFolderName)/$(testResultFolderName)/'
+              artifact: 'CodeCoverageWinPS7'
+              publishLocation: 'pipeline'
+              parallel: true
+
+      - job: test_windows_ps51
+        displayName: 'Windows (PowerShell 5.1)'
+        pool:
+          vmImage: 'windows-latest'
+        steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Artifact'
+            inputs:
+              buildType: 'current'
+              artifactName: $(buildArtifactName)
+              targetPath: '$(Build.SourcesDirectory)/$(buildFolderName)'
+
+          - task: PowerShell@2
+            name: test
+            displayName: 'Run Tests'
+            inputs:
+              filePath: './build.ps1'
+              arguments: '-tasks test'
+              pwsh: false
+
+          - task: PublishTestResults@2
+            displayName: 'Publish Test Results'
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: 'NUnit'
+              testResultsFiles: '$(buildFolderName)/$(testResultFolderName)/NUnit*.xml'
+              testRunTitle: 'Windows (PS5.1)'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Test Artifact'
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: '$(buildFolderName)/$(testResultFolderName)/'
+              artifact: 'CodeCoverageWinPS51'
+              publishLocation: 'pipeline'
+              parallel: true
+
+  # ---------------------------------------------------------------------------
+  # Stage 3: Deploy
+  # ---------------------------------------------------------------------------
+  - stage: Deploy
+    dependsOn: Test
+    condition: |
+      and(
+        succeeded(),
+        or(
+          eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+          startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+        )
+      )
+    jobs:
+      - job: Deploy_Module
+        displayName: 'Deploy Module'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Artifact'
+            inputs:
+              buildType: 'current'
+              artifactName: $(buildArtifactName)
+              targetPath: '$(Build.SourcesDirectory)/$(buildFolderName)'
+
+          - task: PowerShell@2
+            name: publishRelease
+            displayName: 'Publish Release'
+            inputs:
+              filePath: './build.ps1'
+              arguments: '-tasks publish'
+              pwsh: true
+            env:
+              GitHubToken: $(GitHubToken)
+              GalleryApiToken: $(GalleryApiToken)
+              ReleaseBranch: $(defaultBranch)
+              MainGitBranch: $(defaultBranch)
+
+          - task: PowerShell@2
+            name: sendChangelogPR
+            displayName: 'Send Changelog PR'
+            inputs:
+              filePath: './build.ps1'
+              arguments: '-tasks Create_ChangeLog_GitHub_PR'
+              pwsh: true
+            env:
+              GitHubToken: $(GitHubToken)
+              ReleaseBranch: $(defaultBranch)
+              MainGitBranch: $(defaultBranch)
