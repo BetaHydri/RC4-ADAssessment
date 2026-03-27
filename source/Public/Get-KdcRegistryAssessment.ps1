@@ -1,4 +1,24 @@
 function Get-KdcRegistryAssessment {
+    <#
+    .SYNOPSIS
+        Assesses KDC registry settings on Domain Controllers for RC4 disablement configuration.
+
+    .DESCRIPTION
+        Connects to each Domain Controller via WinRM and reads two KDC-related registry values:
+        RC4DefaultDisablementPhase (controls RC4 deprecation phase) and
+        DefaultDomainSupportedEncTypes (controls which encryption types are advertised by default).
+        Returns a hashtable with status for each setting, per-DC details, and a list of DCs that
+        could not be queried. AzureADKerberos proxy objects are automatically excluded.
+
+    .PARAMETER ServerParams
+        A hashtable of parameters passed through to Active Directory cmdlets. Supports a
+        'Server' key to target a specific Domain Controller.
+
+    .EXAMPLE
+        $params = @{ Server = 'dc01.contoso.com' }
+        $result = Get-KdcRegistryAssessment -ServerParams $params
+        $result.RC4DefaultDisablementPhase.Status
+    #>
     param(
         [hashtable]$ServerParams
     )

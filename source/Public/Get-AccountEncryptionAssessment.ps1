@@ -1,4 +1,24 @@
 function Get-AccountEncryptionAssessment {
+    <#
+    .SYNOPSIS
+        Assesses Kerberos encryption configuration for KRBTGT and service accounts in a domain.
+
+    .DESCRIPTION
+        Queries Active Directory for the KRBTGT account password age and encryption type,
+        as well as service accounts that are configured with DES-only or RC4-only encryption,
+        accounts with the DES flag set, accounts missing AES keys (password not changed since
+        AES was introduced), and accounts using RC4 exception flags. Returns a detailed
+        hashtable with status and findings for each category.
+
+    .PARAMETER ServerParams
+        A hashtable of parameters passed through to Active Directory cmdlets. Supports a
+        'Server' key to target a specific Domain Controller.
+
+    .EXAMPLE
+        $params = @{ Server = 'dc01.contoso.com' }
+        $result = Get-AccountEncryptionAssessment -ServerParams $params
+        $result.KRBTGT.Status
+    #>
     param(
         [hashtable]$ServerParams
     )

@@ -1,4 +1,17 @@
 function Show-ManualValidationGuidance {
+    <#
+    .SYNOPSIS
+        Displays manual validation and monitoring guidance for RC4/DES remediation.
+
+    .DESCRIPTION
+        Outputs a comprehensive set of manual validation steps and remediation guidance to the
+        console, covering event log monitoring setup, Group Policy configuration, account
+        remediation, KRBTGT password reset procedures, trust configuration, and reference
+        documentation links. This guidance complements the automated assessment findings.
+
+    .EXAMPLE
+        Show-ManualValidationGuidance
+    #>
     Write-Section "Manual Validation & Monitoring Guidance"
     
     Write-Host @"

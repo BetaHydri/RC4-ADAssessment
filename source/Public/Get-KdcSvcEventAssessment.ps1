@@ -1,4 +1,24 @@
 function Get-KdcSvcEventAssessment {
+    <#
+    .SYNOPSIS
+        Assesses KDCSVC system events on Domain Controllers related to CVE-2026-20833.
+
+    .DESCRIPTION
+        Connects to each Domain Controller and queries the System event log for KDCSVC events
+        that indicate RC4 usage warnings or enforcement actions. Returns a hashtable containing
+        event counts per Event ID, detailed event records, queried DC list, a list of DCs that
+        failed, and an overall OK or WARNING status. AzureADKerberos proxy objects are
+        automatically excluded from the query.
+
+    .PARAMETER ServerParams
+        A hashtable of parameters passed through to Active Directory cmdlets. Supports a
+        'Server' key to target a specific Domain Controller.
+
+    .EXAMPLE
+        $params = @{ Server = 'dc01.contoso.com' }
+        $result = Get-KdcSvcEventAssessment -ServerParams $params
+        $result.Status
+    #>
     param(
         [hashtable]$ServerParams
     )

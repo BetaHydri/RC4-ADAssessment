@@ -1,4 +1,23 @@
 function Get-AuditPolicyCheck {
+    <#
+    .SYNOPSIS
+        Verifies that Kerberos audit policies are enabled on a Domain Controller.
+
+    .DESCRIPTION
+        Connects to the primary Domain Controller and checks whether the advanced audit
+        policy subcategories for Kerberos Authentication Service and Kerberos Service Ticket
+        Operations are enabled. Returns a hashtable indicating the status of each policy and
+        an overall OK, WARNING, CRITICAL, or UNKNOWN assessment status.
+
+    .PARAMETER ServerParams
+        A hashtable of parameters passed through to Active Directory cmdlets. Supports a
+        'Server' key to target a specific Domain Controller.
+
+    .EXAMPLE
+        $params = @{ Server = 'dc01.contoso.com' }
+        $result = Get-AuditPolicyCheck -ServerParams $params
+        $result.Status
+    #>
     param(
         [hashtable]$ServerParams
     )

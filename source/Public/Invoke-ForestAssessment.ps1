@@ -19,6 +19,11 @@ function Invoke-ForestAssessment {
   Process domains in parallel (requires PowerShell 7+).
 .PARAMETER MaxParallelDomains
   Maximum number of domains to process in parallel (1-10). Default: 3.
+.EXAMPLE
+  Invoke-ForestAssessment
+
+.EXAMPLE
+  Invoke-ForestAssessment -ForestName "contoso.com" -AnalyzeEventLogs -ExportResults
 #>
     [CmdletBinding()]
     param(

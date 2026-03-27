@@ -1,4 +1,28 @@
 function Get-EventLogEncryptionAnalysis {
+    <#
+    .SYNOPSIS
+        Analyses Kerberos event logs on Domain Controllers to detect DES and RC4 ticket usage.
+
+    .DESCRIPTION
+        Connects to each Domain Controller and queries Security event logs for Kerberos ticket
+        events (Event IDs 4768 and 4769) within a configurable time window. Counts AES, RC4,
+        and DES tickets, identifies accounts using weak encryption, and records per-DC
+        statistics. Falls back from WinRM to RPC when WinRM is unavailable. Returns a detailed
+        hashtable with event counts, affected accounts, and a list of DCs that could not be
+        queried.
+
+    .PARAMETER ServerParams
+        A hashtable of parameters passed through to Active Directory cmdlets. Supports a
+        'Server' key to target a specific Domain Controller.
+
+    .PARAMETER Hours
+        The number of hours of event log history to analyse. Defaults to 24.
+
+    .EXAMPLE
+        $params = @{ Server = 'dc01.contoso.com' }
+        $result = Get-EventLogEncryptionAnalysis -ServerParams $params -Hours 48
+        $result.RC4Tickets
+    #>
     param(
         [hashtable]$ServerParams,
         [int]$Hours = 24
