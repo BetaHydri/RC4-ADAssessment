@@ -1,6 +1,6 @@
-# RC4_DES_Assessment.ps1 v2.9.0 - Quick Start Guide
+# RC4ADCheck Module — Quick Start Guide
 
-> **✨ New in v2.9.0:** AES/RC4 correlation — detects accounts with AES configured but still issuing RC4 tickets (password reset needed). Event log deserialization fix, guidance text file export, per-DC event count fix, KDCSVC event reference table, gMSA/sMSA creation guide.
+> **v3.0:** This toolkit is now a PowerShell module. Install with `Install-Module RC4ADCheck` or import from a local build.
 
 ## 🔐 Using with Active Directory
 
@@ -11,54 +11,63 @@
 - Domain Admin or equivalent permissions
 - Network access to domain controllers (WinRM 5985 or RPC 135)
 
+### Install & Import
+```powershell
+# Install from PSGallery (once published)
+Install-Module -Name RC4ADCheck
+
+# Or import from local build
+Import-Module ./output/builtModule/RC4ADCheck
+```
+
 ### Quick Scan (Fastest - No Event Logs)
 ```powershell
-.\RC4_DES_Assessment.ps1 -QuickScan
+Invoke-RC4Assessment -QuickScan
 ```
-**Runtime**: ~30 seconds  
+**Runtime**: ~30 seconds
 **Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), KDC Registry, KDCSVC Events (CVE-2026-20833), DES flags, Missing AES keys, RC4 exceptions, AzureADKerberos detection
 
 ### Full Assessment (Recommended)
 ```powershell
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 24
+Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 24
 ```
-**Runtime**: 2-5 minutes  
+**Runtime**: 2-5 minutes
 **Checks**: All of the above + audit policy verification + 24 hours of event logs for actual DES/RC4 usage
 
 ### With Export
 ```powershell
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -ExportResults
+Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults
 ```
 **Output**: JSON and CSV files with timestamp in `.\Exports\`
 
 ### With Full Reference Manual
 ```powershell
-.\RC4_DES_Assessment.ps1 -IncludeGuidance
+Invoke-RC4Assessment -IncludeGuidance
 ```
 **Shows**: Audit setup, SIEM/Splunk queries, KRBTGT rotation guidance, July 2026 timeline
 
 ### Specific Domain
 ```powershell
-.\RC4_DES_Assessment.ps1 -Domain contoso.com -AnalyzeEventLogs
+Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs
 ```
 
 ### Forest-Wide Assessment
 ```powershell
 # Quick scan all domains in forest
-.\Assess-ADForest.ps1
+Invoke-ForestAssessment
 
 # Full assessment with event logs
-.\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults
+Invoke-ForestAssessment -AnalyzeEventLogs -ExportResults
 
 # Parallel processing (PowerShell 7+)
-.\Assess-ADForest.ps1 -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs
+Invoke-ForestAssessment -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs
 ```
-**Runtime**: Varies (parallel mode processes multiple domains concurrently)  
+**Runtime**: Varies (parallel mode processes multiple domains concurrently)
 **Output**: Per-domain JSON exports + forest-wide summary
 
 ### Compare Two Runs (Track Progress)
 ```powershell
-.\Compare-Assessments.ps1 -BaselineFile before.json -CurrentFile after.json -ShowDetails
+Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
 ```
 **Compares**: DC encryption, trusts, accounts (KRBTGT, service accounts, DES flags, missing AES keys), KDC registry, KDCSVC events (CVE-2026-20833), event log tickets
 
@@ -172,8 +181,9 @@ Event Log Analysis - Actual DES/RC4 Usage
 
   Option 3: Run Locally on DC
   ────────────────────────────────────────
-  Copy script to DC and run:
-  PS> .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 24
+  Import module on DC and run:
+  PS> Import-Module RC4ADCheck
+  PS> Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 24
 
   Option 4: Verify Permissions
   ────────────────────────────────────────
@@ -225,7 +235,7 @@ Assessment Summary Tables
 - 🟡 **Yellow** - WARNING status
 - 🔴 **Red** - CRITICAL/Failed status
 
-**Forest-Wide** (when using Assess-ADForest.ps1):
+**Forest-Wide** (when using `Invoke-ForestAssessment`):
 Tables are grouped by domain, showing all DCs, event logs, and trusts across the entire forest.
 
 ---
@@ -301,13 +311,13 @@ Every finding includes copy-paste PowerShell commands to fix the issue, includin
 
 ### Phase 1: Initial AD Scan
 ```powershell
-.\RC4_DES_Assessment.ps1 -QuickScan
+Invoke-RC4Assessment -QuickScan
 ```
 Get baseline configuration (DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry).
 
 ### Phase 2: Usage Analysis
 ```powershell
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 ```
 Analyze 7 days of event logs to detect actual DES/RC4 usage. Export for comparison.
 
@@ -319,14 +329,14 @@ Follow the inline fix commands shown with every finding:
 
 ### Phase 4: Validate & Track Progress
 ```powershell
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
-.\Compare-Assessments.ps1 -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
+Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+Invoke-AssessmentComparison -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
 ```
 Compare assessments to verify remediation progress.
 
 ### Phase 5: Monitoring Setup
 ```powershell
-.\RC4_DES_Assessment.ps1 -IncludeGuidance
+Invoke-RC4Assessment -IncludeGuidance
 ```
 Get Splunk/SIEM queries, KRBTGT rotation guidance, and continuous monitoring setup.
 
@@ -336,26 +346,12 @@ Get Splunk/SIEM queries, KRBTGT rotation guidance, and continuous monitoring set
 
 ### Event Log Access Issues (NEW in v2.0.1)
 
-**Problem:** Script shows "RPC server unavailable" or "Access denied" when querying DCs
+**Problem:** Module shows "RPC server unavailable" or "Access denied" when querying DCs
 
-**Solution:** The script now provides automatic troubleshooting guidance. When failures occur, you'll see:
+**Solution:** The module provides automatic troubleshooting guidance. When failures occur, you'll see:
 - Which DCs failed and the specific error
 - Four detailed options to fix the issue
 - PowerShell commands to run
-
-**Test the Error Handling:**
-```powershell
-# Simulate RPC failures to see the troubleshooting output
-.\Test-EventLogFailureHandling.ps1 -TestScenario MixedFailures
-```
-
-Available test scenarios:
-- `RPCFailure` - Simulates RPC server unavailable
-- `WinRMFailure` - Simulates PowerShell Remoting issues
-- `AccessDenied` - Simulates permission errors
-- `NetworkFailure` - Simulates network connectivity issues
-- `MixedFailures` - Realistic scenario with multiple failure types
-- `AllSuccess` - Control test (no failures)
 
 ### "Cannot find Active Directory module"
 **Solution**: Install RSAT tools or run on domain controller
@@ -382,7 +378,7 @@ Resolve-DnsName your-domain.com
 
 **Solution:** Use both `-Domain` and `-Server` parameters:
 ```powershell
-.\RC4_DES_Assessment.ps1 -Domain child.contoso.com -Server DC01.child.contoso.com -AnalyzeEventLogs
+Invoke-RC4Assessment -Domain child.contoso.com -Server DC01.child.contoso.com -AnalyzeEventLogs
 ```
 
 ### Emojis not displaying correctly
@@ -391,20 +387,19 @@ Resolve-DnsName your-domain.com
 ### Script runs very slowly
 **Solution**: Use `-QuickScan` to skip event log analysis
 ```powershell
-.\RC4_DES_Assessment.ps1 -QuickScan
+Invoke-RC4Assessment -QuickScan
 ```
 
 ---
 
 ## 📚 Additional Resources
 
-- **README.md** - Comprehensive documentation with full sample outputs and July 2026 timeline
-- **Compare-Assessments.ps1** - Track remediation progress between two assessment exports
-- **Test-EventLogFailureHandling.ps1** - Test script for error handling validation
-- **archive/README_v1_LEGACY.md** - Legacy v1.0 documentation (archived)
-- **[KB5021131](https://support.microsoft.com/kb/5021131)** - Managing Kerberos protocol changes
-- **[Detect and Remediate RC4](https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4)** - Microsoft guidance
-- **[Microsoft Kerberos-Crypto](https://github.com/microsoft/Kerberos-Crypto)** - Microsoft's Kerberos crypto scripts
+- **README.md** — Comprehensive documentation with full sample outputs and July 2026 timeline
+- **CHANGELOG.md** — Full version history
+- **archive/README_v1_LEGACY.md** — Legacy v1.0 documentation (archived)
+- **[KB5021131](https://support.microsoft.com/kb/5021131)** — Managing Kerberos protocol changes
+- **[Detect and Remediate RC4](https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4)** — Microsoft guidance
+- **[Microsoft Kerberos-Crypto](https://github.com/microsoft/Kerberos-Crypto)** — Microsoft's Kerberos crypto scripts
 
 ---
 
@@ -494,7 +489,7 @@ Resolve-DnsName your-domain.com
 ### Workflow 1: Quick Domain Health Check (1 minute)
 ```powershell
 # Single command for domain readiness
-.\RC4_DES_Assessment.ps1 -QuickScan
+Invoke-RC4Assessment -QuickScan
 
 # Expected output includes:
 # ✅ All Domain Controllers have AES encryption configured
@@ -509,7 +504,7 @@ Resolve-DnsName your-domain.com
 ### Workflow 2: Deep Event Log Analysis (5 minutes)
 ```powershell
 # Analyze 7 days of actual usage across ALL DCs
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 
 # Script auto-discovers all DCs and shows per-DC results:
 # • Querying DC01.contoso.com...
@@ -525,7 +520,7 @@ Resolve-DnsName your-domain.com
 ### Workflow 3: Multi-Domain Forest Assessment (10-15 minutes)
 ```powershell
 # Assess all domains in forest with parallel processing
-.\Assess-ADForest.ps1 -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 3
+Invoke-ForestAssessment -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 3
 
 # Forest output shows per-domain DC discovery and assessment results
 ```
@@ -535,10 +530,10 @@ Resolve-DnsName your-domain.com
 ### Workflow 4: Child Domain with Connectivity Issues (3 minutes)
 ```powershell
 # Problem: Auto-discovery fails for child domain
-.\RC4_DES_Assessment.ps1 -Domain labs.contoso.com -AnalyzeEventLogs
+Invoke-RC4Assessment -Domain labs.contoso.com -AnalyzeEventLogs
 
 # Solution: Specify a known DC
-.\RC4_DES_Assessment.ps1 -Server DC01.labs.contoso.com -AnalyzeEventLogs
+Invoke-RC4Assessment -Server DC01.labs.contoso.com -AnalyzeEventLogs
 ```
 
 ---
@@ -546,13 +541,13 @@ Resolve-DnsName your-domain.com
 ### Workflow 5: Track Remediation Progress (5 minutes per run)
 ```powershell
 # Week 1: Baseline
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 
 # Week 2: After fixes
-.\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 
 # Compare
-.\Compare-Assessments.ps1 -BaselineFile old.json -CurrentFile new.json -ShowDetails
+Invoke-AssessmentComparison -BaselineFile old.json -CurrentFile new.json -ShowDetails
 ```
 
 ---
