@@ -50,6 +50,7 @@ Pester:
     Run:
       Path:
         - tests/Unit
+        - tests/QA
     Output:
       Verbosity: Detailed
     CodeCoverage:

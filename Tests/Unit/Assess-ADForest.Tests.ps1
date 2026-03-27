@@ -342,51 +342,34 @@ Describe 'Invoke-DomainAssessment' {
                     HostName = 'dc01.contoso.com'
                 }
             }
+            Mock Invoke-RC4Assessment {
+                @{
+                    OverallStatus = 'OK'
+                    Domain        = 'contoso.com'
+                }
+            }
         }
 
         It 'Discovers DC and sets server parameter' {
-            # Create a temp script that returns a simple result
-            $tempScript = Join-Path ([System.IO.Path]::GetTempPath()) "test_assess_$(Get-Random).ps1"
-            Set-Content -Path $tempScript -Value @'
-param([string]$Server, [string]$Domain)
-@{
-    OverallStatus = 'OK'
-    Domain = $Server
-}
-'@
-
-            try {
-                $result = Invoke-DomainAssessment -DomainName 'contoso.com' -ScriptPath $tempScript -AnalyzeLogs $false -Hours 24 -Export $false
-                $result.Domain | Should -Be 'contoso.com'
-            }
-            finally {
-                Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
-            }
+            $result = Invoke-DomainAssessment -DomainName 'contoso.com' -AnalyzeLogs $false -Hours 24 -Export $false
+            $result.Domain | Should -Be 'contoso.com'
         }
     }
 
     Context 'When DC discovery fails' {
         BeforeEach {
             Mock Get-ADDomainController { throw "Cannot locate DC" }
+            Mock Invoke-RC4Assessment {
+                @{
+                    OverallStatus = 'OK'
+                    Domain        = 'contoso.com'
+                }
+            }
         }
 
         It 'Falls back to domain name' {
-            $tempScript = Join-Path ([System.IO.Path]::GetTempPath()) "test_assess_$(Get-Random).ps1"
-            Set-Content -Path $tempScript -Value @'
-param([string]$Server, [string]$Domain)
-@{
-    OverallStatus = 'OK'
-    Domain = $Domain
-}
-'@
-
-            try {
-                $result = Invoke-DomainAssessment -DomainName 'contoso.com' -ScriptPath $tempScript -AnalyzeLogs $false -Hours 24 -Export $false
-                $result.Domain | Should -Be 'contoso.com'
-            }
-            finally {
-                Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
-            }
+            $result = Invoke-DomainAssessment -DomainName 'contoso.com' -AnalyzeLogs $false -Hours 24 -Export $false
+            $result.Domain | Should -Be 'contoso.com'
         }
     }
 
@@ -397,20 +380,13 @@ param([string]$Server, [string]$Domain)
                     HostName = 'dc01.contoso.com'
                 }
             }
+            Mock Invoke-RC4Assessment { throw "Assessment failed due to permissions" }
         }
 
         It 'Returns failed status with error message' {
-            $tempScript = Join-Path ([System.IO.Path]::GetTempPath()) "test_assess_$(Get-Random).ps1"
-            Set-Content -Path $tempScript -Value 'throw "Assessment failed due to permissions"'
-
-            try {
-                $result = Invoke-DomainAssessment -DomainName 'contoso.com' -ScriptPath $tempScript -AnalyzeLogs $false -Hours 24 -Export $false
-                $result.Status | Should -Be 'Failed'
-                $result.Error | Should -BeLike '*Assessment failed*'
-            }
-            finally {
-                Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
-            }
+            $result = Invoke-DomainAssessment -DomainName 'contoso.com' -AnalyzeLogs $false -Hours 24 -Export $false
+            $result.Status | Should -Be 'Failed'
+            $result.Error | Should -BeLike '*Assessment failed*'
         }
     }
 
@@ -421,33 +397,19 @@ param([string]$Server, [string]$Domain)
                     HostName = 'dc01.contoso.com'
                 }
             }
+            Mock Invoke-RC4Assessment {
+                @{
+                    OverallStatus    = 'OK'
+                    AnalyzeEventLogs = $true
+                    EventLogHours    = 48
+                }
+            }
         }
 
         It 'Passes event log parameters correctly' {
-            $tempScript = Join-Path ([System.IO.Path]::GetTempPath()) "test_assess_$(Get-Random).ps1"
-            Set-Content -Path $tempScript -Value @'
-param(
-    [string]$Server,
-    [string]$Domain,
-    [switch]$AnalyzeEventLogs,
-    [int]$EventLogHours,
-    [switch]$ExportResults
-)
-@{
-    OverallStatus    = 'OK'
-    AnalyzeEventLogs = [bool]$AnalyzeEventLogs
-    EventLogHours    = $EventLogHours
-}
-'@
-
-            try {
-                $result = Invoke-DomainAssessment -DomainName 'contoso.com' -ScriptPath $tempScript -AnalyzeLogs $true -Hours 48 -Export $false
-                $result.Data.AnalyzeEventLogs | Should -BeTrue
-                $result.Data.EventLogHours | Should -Be 48
-            }
-            finally {
-                Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
-            }
+            $result = Invoke-DomainAssessment -DomainName 'contoso.com' -AnalyzeLogs $true -Hours 48 -Export $false
+            $result.Data.AnalyzeEventLogs | Should -BeTrue
+            $result.Data.EventLogHours | Should -Be 48
         }
     }
 }
@@ -496,4 +458,5 @@ Describe 'Forest Export Logic' {
         }
     }
 }
+
 
