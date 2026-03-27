@@ -114,13 +114,16 @@ Describe 'Quality for module' -Tags 'TestQuality' {
     }
 
     It 'Should have a unit test for <Name>' -ForEach $testCases {
-        Get-ChildItem -Path 'tests\' -Recurse -Include "$Name.Tests.ps1" | Should -Not -BeNullOrEmpty
+        Get-ChildItem -Path (Join-Path -Path $projectPath -ChildPath 'tests') -Recurse -Include "$Name.Tests.ps1" | Should -Not -BeNullOrEmpty
     }
 
     It 'Should pass Script Analyzer for <Name>' -ForEach $testCases -Skip:(-not $scriptAnalyzerRules) {
         $functionFile = Get-ChildItem -Path $sourcePath -Recurse -Include "$Name.ps1"
+        $settingsPath = Join-Path -Path $projectPath -ChildPath 'PSScriptAnalyzerSettings.psd1'
+        $pssaParams = @{ Path = $functionFile.FullName }
+        if (Test-Path $settingsPath) { $pssaParams['Settings'] = $settingsPath }
 
-        $pssaResult = (Invoke-ScriptAnalyzer -Path $functionFile.FullName)
+        $pssaResult = (Invoke-ScriptAnalyzer @pssaParams)
         $report = $pssaResult | Format-Table -AutoSize | Out-String -Width 110
         $pssaResult | Should -BeNullOrEmpty -Because `
             "some rule triggered.`r`n`r`n $report"

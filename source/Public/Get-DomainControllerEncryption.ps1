@@ -22,9 +22,9 @@ function Get-DomainControllerEncryption {
     param(
         [hashtable]$ServerParams
     )
-    
+
     Write-Section "Domain Controller Encryption Configuration"
-    
+
     $assessment = @{
         TotalDCs           = 0
         AESConfigured      = 0
@@ -36,7 +36,7 @@ function Get-DomainControllerEncryption {
         GPOConfigured      = $false
         GPOEncryptionTypes = $null
     }
-    
+
     try {
         # Get domain info - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
@@ -52,16 +52,16 @@ function Get-DomainControllerEncryption {
             $domainInfo = Get-ADDomain
         }
         $dcOU = "OU=Domain Controllers,$($domainInfo.DistinguishedName)"
-        
+
         Write-Finding -Status "INFO" -Message "Analyzing domain: $($domainInfo.DNSRoot)"
-        
+
         # Get all domain controllers using authoritative DC Locator (queries Configuration partition)
         $dcObjects = @(Get-ADDomainController -Filter * @ServerParams)
-        
+
         $assessment.TotalDCs = $dcObjects.Count
-        
+
         Write-Finding -Status "INFO" -Message "Found $($assessment.TotalDCs) Domain Controller(s)"
-        
+
         # Check for AzureADKerberos (Entra Kerberos proxy) in DC OU - not a real DC
         try {
             $azureADKerberos = Get-ADComputer -Identity 'AzureADKerberos' -Properties msDS-SupportedEncryptionTypes @ServerParams -ErrorAction SilentlyContinue
@@ -78,15 +78,15 @@ function Get-DomainControllerEncryption {
             }
         }
         catch {
-            # AzureADKerberos object not found - this is normal
+            Write-Verbose "AzureADKerberos object not found (expected): $($_.Exception.Message)"
         }
-        
+
         # Analyze each DC - read computer object properties for encryption assessment
         foreach ($dc in $dcObjects) {
             $dcComputer = Get-ADComputer $dc.ComputerObjectDN -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
             $encValue = $dcComputer.'msDS-SupportedEncryptionTypes'
             $encTypes = Get-EncryptionTypeString -Value $encValue
-            
+
             $dcInfo = @{
                 Name            = $dc.Name
                 EncryptionValue = $encValue
@@ -94,7 +94,7 @@ function Get-DomainControllerEncryption {
                 OperatingSystem = $dcComputer.OperatingSystem
                 Status          = "Unknown"
             }
-            
+
             if (-not $encValue -or $encValue -eq 0) {
                 $assessment.NotConfigured++
                 $dcInfo.Status = "Not Configured (Inherits from GPO)"
@@ -103,7 +103,7 @@ function Get-DomainControllerEncryption {
                 # AES128 or AES256
                 $assessment.AESConfigured++
                 $dcInfo.Status = "AES Configured"
-                
+
                 if ($encValue -band 0x4) {
                     # Also has RC4
                     $assessment.RC4Configured++
@@ -125,32 +125,32 @@ function Get-DomainControllerEncryption {
                 $assessment.DESConfigured++
                 $dcInfo.Status = "DES Only"
             }
-            
+
             $assessment.Details += $dcInfo
         }
-        
+
         # Check GPO configuration
         Write-Host "`n  Checking GPO Kerberos encryption policy..." -ForegroundColor Cyan
-        
+
         try {
             # Try to get GPO inheritance for DC OU via GroupPolicy module
             $gpoInheritance = Get-GPInheritance -Target $dcOU -Domain $domainInfo.DNSRoot @ServerParams -ErrorAction Stop
-            
+
             if ($gpoInheritance -and $gpoInheritance.GpoLinks) {
                 foreach ($gpoLink in $gpoInheritance.GpoLinks) {
                     # Guard: on broken GroupPolicy assemblies, GpoLinks may be strings instead of objects
                     if ($gpoLink -is [string]) { continue }
                     if ($gpoLink.Enabled) {
                         $gpoReport = Get-GPOReport -Guid $gpoLink.GpoId -ReportType Xml -Domain $domainInfo.DNSRoot @ServerParams -ErrorAction SilentlyContinue
-                        
+
                         if ($gpoReport -and $gpoReport -match "Configure encryption types allowed for Kerberos") {
                             $assessment.GPOConfigured = $true
-                            
+
                             # Extract encryption value from GPO
                             if ($gpoReport -match 'name="Configure encryption types allowed for Kerberos".*?<decimal value="(\d+)"') {
                                 $assessment.GPOEncryptionTypes = [int]$matches[1]
                             }
-                            
+
                             Write-Finding -Status "OK" -Message "GPO '$($gpoLink.DisplayName)' configures Kerberos encryption" `
                                 -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
                             break
@@ -162,7 +162,7 @@ function Get-DomainControllerEncryption {
         catch {
             Write-Verbose "GroupPolicy module failed: $($_.Exception.Message)"
         }
-        
+
         # Fallback: If GroupPolicy module produced no results (broken assembly, serialization issues, etc.)
         # read the gPLink AD attribute on the DC OU and parse SYSVOL GptTmpl.inf directly
         if (-not $assessment.GPOConfigured) {
@@ -177,14 +177,14 @@ function Get-DomainControllerEncryption {
                         $linkFlags = [int]$linkMatch.Groups[2].Value
                         # Skip disabled links (bit 0 set = disabled)
                         if ($linkFlags -band 1) { continue }
-                        
+
                         $sysvolPath = "\\$($domainInfo.DNSRoot)\SYSVOL\$($domainInfo.DNSRoot)\Policies\$gpoGuid\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
                         if (Test-Path -LiteralPath $sysvolPath) {
                             $gptTmplContent = Get-Content -LiteralPath $sysvolPath -Raw -ErrorAction Stop
                             if ($gptTmplContent -match 'SupportedEncryptionTypes\s*=\s*4\s*,\s*(\d+)') {
                                 $assessment.GPOConfigured = $true
                                 $assessment.GPOEncryptionTypes = [int]$matches[1]
-                                
+
                                 # Try to resolve GPO display name
                                 $gpoDisplayName = $gpoGuid
                                 try {
@@ -192,8 +192,8 @@ function Get-DomainControllerEncryption {
                                     Where-Object { $_.Name -eq $gpoGuid }
                                     if ($gpoADObj) { $gpoDisplayName = $gpoADObj.DisplayName }
                                 }
-                                catch { }
-                                
+                                catch { Write-Verbose "Could not resolve GPO display name: $($_.Exception.Message)" }
+
                                 Write-Finding -Status "OK" -Message "GPO '$gpoDisplayName' configures Kerberos encryption (detected via SYSVOL)" `
                                     -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
                                 break
@@ -206,7 +206,7 @@ function Get-DomainControllerEncryption {
                 Write-Verbose "SYSVOL fallback failed: $($_.Exception.Message)"
             }
         }
-        
+
         # Display summary
         Write-Host ""
         Write-Finding -Status "INFO" -Message "Domain Controller Summary:"
@@ -218,7 +218,7 @@ function Get-DomainControllerEncryption {
         if ($assessment.AzureADKerberos) {
             Write-Host "  $([char]0x2022) AzureADKerberos (Entra proxy): Excluded from DC counts (managed by Entra ID)" -ForegroundColor DarkCyan
         }
-        
+
         # Display individual DC details
         if ($assessment.Details.Count -gt 0) {
             Write-Host "`n  Individual DC Status:" -ForegroundColor Cyan
@@ -235,7 +235,7 @@ function Get-DomainControllerEncryption {
                 }
             }
         }
-        
+
         # Assessment
         if ($assessment.GPOConfigured -and ($assessment.GPOEncryptionTypes -band 0x18)) {
             Write-Finding -Status "OK" -Message "Domain Controllers are configured for AES encryption via GPO"
@@ -249,11 +249,11 @@ function Get-DomainControllerEncryption {
         elseif ($assessment.TotalDCs -gt 0) {
             Write-Finding -Status "WARNING" -Message "Not all Domain Controllers have AES encryption configured"
         }
-        
+
         if ($assessment.DESConfigured -gt 0) {
             Write-Finding -Status "CRITICAL" -Message "$($assessment.DESConfigured) DC(s) have DES encryption enabled - immediate remediation required"
         }
-        
+
         if ($assessment.RC4Configured -gt 0) {
             Write-Finding -Status "WARNING" -Message "$($assessment.RC4Configured) DC(s) have RC4 encryption enabled"
         }
@@ -271,6 +271,6 @@ function Get-DomainControllerEncryption {
             Write-Finding -Status "CRITICAL" -Message "Error analyzing Domain Controllers: $errorMsg"
         }
     }
-    
+
     return $assessment
 }

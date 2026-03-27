@@ -22,9 +22,9 @@ function Get-TrustEncryptionAssessment {
     param(
         [hashtable]$ServerParams
     )
-    
+
     Write-Section "Trust Encryption Assessment (Post-November 2022 Logic)"
-    
+
     $assessment = @{
         TotalTrusts = 0
         ExplicitAES = 0
@@ -33,7 +33,7 @@ function Get-TrustEncryptionAssessment {
         DESRisk     = 0
         Details     = @()
     }
-    
+
     try {
         # Get domain info - ensure we query the correct domain
         if ($ServerParams.ContainsKey('Server')) {
@@ -49,19 +49,19 @@ function Get-TrustEncryptionAssessment {
             $domainInfo = Get-ADDomain
         }
         $trusts = Get-ADTrust -Filter * @ServerParams -Properties msDS-SupportedEncryptionTypes, TrustDirection, TrustType
-        
+
         if (-not $trusts) {
             Write-Finding -Status "INFO" -Message "No trusts found in domain: $($domainInfo.DNSRoot)"
             return $assessment
         }
-        
+
         $assessment.TotalTrusts = if ($trusts -is [array]) { $trusts.Count } else { 1 }
         Write-Finding -Status "INFO" -Message "Found $($assessment.TotalTrusts) trust(s)"
-        
+
         foreach ($trust in $trusts) {
             $encValue = $trust.'msDS-SupportedEncryptionTypes'
             $encTypes = Get-EncryptionTypeString -Value $encValue
-            
+
             $trustInfo = @{
                 Name                 = $trust.Name
                 Direction            = $trust.TrustDirection
@@ -71,7 +71,7 @@ function Get-TrustEncryptionAssessment {
                 Status               = "Unknown"
                 PostNov2022Compliant = $false
             }
-            
+
             # Post-November 2022 logic: Trusts default to AES when not set
             if (-not $encValue -or $encValue -eq 0) {
                 $assessment.DefaultAES++
@@ -84,7 +84,7 @@ function Get-TrustEncryptionAssessment {
                 $assessment.ExplicitAES++
                 $trustInfo.Status = "AES (Explicitly Configured)"
                 $trustInfo.PostNov2022Compliant = $true
-                
+
                 if ($encValue -band 0x4) {
                     # Also has RC4
                     $assessment.RC4Risk++
@@ -95,7 +95,7 @@ function Get-TrustEncryptionAssessment {
                 else {
                     Write-Finding -Status "OK" -Message "Trust '$($trust.Name)': AES explicitly configured"
                 }
-                
+
                 if ($encValue -band 0x3) {
                     # Also has DES
                     $assessment.DESRisk++
@@ -116,10 +116,10 @@ function Get-TrustEncryptionAssessment {
                 $trustInfo.Status = "DES Only"
                 Write-Finding -Status "CRITICAL" -Message "Trust '$($trust.Name)': DES only - immediate remediation required"
             }
-            
+
             $assessment.Details += $trustInfo
         }
-        
+
         # Summary
         Write-Host ""
         Write-Finding -Status "INFO" -Message "Trust Assessment Summary:"
@@ -128,7 +128,7 @@ function Get-TrustEncryptionAssessment {
         Write-Host "  $([char]0x2022) AES Explicit: $($assessment.ExplicitAES)" -ForegroundColor Green
         Write-Host "  $([char]0x2022) RC4 Risk: $($assessment.RC4Risk)" -ForegroundColor $(if ($assessment.RC4Risk -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) DES Risk: $($assessment.DESRisk)" -ForegroundColor $(if ($assessment.DESRisk -gt 0) { "Red" } else { "Green" })
-        
+
         Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F4D8)) Post-November 2022 Update:" -ForegroundColor Cyan
         Write-Host "  When msDS-SupportedEncryptionTypes is not set (0 or empty) on trusts," -ForegroundColor Gray
         Write-Host "  they default to AES encryption. No action needed for these trusts." -ForegroundColor Gray
@@ -146,6 +146,6 @@ function Get-TrustEncryptionAssessment {
             Write-Finding -Status "CRITICAL" -Message "Error analyzing trusts: $errorMsg"
         }
     }
-    
+
     return $assessment
 }

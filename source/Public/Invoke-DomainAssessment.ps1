@@ -38,11 +38,11 @@ function Invoke-DomainAssessment {
         [bool]$Export,
         [bool]$Guidance
     )
-    
+
     Write-Host "`n$("=" * 80)" -ForegroundColor Yellow
     Write-Host "Assessing Domain: $DomainName" -ForegroundColor Yellow
     Write-Host $("=" * 80) -ForegroundColor Yellow
-    
+
     # Try to discover a specific DC in this domain for better connectivity
     $serverParam = $null
     try {
@@ -66,10 +66,10 @@ function Invoke-DomainAssessment {
         Write-Host "  Could not discover DC, using domain name directly" -ForegroundColor Yellow
         Write-Host "  Warning: This may fail for child domains if not directly reachable" -ForegroundColor Yellow
     }
-    
+
     # Build command parameters
     $params = @{}
-    
+
     if ($serverParam) {
         # Use -Server with the discovered DC hostname
         $params['Server'] = $serverParam
@@ -78,43 +78,43 @@ function Invoke-DomainAssessment {
         # Fall back to -Domain
         $params['Domain'] = $DomainName
     }
-    
+
     if ($AnalyzeLogs) {
         $params['AnalyzeEventLogs'] = $true
         $params['EventLogHours'] = $Hours
     }
-    
+
     if ($Export) {
         $params['ExportResults'] = $true
     }
-    
+
     if ($Guidance) {
         $params['IncludeGuidance'] = $true
     }
-    
+
     try {
         # Run assessment and capture returned results object
         $assessmentResults = Invoke-RC4Assessment @params
-        
+
         # Parse results (if exported)
         if ($Export) {
             $domainSafe = $DomainName -replace '\.', '_'
             $timestamp = Get-Date -Format "yyyyMMdd"
             $jsonPattern = "DES_RC4_Assessment_${domainSafe}_${timestamp}*.json"
-            
+
             # Look in Exports folder first, then fallback to script root
             $exportFolder = Join-Path -Path $PSScriptRoot -ChildPath "Exports"
-            $resultFile = Get-ChildItem -Path $exportFolder -Filter $jsonPattern -ErrorAction SilentlyContinue | 
-            Sort-Object LastWriteTime -Descending | 
+            $resultFile = Get-ChildItem -Path $exportFolder -Filter $jsonPattern -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
-            
+
             if (-not $resultFile) {
                 # Fallback to script root for backwards compatibility
-                $resultFile = Get-ChildItem -Path $PSScriptRoot -Filter $jsonPattern -ErrorAction SilentlyContinue | 
-                Sort-Object LastWriteTime -Descending | 
+                $resultFile = Get-ChildItem -Path $PSScriptRoot -Filter $jsonPattern -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending |
                 Select-Object -First 1
             }
-            
+
             if ($resultFile) {
                 $result = Get-Content $resultFile.FullName | ConvertFrom-Json
                 return @{
@@ -124,7 +124,7 @@ function Invoke-DomainAssessment {
                 }
             }
         }
-        
+
         # Return results from the script execution
         if ($assessmentResults) {
             return @{
@@ -133,7 +133,7 @@ function Invoke-DomainAssessment {
                 Data   = $assessmentResults
             }
         }
-        
+
         return @{
             Domain = $DomainName
             Status = "Completed"

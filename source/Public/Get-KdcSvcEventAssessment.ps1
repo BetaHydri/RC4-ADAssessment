@@ -19,12 +19,13 @@ function Get-KdcSvcEventAssessment {
         $result = Get-KdcSvcEventAssessment -ServerParams $params
         $result.Status
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseUsingScopeModifierInNewRunspaces', '')]
     param(
         [hashtable]$ServerParams
     )
-    
+
     Write-Section "KDCSVC System Event Assessment (CVE-2026-20833)"
-    
+
     $assessment = @{
         TotalEvents  = 0
         EventCounts  = @{}     # EventID -> count
@@ -33,29 +34,29 @@ function Get-KdcSvcEventAssessment {
         FailedDCs    = @()
         Status       = "Unknown"
     }
-    
+
     try {
         # Get domain info
         if ($ServerParams.ContainsKey('Server')) {
             try {
-                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
+                $null = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
             }
             catch {
                 throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
             }
         }
         else {
-            $domainInfo = Get-ADDomain
+            $null = Get-ADDomain
         }
-        
+
         # Get all DCs using authoritative DC Locator
         $dcs = @(Get-ADDomainController -Filter * @ServerParams)
-        
+
         if (-not $dcs -or $dcs.Count -eq 0) {
             Write-Finding -Status "WARNING" -Message "No Domain Controllers found for KDCSVC event check"
             return $assessment
         }
-        
+
         Write-Finding -Status "INFO" -Message "Checking KDCSVC events 201-209 on $($dcs.Count) Domain Controller(s)"
         Write-Host "  These events indicate RC4 risks related to CVE-2026-20833" -ForegroundColor Gray
         Write-Host ""
@@ -75,11 +76,11 @@ function Get-KdcSvcEventAssessment {
         Write-Host "  $([char]0x2514)$([string]::new([char]0x2500, 8))$([char]0x2534)$([string]::new([char]0x2500, 14))$([char]0x2534)$([string]::new([char]0x2500, 72))$([char]0x2518)" -ForegroundColor DarkGray
         Write-Host "  Ref: https://support.microsoft.com/help/5073381 (CVE-2026-20833)" -ForegroundColor DarkGray
         Write-Host ""
-        
+
         foreach ($dc in $dcs) {
             $dcName = $dc.HostName
             Write-Host "  $([char]0x2022) Querying $dcName (System log)..." -ForegroundColor Cyan
-            
+
             try {
                 $filterXml = @"
 <QueryList>
@@ -90,7 +91,7 @@ function Get-KdcSvcEventAssessment {
   </Query>
 </QueryList>
 "@
-                
+
                 $events = $null
                 try {
                     $events = Invoke-Command -ComputerName $dcName -ScriptBlock {
@@ -118,26 +119,26 @@ function Get-KdcSvcEventAssessment {
                         }
                     }
                 }
-                
+
                 $assessment.QueriedDCs += $dcName
-                
+
                 if ($events -and $events.Count -gt 0) {
                     Write-Host "    $([char]0x26A0) Found $($events.Count) KDCSVC event(s)" -ForegroundColor Yellow
                     $assessment.TotalEvents += $events.Count
-                    
-                    foreach ($event in $events) {
-                        $eventId = if ($event.Id) { $event.Id } else { $event.EventID }
-                        
+
+                    foreach ($evt in $events) {
+                        $eventId = if ($evt.Id) { $evt.Id } else { $evt.EventID }
+
                         if (-not $assessment.EventCounts.ContainsKey("$eventId")) {
                             $assessment.EventCounts["$eventId"] = 0
                         }
                         $assessment.EventCounts["$eventId"]++
-                        
+
                         $assessment.EventDetails += @{
                             DC      = $dcName
                             EventID = $eventId
-                            Time    = if ($event.TimeCreated) { $event.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss') } else { 'Unknown' }
-                            Message = if ($event.Message) { ($event.Message -split "`n")[0] } else { '' }
+                            Time    = if ($evt.TimeCreated) { $evt.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss') } else { 'Unknown' }
+                            Message = if ($evt.Message) { ($evt.Message -split "`n")[0] } else { '' }
                         }
                     }
                 }
@@ -150,7 +151,7 @@ function Get-KdcSvcEventAssessment {
                 Write-Host "    $([char]0x26A0) Could not query System log on $dcName" -ForegroundColor Yellow
             }
         }
-        
+
         # Assess results
         if ($assessment.TotalEvents -gt 0) {
             $assessment.Status = "WARNING"
@@ -172,7 +173,7 @@ function Get-KdcSvcEventAssessment {
                 }
                 Write-Host "    Event $($kvp.Key): $($kvp.Value) occurrence(s) - $eventDesc" -ForegroundColor Yellow
             }
-            
+
             # Events 206-208 indicate Enforcement mode is active and blocking
             $blockingEvents = ($assessment.EventCounts.Keys | Where-Object { [int]$_ -ge 206 -and [int]$_ -le 208 })
             if ($blockingEvents) {
@@ -188,7 +189,7 @@ function Get-KdcSvcEventAssessment {
                 Write-Host "  If RC4DefaultDisablementPhase is not set or 0, set it to 1 to enable auditing" -ForegroundColor Gray
             }
         }
-        
+
         if ($assessment.FailedDCs.Count -gt 0) {
             Write-Host "`n  $([char]0x26A0) Could not query System log on $($assessment.FailedDCs.Count) DC(s)" -ForegroundColor Yellow
         }
@@ -202,6 +203,6 @@ function Get-KdcSvcEventAssessment {
             Write-Finding -Status "WARNING" -Message "Error checking KDCSVC events: $errorMsg"
         }
     }
-    
+
     return $assessment
 }

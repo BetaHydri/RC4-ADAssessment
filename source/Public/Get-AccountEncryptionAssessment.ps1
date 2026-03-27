@@ -1,4 +1,4 @@
-function Get-AccountEncryptionAssessment {
+﻿function Get-AccountEncryptionAssessment {
     <#
     .SYNOPSIS
         Assesses Kerberos encryption configuration for KRBTGT and service accounts in a domain.
@@ -22,9 +22,9 @@ function Get-AccountEncryptionAssessment {
     param(
         [hashtable]$ServerParams
     )
-    
+
     Write-Section "KRBTGT & Service Account Encryption Assessment"
-    
+
     $assessment = @{
         KRBTGT                 = @{
             PasswordAgeDays = 0
@@ -49,7 +49,7 @@ function Get-AccountEncryptionAssessment {
         TotalMissingAES        = 0
         Details                = @()
     }
-    
+
     try {
         # Get domain info
         if ($ServerParams.ContainsKey('Server')) {
@@ -64,32 +64,32 @@ function Get-AccountEncryptionAssessment {
         else {
             $domainInfo = Get-ADDomain
         }
-        
+
         Write-Finding -Status "INFO" -Message "Analyzing accounts in domain: $($domainInfo.DNSRoot)"
-        
+
         # ────────────────────────────────────────────────
         # 1. KRBTGT Account Assessment
         # ────────────────────────────────────────────────
         Write-Host "`n  Checking KRBTGT account..." -ForegroundColor Cyan
-        
+
         try {
             $krbtgt = Get-ADUser -Identity "krbtgt" `
                 -Properties pwdLastSet, 'msDS-SupportedEncryptionTypes', PasswordLastSet, WhenChanged @ServerParams -ErrorAction Stop
-            
+
             $pwdLastSet = $krbtgt.PasswordLastSet
             if (-not $pwdLastSet -and $krbtgt.pwdLastSet) {
                 $pwdLastSet = [DateTime]::FromFileTime($krbtgt.pwdLastSet)
             }
-            
+
             $passwordAgeDays = if ($pwdLastSet) { ((Get-Date) - $pwdLastSet).Days } else { -1 }
             $encValue = $krbtgt.'msDS-SupportedEncryptionTypes'
             $encTypes = Get-EncryptionTypeString -Value $encValue
-            
+
             $assessment.KRBTGT.PasswordAgeDays = $passwordAgeDays
             $assessment.KRBTGT.PasswordLastSet = $pwdLastSet
             $assessment.KRBTGT.EncryptionValue = $encValue
             $assessment.KRBTGT.EncryptionTypes = $encTypes
-            
+
             # Assess KRBTGT password age
             if ($passwordAgeDays -lt 0) {
                 $assessment.KRBTGT.Status = "UNKNOWN"
@@ -109,7 +109,7 @@ function Get-AccountEncryptionAssessment {
                 $assessment.KRBTGT.Status = "OK"
                 Write-Finding -Status "OK" -Message "KRBTGT password age: $passwordAgeDays days (last set: $($pwdLastSet.ToString('yyyy-MM-dd')))"
             }
-            
+
             # Assess KRBTGT encryption types
             if ($encValue -and ($encValue -band 0x3) -and -not ($encValue -band 0x18)) {
                 Write-Finding -Status "CRITICAL" -Message "KRBTGT has DES encryption configured without AES" `
@@ -130,21 +130,21 @@ function Get-AccountEncryptionAssessment {
         catch {
             Write-Finding -Status "WARNING" -Message "Could not query KRBTGT account: $($_.Exception.Message)"
         }
-        
+
         # ────────────────────────────────────────────────
         # 2. Accounts with USE_DES_KEY_ONLY flag
         # ────────────────────────────────────────────────
         Write-Host "`n  Checking for accounts with USE_DES_KEY_ONLY flag..." -ForegroundColor Cyan
-        
+
         try {
             # UAC bit 0x200000 = 2097152 = USE_DES_KEY_ONLY
             $desAccounts = Get-ADUser -Filter 'UserAccountControl -band 2097152' `
                 -Properties UserAccountControl, 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, Enabled, lastLogonTimestamp @ServerParams -ErrorAction Stop
-            
+
             if ($desAccounts) {
                 $desList = @($desAccounts)
                 $assessment.TotalDESFlag = $desList.Count
-                
+
                 foreach ($acct in $desList) {
                     $logon = ConvertFrom-LastLogonTimestamp -RawValue $acct.lastLogonTimestamp
                     $acctInfo = @{
@@ -161,10 +161,10 @@ function Get-AccountEncryptionAssessment {
                     }
                     $assessment.DESFlagAccounts += $acctInfo
                 }
-                
+
                 Write-Finding -Status "CRITICAL" -Message "$($desList.Count) account(s) have USE_DES_KEY_ONLY flag set in UserAccountControl" `
                     -Detail "These accounts are forced to use DES encryption - immediate remediation required"
-                
+
                 foreach ($acct in $assessment.DESFlagAccounts) {
                     $enabledStr = if ($acct.Enabled) { "Enabled" } else { "Disabled" }
                     $logonStr = if ($acct.LastLogon) { ", Last logon: $($acct.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
@@ -178,26 +178,26 @@ function Get-AccountEncryptionAssessment {
         catch {
             Write-Finding -Status "WARNING" -Message "Could not query for DES flag accounts: $($_.Exception.Message)"
         }
-        
+
         # ────────────────────────────────────────────────
         # 3. Service accounts with RC4/DES-only encryption
         # ────────────────────────────────────────────────
         Write-Host "`n  Checking service accounts (accounts with SPNs)..." -ForegroundColor Cyan
-        
+
         try {
             # Get user accounts with SPNs (service accounts)
             $svcAccounts = Get-ADUser -Filter 'ServicePrincipalName -like "*"' `
                 -Properties ServicePrincipalName, 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, DisplayName, lastLogonTimestamp @ServerParams -ErrorAction Stop
-            
+
             if ($svcAccounts) {
                 $svcList = @($svcAccounts)
                 Write-Finding -Status "INFO" -Message "Found $($svcList.Count) service account(s) with SPNs"
-                
+
                 foreach ($svc in $svcList) {
                     $encValue = $svc.'msDS-SupportedEncryptionTypes'
                     $pwdAge = if ($svc.PasswordLastSet) { ((Get-Date) - $svc.PasswordLastSet).Days } else { -1 }
                     $logon = ConvertFrom-LastLogonTimestamp -RawValue $svc.lastLogonTimestamp
-                    
+
                     # Check for RC4-only (has RC4 bit but no AES bits)
                     if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
                         $svcInfo = @{
@@ -215,7 +215,7 @@ function Get-AccountEncryptionAssessment {
                         }
                         $assessment.RC4OnlyServiceAccounts += $svcInfo
                     }
-                    
+
                     # Check for DES-only (has DES bits but no AES bits)
                     if ($encValue -and ($encValue -band 0x3) -and -not ($encValue -band 0x18)) {
                         $svcInfo = @{
@@ -236,7 +236,7 @@ function Get-AccountEncryptionAssessment {
                             $assessment.RC4OnlyServiceAccounts += $svcInfo
                         }
                     }
-                    
+
                     # Check for DES bits enabled (has DES bits, even alongside AES - DES is removed in Server 2025)
                     if ($encValue -and ($encValue -band 0x3) -and ($encValue -band 0x18)) {
                         $desInfo = @{
@@ -256,7 +256,7 @@ function Get-AccountEncryptionAssessment {
                             $assessment.DESEnabledAccounts += $desInfo
                         }
                     }
-                    
+
                     # Check for explicit RC4 exception (has RC4 + AES = 0x1C or similar)
                     if ($encValue -and ($encValue -band 0x4) -and ($encValue -band 0x18)) {
                         $excInfo = @{
@@ -298,10 +298,10 @@ function Get-AccountEncryptionAssessment {
                         }
                     }
                 }
-                
+
                 $assessment.TotalRC4OnlySvc = $assessment.RC4OnlyServiceAccounts.Count
                 $assessment.TotalStaleSvc = $assessment.StaleServiceAccounts.Count
-                
+
                 if ($assessment.RC4OnlyServiceAccounts.Count -gt 0) {
                     Write-Finding -Status "CRITICAL" -Message "$($assessment.RC4OnlyServiceAccounts.Count) service account(s) have RC4/DES-only encryption configured"
                     foreach ($svc in $assessment.RC4OnlyServiceAccounts) {
@@ -314,7 +314,7 @@ function Get-AccountEncryptionAssessment {
                 else {
                     Write-Finding -Status "OK" -Message "No service accounts have RC4/DES-only encryption configured"
                 }
-                
+
                 if ($assessment.StaleServiceAccounts.Count -gt 0) {
                     Write-Finding -Status "WARNING" -Message "$($assessment.StaleServiceAccounts.Count) service account(s) have stale passwords (>365 days) with RC4 enabled"
                     foreach ($svc in $assessment.StaleServiceAccounts) {
@@ -330,24 +330,24 @@ function Get-AccountEncryptionAssessment {
         catch {
             Write-Finding -Status "WARNING" -Message "Could not query service accounts: $($_.Exception.Message)"
         }
-        
+
         # ────────────────────────────────────────────────
         # 4. Managed Service Accounts (gMSA/sMSA/dMSA)
         # ────────────────────────────────────────────────
         Write-Host "`n  Checking Managed Service Accounts (gMSA/sMSA/dMSA)..." -ForegroundColor Cyan
-        
+
         try {
             $msaAccounts = Get-ADServiceAccount -Filter * `
                 -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, ServicePrincipalName, ObjectClass, lastLogonTimestamp @ServerParams -ErrorAction Stop
-            
+
             if ($msaAccounts) {
                 $msaList = @($msaAccounts)
                 Write-Finding -Status "INFO" -Message "Found $($msaList.Count) Managed Service Account(s)"
-                
+
                 foreach ($msa in $msaList) {
                     $encValue = $msa.'msDS-SupportedEncryptionTypes'
                     $logon = ConvertFrom-LastLogonTimestamp -RawValue $msa.lastLogonTimestamp
-                    
+
                     # Check for RC4-only (has RC4 bit but no AES bits)
                     if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
                         $msaInfo = @{
@@ -364,7 +364,7 @@ function Get-AccountEncryptionAssessment {
                         }
                         $assessment.RC4OnlyMSAs += $msaInfo
                     }
-                    
+
                     # Check for explicit RC4 exception on MSA (has RC4 + AES = 0x1C or similar)
                     if ($encValue -and ($encValue -band 0x4) -and ($encValue -band 0x18)) {
                         $excInfo = @{
@@ -401,9 +401,9 @@ function Get-AccountEncryptionAssessment {
                         }
                     }
                 }
-                
+
                 $assessment.TotalRC4OnlyMSA = $assessment.RC4OnlyMSAs.Count
-                
+
                 if ($assessment.RC4OnlyMSAs.Count -gt 0) {
                     Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
                     foreach ($msa in $assessment.RC4OnlyMSAs) {
@@ -427,7 +427,7 @@ function Get-AccountEncryptionAssessment {
                 Write-Finding -Status "WARNING" -Message "Could not query Managed Service Accounts: $($_.Exception.Message)"
             }
         }
-        
+
         # Update DES-enabled totals and display
         $assessment.TotalDESEnabled = $assessment.DESEnabledAccounts.Count
         if ($assessment.TotalDESEnabled -gt 0) {
@@ -437,7 +437,7 @@ function Get-AccountEncryptionAssessment {
                 Write-Host "    $([char]0x2022) $($des.Name) ($($des.AccountType)) - $($des.EncryptionTypes)$logonStr" -ForegroundColor Yellow
             }
         }
-        
+
         # Update RC4 exception totals and display
         $assessment.TotalRC4Exception = $assessment.RC4ExceptionAccounts.Count
         if ($assessment.TotalRC4Exception -gt 0) {
@@ -448,18 +448,18 @@ function Get-AccountEncryptionAssessment {
                 Write-Host "    $([char]0x2022) $($exc.Name) ($excType) - $($exc.EncryptionTypes)$logonStr" -ForegroundColor Yellow
             }
         }
-        
+
         # ────────────────────────────────────────────────
         # 5. Accounts missing AES keys (password set before DFL 2008)
         # ────────────────────────────────────────────────
         Write-Host "`n  Checking for accounts missing AES keys..." -ForegroundColor Cyan
-        
+
         try {
             # Determine when DFL was raised to 2008 (DFL >= Windows2008Domain means AES keys are generated on password set)
             # Accounts whose password was last set BEFORE the DFL was raised to 2008 won't have AES keys
             $dfl = $domainInfo.DomainMode
             $dflSupportsAES = $dfl -match '2008|2012|2016|Windows2008|Windows2012|Windows2016|2025'
-            
+
             if ($dflSupportsAES) {
                 # Find enabled user accounts with very old passwords that likely predate AES key generation
                 # We look for accounts with msDS-SupportedEncryptionTypes = 0 or not set, AND password > 5 years old
@@ -467,14 +467,14 @@ function Get-AccountEncryptionAssessment {
                 $fiveYearsAgo = (Get-Date).AddYears(-5)
                 $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
                     -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated, lastLogonTimestamp @ServerParams -ErrorAction Stop
-                
+
                 if ($oldAccounts) {
                     $oldList = @($oldAccounts)
-                    
+
                     foreach ($acct in $oldList) {
                         $encValue = $acct.'msDS-SupportedEncryptionTypes'
                         $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
-                        
+
                         # Flag accounts where password hasn't been reset since before AES was available
                         # AND msDS-SupportedEncryptionTypes is not set (meaning no explicit AES bits)
                         if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
@@ -493,13 +493,13 @@ function Get-AccountEncryptionAssessment {
                             $assessment.MissingAESKeyAccounts += $acctInfo
                         }
                     }
-                    
+
                     $assessment.TotalMissingAES = $assessment.MissingAESKeyAccounts.Count
-                    
+
                     if ($assessment.MissingAESKeyAccounts.Count -gt 0) {
                         Write-Finding -Status "WARNING" -Message "$($assessment.MissingAESKeyAccounts.Count) account(s) may be missing AES keys (password not reset since DFL raised to 2008+)" `
                             -Detail "Reset password twice for these accounts to generate AES keys"
-                        
+
                         $displayCount = [Math]::Min($assessment.MissingAESKeyAccounts.Count, 10)
                         foreach ($acct in $assessment.MissingAESKeyAccounts | Select-Object -First $displayCount) {
                             $spnStr = if ($acct.HasSPN) { " [HAS SPN]" } else { "" }
@@ -526,13 +526,13 @@ function Get-AccountEncryptionAssessment {
         catch {
             Write-Finding -Status "WARNING" -Message "Could not check for accounts missing AES keys: $($_.Exception.Message)"
         }
-        
+
         # ────────────────────────────────────────────────
         # Summary
         # ────────────────────────────────────────────────
         Write-Host ""
         Write-Finding -Status "INFO" -Message "Account Encryption Assessment Summary:"
-        
+
         $krbtgtColor = switch ($assessment.KRBTGT.Status) {
             "OK" { "Green" }
             "WARNING" { "Yellow" }
@@ -560,6 +560,6 @@ function Get-AccountEncryptionAssessment {
             Write-Finding -Status "CRITICAL" -Message "Error analyzing accounts: $errorMsg"
         }
     }
-    
+
     return $assessment
 }

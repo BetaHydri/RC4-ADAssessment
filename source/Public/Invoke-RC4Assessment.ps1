@@ -131,32 +131,30 @@ $results = @{
 try {
     # 1. Domain Controller Assessment
     $results.DomainControllers = Get-DomainControllerEncryption -ServerParams $serverParams
-    
+
     # 2. Trust Assessment
     $results.Trusts = Get-TrustEncryptionAssessment -ServerParams $serverParams
-    
+
     # 3. KRBTGT & Account Assessment
     $results.Accounts = Get-AccountEncryptionAssessment -ServerParams $serverParams
-    
+
     # 4. KDC Registry Assessment
     $results.KdcRegistry = Get-KdcRegistryAssessment -ServerParams $serverParams
-    
+
     # 4b. KDCSVC System Event Assessment (CVE-2026-20833)
     $results.KdcSvcEvents = Get-KdcSvcEventAssessment -ServerParams $serverParams
-    
+
     # 5. Event Log Analysis (if requested)
     if ($AnalyzeEventLogs) {
         # 5a. Check audit policy first
         $results.AuditPolicy = Get-AuditPolicyCheck -ServerParams $serverParams
-        
+
         # 5b. Analyze event logs
         $results.EventLogs = Get-EventLogEncryptionAnalysis -ServerParams $serverParams -Hours $EventLogHours
-        
+
         # 5c. Correlate: accounts with AES configured in AD but using RC4 tickets (need password reset)
         if ($results.EventLogs.RC4Accounts.Count -gt 0 -and $results.Accounts) {
-            # Build lookup of all known account encryption configs from AD
-            $allAccountConfigs = @{}
-            
+            # Correlate: accounts with AES configured in AD but using RC4 tickets (need password reset)
             # Service accounts with SPNs (RC4-only ones wouldn't have AES, skip them)
             # We want accounts that HAVE AES configured but are still issuing RC4 tickets
             try {
@@ -192,7 +190,7 @@ try {
                                 # OR account has no encryption type set (inherits from GPO/domain default which is AES)
                                 $hasAES = $encValue -and ($encValue -band 0x18)
                                 $inheritsDefault = -not $encValue -or $encValue -eq 0
-                                
+
                                 if ($hasAES -or $inheritsDefault) {
                                     $results.EventLogs.PasswordResetNeeded += @{
                                         Name            = $acctName
@@ -211,7 +209,7 @@ try {
                         }
                     }
                 }
-                
+
                 if ($results.EventLogs.PasswordResetNeeded.Count -gt 0) {
                     Write-Finding -Status "WARNING" -Message "$($results.EventLogs.PasswordResetNeeded.Count) account(s) have AES configured but are still using RC4 tickets (password reset needed)"
                     foreach ($acct in $results.EventLogs.PasswordResetNeeded) {
@@ -232,13 +230,13 @@ try {
         Write-Host "  This provides real-world usage data showing actual DES/RC4 tickets." -ForegroundColor Gray
         Write-Host "  Example: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 48" -ForegroundColor Gray
     }
-    
+
     # 5. Overall Assessment
     Write-Section "Overall Security Assessment"
-    
+
     $criticalIssues = 0
     $warnings = 0
-    
+
     # Check for DES
     if ($results.DomainControllers.DESConfigured -gt 0) {
         $criticalIssues++
@@ -252,7 +250,7 @@ try {
             )
         }
     }
-    
+
     if ($results.Trusts.DESRisk -gt 0) {
         $criticalIssues++
         $desTrusts = ($results.Trusts.Details | Where-Object { $_.Status -match 'DES' }).Name -join ', '
@@ -265,7 +263,7 @@ try {
             )
         }
     }
-    
+
     if ($results.EventLogs -and $results.EventLogs.DESTickets -gt 0) {
         $criticalIssues++
         $desAcctList = if ($results.EventLogs.DESAccounts.Count -gt 0) { ($results.EventLogs.DESAccounts | Select-Object -First 5) -join ', ' } else { 'unknown' }
@@ -279,7 +277,7 @@ try {
             )
         }
     }
-    
+
     # Check for RC4
     if ($results.DomainControllers.RC4Configured -gt 0) {
         $warnings++
@@ -293,7 +291,7 @@ try {
             )
         }
     }
-    
+
     if ($results.Trusts.RC4Risk -gt 0) {
         $warnings++
         $rc4Trusts = ($results.Trusts.Details | Where-Object { $_.Status -match 'RC4' }).Name -join ', '
@@ -307,7 +305,7 @@ try {
             )
         }
     }
-    
+
     if ($results.EventLogs -and $results.EventLogs.RC4Tickets -gt 0) {
         $criticalIssues++
         $rc4AcctList = if ($results.EventLogs.RC4Accounts.Count -gt 0) { ($results.EventLogs.RC4Accounts | Select-Object -First 5) -join ', ' } else { 'unknown' }
@@ -324,7 +322,7 @@ try {
             )
         }
     }
-    
+
     if ($results.EventLogs -and $results.EventLogs.PasswordResetNeeded.Count -gt 0) {
         $warnings++
         $prnList = ($results.EventLogs.PasswordResetNeeded | Select-Object -First 5).Name -join ', '
@@ -340,7 +338,7 @@ try {
             )
         }
     }
-    
+
     # Check for KRBTGT and account issues
     if ($results.Accounts) {
         if ($results.Accounts.KRBTGT.Status -eq "CRITICAL") {
@@ -375,7 +373,7 @@ try {
                 )
             }
         }
-        
+
         if ($results.Accounts.TotalDESFlag -gt 0) {
             $criticalIssues++
             $desNames = ($results.Accounts.DESFlagAccounts | Select-Object -First 5).Name -join ', '
@@ -388,7 +386,7 @@ try {
                 )
             }
         }
-        
+
         if ($results.Accounts.TotalRC4OnlySvc -gt 0) {
             $criticalIssues++
             $svcNames = ($results.Accounts.RC4OnlyServiceAccounts | Select-Object -First 5).Name -join ', '
@@ -403,7 +401,7 @@ try {
                 )
             }
         }
-        
+
         if ($results.Accounts.TotalRC4OnlyMSA -gt 0) {
             $warnings++
             $msaNames = ($results.Accounts.RC4OnlyMSAs | Select-Object -First 5).Name -join ', '
@@ -415,7 +413,7 @@ try {
                 )
             }
         }
-        
+
         if ($results.Accounts.TotalRC4Exception -gt 0) {
             $warnings++
             $excNames = ($results.Accounts.RC4ExceptionAccounts | Select-Object -First 5).Name -join ', '
@@ -432,7 +430,7 @@ try {
                 )
             }
         }
-        
+
         if ($results.Accounts.TotalDESEnabled -gt 0) {
             $warnings++
             $desNames = ($results.Accounts.DESEnabledAccounts | Select-Object -First 5).Name -join ', '
@@ -447,7 +445,7 @@ try {
                 )
             }
         }
-        
+
         if ($results.Accounts.TotalStaleSvc -gt 0) {
             $warnings++
             $staleNames = ($results.Accounts.StaleServiceAccounts | Select-Object -First 5).Name -join ', '
@@ -461,7 +459,7 @@ try {
                 )
             }
         }
-        
+
         if ($results.Accounts.TotalMissingAES -gt 0) {
             $warnings++
             $missingNames = ($results.Accounts.MissingAESKeyAccounts | Select-Object -First 5 | ForEach-Object {
@@ -485,7 +483,7 @@ try {
             }
         }
     }
-    
+
     # Check KDC registry
     if ($results.KdcRegistry) {
         if ($results.KdcRegistry.DefaultDomainSupportedEncTypes.Status -eq "CRITICAL") {
@@ -513,7 +511,7 @@ try {
             else {
                 "RC4DefaultDisablementPhase = $currentPhase"
             }
-            
+
             $results.Recommendations += @{
                 Level   = "WARNING"
                 Message = "[$($results.Domain)] $phaseMsg"
@@ -527,7 +525,7 @@ try {
             }
         }
     }
-    
+
     # Check KDCSVC events (CVE-2026-20833)
     if ($results.KdcSvcEvents -and $results.KdcSvcEvents.TotalEvents -gt 0) {
         $warnings++
@@ -547,7 +545,7 @@ try {
             )
         }
     }
-    
+
     # Check audit policy
     if ($results.AuditPolicy -and $results.AuditPolicy.Status -eq "CRITICAL") {
         $warnings++
@@ -561,7 +559,7 @@ try {
             )
         }
     }
-    
+
     # Determine overall status
     if ($criticalIssues -gt 0) {
         $results.OverallStatus = "CRITICAL"
@@ -575,7 +573,7 @@ try {
         $results.OverallStatus = "OK"
         Write-Finding -Status "OK" -Message "No DES/RC4 usage detected - environment is secure"
     }
-    
+
     # Display recommendations with inline fix commands
     if ($results.Recommendations.Count -gt 0) {
         Write-Host "`n  Recommendations & Remediation:" -ForegroundColor Yellow
@@ -595,16 +593,16 @@ try {
             }
         }
     }
-    
+
     # Check for event log access issues
     if ($results.EventLogs -and $results.EventLogs.FailedDCs.Count -gt 0) {
         Write-Host "`n  $([char]0x26A0)  Note: Event log data is incomplete due to $($results.EventLogs.FailedDCs.Count) DC(s) being inaccessible" -ForegroundColor Yellow
         Write-Host "  Review the detailed troubleshooting guidance in the Event Log Analysis section above" -ForegroundColor Yellow
     }
-    
+
     # 6. Display Summary Tables
     Show-AssessmentSummary -Results $results
-    
+
     # 7. Manual Validation Guidance (if requested)
     if ($IncludeGuidance) {
         Show-ManualValidationGuidance
@@ -612,30 +610,30 @@ try {
     else {
         Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F4A1)) Tip: Use -IncludeGuidance for the full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline)." -ForegroundColor Cyan
     }
-    
+
     # 8. Export Results (if requested)
     if ($ExportResults) {
         Write-Section "Exporting Results"
-        
+
         # Create Exports folder if it doesn't exist
         $exportFolder = Join-Path -Path $PWD -ChildPath "Exports"
         if (-not (Test-Path -Path $exportFolder)) {
             New-Item -Path $exportFolder -ItemType Directory -Force | Out-Null
             Write-Finding -Status "INFO" -Message "Created export folder: $exportFolder"
         }
-        
+
         $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
         $domain = $results.Domain -replace '\.', '_'
-        
+
         # Export JSON
         $jsonPath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Assessment_${domain}_${timestamp}.json"
         $results | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
         Write-Finding -Status "OK" -Message "JSON export: $jsonPath"
-        
+
         # Export CSV summary
         $csvPath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Assessment_${domain}_${timestamp}.csv"
         $csvData = @()
-        
+
         # Add DC details
         foreach ($dc in $results.DomainControllers.Details) {
             $csvData += [PSCustomObject]@{
@@ -648,7 +646,7 @@ try {
                 LastLogonDaysAgo = ''
             }
         }
-        
+
         # Add AzureADKerberos if present
         if ($results.DomainControllers.AzureADKerberos) {
             $aadK = $results.DomainControllers.AzureADKerberos
@@ -662,7 +660,7 @@ try {
                 LastLogonDaysAgo = ''
             }
         }
-        
+
         # Add trust details
         foreach ($trust in $results.Trusts.Details) {
             $csvData += [PSCustomObject]@{
@@ -675,7 +673,7 @@ try {
                 LastLogonDaysAgo = ''
             }
         }
-        
+
         # Add KRBTGT details
         if ($results.Accounts) {
             $csvData += [PSCustomObject]@{
@@ -687,7 +685,7 @@ try {
                 LastLogon        = ''
                 LastLogonDaysAgo = ''
             }
-            
+
             # Add DES flag accounts
             foreach ($acct in $results.Accounts.DESFlagAccounts) {
                 $csvData += [PSCustomObject]@{
@@ -700,7 +698,7 @@ try {
                     LastLogonDaysAgo = $acct.LastLogonDaysAgo
                 }
             }
-            
+
             # Add RC4/DES-only service accounts
             foreach ($svc in $results.Accounts.RC4OnlyServiceAccounts) {
                 $csvData += [PSCustomObject]@{
@@ -713,7 +711,7 @@ try {
                     LastLogonDaysAgo = $svc.LastLogonDaysAgo
                 }
             }
-            
+
             # Add RC4-only MSAs
             foreach ($msa in $results.Accounts.RC4OnlyMSAs) {
                 $csvData += [PSCustomObject]@{
@@ -726,7 +724,7 @@ try {
                     LastLogonDaysAgo = $msa.LastLogonDaysAgo
                 }
             }
-            
+
             # Add DES-enabled accounts
             foreach ($des in $results.Accounts.DESEnabledAccounts) {
                 $csvData += [PSCustomObject]@{
@@ -739,7 +737,7 @@ try {
                     LastLogonDaysAgo = $des.LastLogonDaysAgo
                 }
             }
-            
+
             # Add RC4 exception accounts
             foreach ($exc in $results.Accounts.RC4ExceptionAccounts) {
                 $excType = if ($exc.AccountType) { "RC4 Exception $($exc.AccountType)" } else { 'RC4 Exception' }
@@ -753,7 +751,7 @@ try {
                     LastLogonDaysAgo = $exc.LastLogonDaysAgo
                 }
             }
-            
+
             # Add accounts missing AES keys
             foreach ($acct in $results.Accounts.MissingAESKeyAccounts) {
                 $csvData += [PSCustomObject]@{
@@ -767,7 +765,7 @@ try {
                 }
             }
         }
-        
+
         # Add KDC registry data
         if ($results.KdcRegistry) {
             $csvData += [PSCustomObject]@{
@@ -789,7 +787,7 @@ try {
                 LastLogonDaysAgo = ''
             }
         }
-        
+
         # Add KDCSVC event data (CVE-2026-20833)
         if ($results.KdcSvcEvents -and $results.KdcSvcEvents.TotalEvents -gt 0) {
             foreach ($kvp in $results.KdcSvcEvents.EventCounts.GetEnumerator()) {
@@ -804,10 +802,10 @@ try {
                 }
             }
         }
-        
+
         $csvData | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Write-Finding -Status "OK" -Message "CSV export: $csvPath"
-        
+
         # Export guidance text file (when both -ExportResults and -IncludeGuidance are used)
         if ($IncludeGuidance) {
             $guidancePath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Guidance_${domain}_${timestamp}.txt"
@@ -816,15 +814,15 @@ try {
             Write-Finding -Status "OK" -Message "Guidance export: $guidancePath"
         }
     }
-    
+
     # Final summary
     Write-Header "Assessment Complete" -Color "Cyan"
-    
+
     Write-Host "`n$([System.Char]::ConvertFromUtf32(0x1F4CA)) Summary:" -ForegroundColor Cyan
     Write-Host "  $([char]0x2022) Domain: $($results.Domain)" -ForegroundColor White
     Write-Host "  $([char]0x2022) Assessment Date: $($results.AssessmentDate.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor White
     Write-Host "  $([char]0x2022) Overall Status: " -NoNewline -ForegroundColor White
-    
+
     $statusColor = switch ($results.OverallStatus) {
         "OK" { "Green" }
         "WARNING" { "Yellow" }
@@ -832,11 +830,11 @@ try {
         default { "Gray" }
     }
     Write-Host $results.OverallStatus -ForegroundColor $statusColor
-    
+
     if (-not $AnalyzeEventLogs) {
         Write-Host "`n  $([System.Char]::ConvertFromUtf32(0x1F4A1)) For complete assessment, run with -AnalyzeEventLogs to detect actual DES/RC4 usage" -ForegroundColor Cyan
     }
-    
+
     # Return results object for use by Assess-ADForest.ps1
     return $results
 }

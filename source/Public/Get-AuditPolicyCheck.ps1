@@ -21,43 +21,43 @@ function Get-AuditPolicyCheck {
     param(
         [hashtable]$ServerParams
     )
-    
+
     Write-Section "Kerberos Audit Policy Verification"
-    
+
     $assessment = @{
         KerberosAuthServiceEnabled = $null    # $true, $false, or $null if unknown
         KerberosTicketOpsEnabled   = $null
         Status                     = "Unknown"
         QueriedDC                  = $null
     }
-    
+
     try {
         # Get domain info
         if ($ServerParams.ContainsKey('Server')) {
             try {
-                $domainInfo = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
+                $null = Get-ADDomain -Server $ServerParams['Server'] -ErrorAction Stop
             }
             catch {
                 throw "Failed to contact Domain Controller '$($ServerParams['Server'])': $($_.Exception.Message)"
             }
         }
         else {
-            $domainInfo = Get-ADDomain
+            $null = Get-ADDomain
         }
-        
+
         # Query first available DC using authoritative DC Locator
         $dc = Get-ADDomainController -Filter * @ServerParams | Select-Object -First 1
-        
+
         if (-not $dc) {
             Write-Finding -Status "WARNING" -Message "No Domain Controller found for audit policy check"
             return $assessment
         }
-        
+
         $dcName = $dc.HostName
         $assessment.QueriedDC = $dcName
-        
+
         Write-Finding -Status "INFO" -Message "Checking Kerberos audit policy on $dcName"
-        
+
         try {
             $auditResult = Invoke-Command -ComputerName $dcName -ScriptBlock {
                 $output = auditpol /get /subcategory:"Kerberos Authentication Service" 2>&1
@@ -69,11 +69,11 @@ function Get-AuditPolicyCheck {
                     TicketOps   = $ticketOps
                 }
             } -ErrorAction Stop
-            
+
             # Parse audit policy results
             $assessment.KerberosAuthServiceEnabled = $auditResult.AuthService -match 'Success and Failure|Success|Failure'
             $assessment.KerberosTicketOpsEnabled = $auditResult.TicketOps -match 'Success and Failure|Success|Failure'
-            
+
             if ($assessment.KerberosAuthServiceEnabled -and $assessment.KerberosTicketOpsEnabled) {
                 $assessment.Status = "OK"
                 Write-Finding -Status "OK" -Message "Kerberos auditing is enabled (Authentication Service + Ticket Operations)"
@@ -105,6 +105,6 @@ function Get-AuditPolicyCheck {
         $assessment.Status = "UNKNOWN"
         Write-Finding -Status "WARNING" -Message "Error checking audit policy: $errorMsg"
     }
-    
+
     return $assessment
 }
