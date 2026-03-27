@@ -70,7 +70,9 @@
     PSResourceGetVersion = '1.1.1'
 
     # PowerShellGet compatibility module only works when using PSResourceGet or ModuleFast.
-    UsePowerShellGetCompatibilityModule = $true
+    # Disabled: not needed when PSResourceGet is available system-wide and avoids
+    # network timeouts downloading the beta shim during bootstrap.
+    UsePowerShellGetCompatibilityModule = $false
     UsePowerShellGetCompatibilityModuleVersion = '3.0.23-beta23'
 }
 
