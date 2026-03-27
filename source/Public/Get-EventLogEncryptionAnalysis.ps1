@@ -153,6 +153,7 @@ function Get-EventLogEncryptionAnalysis {
                 }
 
                 if ($events) {
+                    $events = @($events)  # Ensure array for PS 5.1 .Count compatibility
                     Write-Host "    $([char]0x2713) Retrieved $($events.Count) events from $dcName" -ForegroundColor Green
                     $assessment.EventsAnalyzed += $events.Count
                     $assessment.QueriedDCs += $dcName  # Track successfully queried DC
