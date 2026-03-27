@@ -13,7 +13,7 @@ function Show-ManualValidationGuidance {
         Show-ManualValidationGuidance
     #>
     Write-Section "Manual Validation & Monitoring Guidance"
-    
+
     Write-Host @"
 
 $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
@@ -21,18 +21,18 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 1. Event Log Monitoring Setup
    $([string]([char]0x2500) * 60)
    Enable advanced Kerberos auditing on Domain Controllers:
-   
+
    $([char]0x2022) Group Policy > Computer Configuration > Policies > Windows Settings
      > Security Settings > Advanced Audit Policy Configuration
      > Audit Policies > Account Logon
-   
+
    $([char]0x2713) Audit Kerberos Authentication Service: Success and Failure
    $([char]0x2713) Audit Kerberos Service Ticket Operations: Success and Failure
-   
+
    Event IDs to monitor:
    $([char]0x2022) 4768: TGT Request (TicketEncryptionType field)
    $([char]0x2022) 4769: Service Ticket Request (TicketEncryptionType field)
-   
+
    Encryption Type Values:
    $([char]0x2022) 0x1 or 0x3: DES (CRITICAL - should be 0)
    $([char]0x2022) 0x17: RC4-HMAC (WARNING - should be 0)
@@ -40,10 +40,10 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
 2. Splunk/SIEM Query Examples
    $([string]([char]0x2500) * 60)
-   
+
    Splunk query to detect RC4 usage:
-   index=windows EventCode=4768 OR EventCode=4769 
-   | eval EncType=if(TicketEncryptionType="0x17", "RC4", 
+   index=windows EventCode=4768 OR EventCode=4769
+   | eval EncType=if(TicketEncryptionType="0x17", "RC4",
                      if(TicketEncryptionType="0x3", "DES",
                      if(TicketEncryptionType="0x1", "DES",
                      if(TicketEncryptionType="0x11", "AES128",
@@ -51,52 +51,52 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    | where EncType="RC4" OR EncType="DES"
    | stats count by TargetUserName, EncType
    | sort -count
-   
+
    This shows which accounts are still using RC4/DES encryption.
 
 3. GPO Validation
    $([string]([char]0x2500) * 60)
-   
+
    Verify GPO is applied and effective:
-   
+
    On a Domain Controller:
    PS> gpresult /h C:\gpresult.html
    PS> Start-Process C:\gpresult.html
-   
+
    Look for: "Network security: Configure encryption types allowed for Kerberos"
    Should show: AES128_HMAC_SHA1, AES256_HMAC_SHA1
    Should NOT show: DES_CBC_CRC, DES_CBC_MD5, RC4_HMAC_MD5
 
 4. Computer Object Assessment (If Needed)
    $([string]([char]0x2500) * 60)
-   
+
    Post-November 2022 Update Clarification:
-   
+
    RC4 fallback ONLY occurs when BOTH conditions are true:
    a) msDS-SupportedEncryptionTypes on CLIENT is set to non-zero value
    b) msDS-SupportedEncryptionTypes on DC does NOT include AES
-   
+
    If your DCs have AES configured via GPO, client computers will inherit AES
    even if their msDS-SupportedEncryptionTypes attribute is not populated.
-   
+
    You do NOT need to populate this attribute on all 100,000+ computers if:
    $([char]0x2713) DCs have AES configured (via GPO or attribute)
    $([char]0x2713) Event logs show no RC4 usage (0x17)
-   
+
    To verify a specific computer:
    PS> Get-ADComputer "COMPUTERNAME" -Properties msDS-SupportedEncryptionTypes
-   
+
    Value of 0 or empty: Inherits from DC (normal and secure post-Nov 2022)
    Value with 0x4 bit: Has RC4 explicitly set (investigate why)
 
 5. Trust Validation
    $([string]([char]0x2500) * 60)
-   
+
    Post-November 2022: Trusts default to AES when attribute is not set.
-   
+
    To verify trust encryption from both sides:
    PS> Get-ADTrust -Filter * | Select-Object Name, msDS-SupportedEncryptionTypes
-   
+
    If msDS-SupportedEncryptionTypes is 0 or empty: Uses AES (secure)
    If set to 0x18: Explicitly configured for AES-only (secure, recommended)
    If set to 0x1C: Explicit RC4 exception with AES (review - remove RC4 when possible)
@@ -104,7 +104,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
 6. KRBTGT Account & Service Account Hygiene
    $([string]([char]0x2500) * 60)
-   
+
    KRBTGT Password Rotation:
    $([char]0x2022) The KRBTGT password encrypts all TGTs in the domain
    $([char]0x2022) If never rotated since pre-AES era, only RC4/DES keys may exist
@@ -113,7 +113,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) Rotate TWICE to flush out old keys entirely
 
    $([char]0x26A0) KRBTGT Rotation Step-by-Step Procedure:
-   
+
    a) Pre-Rotation Checks:
       $([char]0x2022) Confirm ALL Domain Controllers are online and replicating
         PS> repadmin /replsummary
@@ -207,18 +207,18 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Check KRBTGT:
    PS> Get-ADUser krbtgt -Properties PasswordLastSet, msDS-SupportedEncryptionTypes |
        Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
-   
+
    Service Accounts with RC4/DES:
    PS> Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Properties `
        msDS-SupportedEncryptionTypes, PasswordLastSet, ServicePrincipalName |
        Where-Object { `$_.'msDS-SupportedEncryptionTypes' -band 4 -and
                        -not (`$_.'msDS-SupportedEncryptionTypes' -band 0x18) } |
        Select-Object Name, PasswordLastSet, msDS-SupportedEncryptionTypes
-   
+
    Remove USE_DES_KEY_ONLY flag:
    PS> Get-ADUser -Filter 'UserAccountControl -band 2097152' |
        ForEach-Object { Set-ADAccountControl `$_ -UseDESKeyOnly `$false }
-   
+
    Update service accounts to AES:
    PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=24}
    # Then reset the password to generate new AES keys
@@ -231,7 +231,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
 7. RC4 Disablement Timeline & Registry Keys (CVE-2026-20833)
    $([string]([char]0x2500) * 60)
-   
+
    $([char]0x26A0) CRITICAL TIMELINE:
    $([char]0x2022) January 2026: Security updates add RC4DefaultDisablementPhase
      registry key. Audit events (KDCSVC 201-209) logged in System log.
@@ -241,10 +241,10 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) July 2026: Full enforcement - RC4DefaultDisablementPhase
      registry key removed. RC4 blocked for all accounts without explicit
      RC4 in msDS-SupportedEncryptionTypes.
-   
+
    Registry Keys to Configure:
    $([char]0x2022) HKLM\SYSTEM\CurrentControlSet\Services\Kdc
-   
+
    a) RC4DefaultDisablementPhase (DWORD):
       $([char]0x2022) Value = 0: RC4 disablement not active
       $([char]0x2022) Value = 1: Audit mode only (logs KDCSVC events but allows RC4)
@@ -252,7 +252,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
       $([char]0x2022) Deploy to ALL Domain Controllers after January 2026 updates
       PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
             -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord
-   
+
    b) DefaultDomainSupportedEncTypes (DWORD):
       $([char]0x2022) Controls default encryption types for the domain
       $([char]0x2022) After April 2026 updates, defaults to 0x18 (AES-only)
@@ -263,25 +263,25 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
       PS> # Check current value:
       PS> Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
             -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
-   
+
    $([char]0x2022) GPO Preference path for DefaultDomainSupportedEncTypes:
      Computer Configuration > Preferences > Windows Settings > Registry
      > DefaultDomainSupportedEncTypes
-   
+
    $([char]0x2022) KDCSVC System Event Log Monitoring:
      Monitor events 201-209 (Provider: KDCSVC) in the System log.
      These identify accounts and configurations at risk before enabling
      Enforcement mode.
-   
+
    Reference: https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc
 
 8. Explicit RC4 Exception Workflow (CVE-2026-20833)
    $([string]([char]0x2500) * 60)
-   
+
    After April 2026 (Enforcement phase), RC4 is blocked for accounts with
    default encryption configuration. After July 2026, the RC4DefaultDisablementPhase
    registry key is removed entirely. Use this workflow for exceptions:
-   
+
    a) Step 1: Try AES First
       PS> # Set account to AES-only
       PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=24}
@@ -289,10 +289,10 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
       $([char]0x2022) Test application access
-   
+
    b) Step 2: If AES Fails, Add Explicit RC4 Exception
       Per CVE-2026-20833 guidance, use 0x1C (RC4 + AES128 + AES256):
-      
+
       For USER/SERVICE accounts:
       PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
       # 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)
@@ -300,34 +300,34 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
       $([char]0x2022) Test application access
-   
+
       For COMPUTER accounts (rare but possible):
       PS> Set-ADComputer "LEGACYHOST" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
       CMD> klist purge
       $([char]0x2022) Test application access
-   
+
    c) Last Resort: Domain-Wide RC4 Fallback (INSECURE)
       If per-account exceptions are not feasible:
       PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
             -Name 'DefaultDomainSupportedEncTypes' -Value 0x1C -Type DWord
       $([char]0x26A0) This leaves ALL accounts vulnerable to CVE-2026-20833!
       $([char]0x2022) Only use as temporary measure while migrating to AES
-   
+
    d) Step 3: Document and Plan
       $([char]0x2022) Document all accounts with explicit RC4 exceptions
       $([char]0x2022) Engage vendors for AES support on third-party systems
       $([char]0x2022) Plan upgrades or replacements for legacy systems
       $([char]0x2022) Set review dates to revisit each exception
-   
+
    Reference: https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc
 
 9. Accounts Missing AES Keys
    $([string]([char]0x2500) * 60)
-   
+
    Accounts whose password was last set BEFORE the Domain Functional Level
    was raised to Windows Server 2008 will NOT have AES keys generated.
    The lastLogonTimestamp field helps determine if the account is still in use.
-   
+
    Find affected accounts (including last logon):
    PS> Get-ADUser -Filter 'Enabled -eq `$true' -Properties PasswordLastSet, `
        'msDS-SupportedEncryptionTypes', lastLogonTimestamp |
@@ -338,22 +338,22 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
            if (`$_.lastLogonTimestamp) { [DateTime]::FromFileTime(`$_.lastLogonTimestamp) }
            else { 'Never' }
        }}
-   
+
    $([char]0x2022) Accounts with recent lastLogonTimestamp: actively in use, prioritize
    $([char]0x2022) Accounts that never logged on or >90 days: consider disabling first
-   
+
    Remediation Options:
-   
+
    a) Option 1: Reset Password (Simple)
       $([char]0x2022) Reset password to generate AES keys
       $([char]0x2022) Update services running under these accounts with new password
       $([char]0x2022) After reset, AES keys are automatically generated
-   
+
    b) Option 2: Fine-Grained Password Policy (Zero-Disruption)
       Use a temporary FGPP to bypass domain password history requirements,
       allowing you to reset the password with the SAME value. This avoids
       service disruption while generating AES keys.
-      
+
       Step 1: Create a temporary FGPP (one-time setup):
       PS> New-ADFineGrainedPasswordPolicy -Name 'Temp_AES_Key_Fix' ``
             -Precedence 1 ``
@@ -364,44 +364,44 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
             -MinPasswordLength 0 ``
             -LockoutThreshold 0 ``
             -ReversibleEncryptionEnabled `$false
-      
+
       Step 2: Apply FGPP to the target account:
       PS> Add-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' ``
             -Subjects '<AccountName>'
-      
+
       Step 3: Reset password with the same value:
       PS> Set-ADAccountPassword '<AccountName>' -Reset ``
             -NewPassword (ConvertTo-SecureString '<SamePassword>' -AsPlainText -Force)
-      
+
       Step 4: Force replication to all DCs:
       CMD> repadmin /syncall /AdePq
-      
+
       Step 5: Remove FGPP from the account:
       PS> Remove-ADFineGrainedPasswordPolicySubject -Identity 'Temp_AES_Key_Fix' ``
             -Subjects '<AccountName>'
-      
+
       Step 6: Verify AES keys exist (Event ID 4768 should now show AES):
       PS> Get-ADUser '<AccountName>' -Properties msDS-SupportedEncryptionTypes
-   
+
    c) Option 3: Explicitly Set AES Encryption Types
       In some cases, resetting the password alone is not enough. If Event ID
       4768 still shows 'Available Keys: RC4' after the password reset, you
       must explicitly set the account's msDS-SupportedEncryptionTypes to AES:
-      
+
       PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
       # 24 = 0x18 = AES128 + AES256
       PS> Set-ADAccountPassword '<AccountName>' -Reset ``
             -NewPassword (ConvertTo-SecureString '<Password>' -AsPlainText -Force)
       CMD> klist purge
-      
+
       After this, Event ID 4768 should show:
         MSDS-SupportedEncryptionTypes: 0x18 (AES128-SHA96, AES256-SHA96)
         Available Keys: AES-SHA1, RC4
-      
+
       $([char]0x26A0) The 'Available Keys' field always lists RC4 as available (AD
       stores RC4 keys for all accounts). What matters is that AES is
       listed FIRST and that 0x18 is set on the account.
-   
+
    $([char]0x26A0) For service accounts, coordinate password reset with
    application teams to avoid service disruptions.
    $([char]0x26A0) For Linux services using keytabs, regenerate keytab files
@@ -409,18 +409,18 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
 10. Microsoft Kerberos-Crypto Tools
    $([string]([char]0x2500) * 60)
-   
+
    Microsoft provides complementary scripts for RC4 detection:
    $([char]0x2022) Get-KerbEncryptionUsage.ps1 - Detects RC4 usage from events 4768/4769
    $([char]0x2022) List-AccountKeys.ps1 - Lists account encryption key types
-   
+
    Download from: https://github.com/microsoft/Kerberos-Crypto
-   
+
    More info: https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4
 
 11. Recommended Monitoring Schedule
    $([string]([char]0x2500) * 60)
-   
+
    $([char]0x2022) Weekly: Check for RC4/DES events (automated alert)
    $([char]0x2022) Monthly: Review this assessment
    $([char]0x2022) Quarterly: Full security audit including Kerberos encryption

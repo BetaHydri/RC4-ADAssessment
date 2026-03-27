@@ -1,4 +1,4 @@
-function Get-ChangeIndicator {
+﻿function Get-ChangeIndicator {
     <#
     .SYNOPSIS
         Returns a directional change indicator comparing two integer values.
@@ -20,7 +20,7 @@ function Get-ChangeIndicator {
         # Displays a green down-arrow indicating improvement (fewer issues)
     #>
     param([int]$Old, [int]$New)
-    
+
     if ($New -lt $Old) {
         return @{Symbol = "$([char]0x2193)"; Color = "Green"; Status = "Improved" }  # ↓
     }

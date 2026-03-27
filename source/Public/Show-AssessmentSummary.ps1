@@ -21,16 +21,16 @@ function Show-AssessmentSummary {
         [Parameter(Mandatory = $true)]
         [hashtable]$Results
     )
-    
+
     Write-Section "Assessment Summary Tables"
-    
+
     # 1. Domain Controller Summary Table
     Write-Host "`n  DOMAIN CONTROLLER SUMMARY" -ForegroundColor Cyan
     Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
-    
+
     if ($Results.DomainControllers.Details.Count -gt 0) {
         $dcTable = @()
-        
+
         foreach ($dc in $Results.DomainControllers.Details) {
             # Determine status color
             $status = "OK"
@@ -40,16 +40,16 @@ function Show-AssessmentSummary {
             elseif ($dc.EncryptionTypes -match "RC4") {
                 $status = "WARNING"
             }
-            
+
             # Check GPO status
-            $gpoStatus = if ($Results.DomainControllers.GPOConfigured) { 
+            $gpoStatus = if ($Results.DomainControllers.GPOConfigured) {
                 $gpoEnc = $Results.DomainControllers.GPOEncryptionTypes
                 if ($gpoEnc -band 0x3) { "CRITICAL" }      # DES enabled
                 elseif ($gpoEnc -band 0x4) { "WARNING" }    # RC4 enabled
                 else { "OK" }
             }
             else { "Not Configured" }
-            
+
             $dcTable += [PSCustomObject]@{
                 'Domain Controller' = $dc.Name
                 'Status'            = $status
@@ -59,7 +59,7 @@ function Show-AssessmentSummary {
                 'Operating System'  = $dc.OperatingSystem
             }
         }
-        
+
         # Display table with color coding
         $dcTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
             if ($_ -match "CRITICAL") {
@@ -78,7 +78,7 @@ function Show-AssessmentSummary {
                 Write-Host "  $_"
             }
         }
-        
+
         # Summary statistics
         Write-Host "`n  Summary:" -ForegroundColor Cyan
         Write-Host "    Total DCs: $($Results.DomainControllers.TotalDCs)" -ForegroundColor White
@@ -91,7 +91,7 @@ function Show-AssessmentSummary {
         if ($Results.DomainControllers.AESConfigured -gt 0) {
             Write-Host "    AES Configured: $($Results.DomainControllers.AESConfigured)" -ForegroundColor Green
         }
-        
+
         # Display AzureADKerberos separately if present
         if ($Results.DomainControllers.AzureADKerberos) {
             $aadK = $Results.DomainControllers.AzureADKerberos
@@ -117,19 +117,19 @@ function Show-AssessmentSummary {
     else {
         Write-Host "  No Domain Controller data available" -ForegroundColor Yellow
     }
-    
+
     # 2. Event Log Summary Table
     if ($Results.EventLogs) {
         Write-Host "`n`n  EVENT LOG ANALYSIS SUMMARY" -ForegroundColor Cyan
         Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
-        
+
         # Debug: Check what properties we have
         Write-Verbose "EventLogs properties: $($Results.EventLogs.Keys -join ', ')"
         Write-Verbose "QueriedDCs count: $($Results.EventLogs.QueriedDCs.Count)"
         Write-Verbose "TotalEvents: $($Results.EventLogs.EventsAnalyzed)"
-        
+
         $eventTable = @()
-        
+
         # Add successfully queried DCs
         if ($Results.EventLogs.QueriedDCs -and $Results.EventLogs.QueriedDCs.Count -gt 0) {
             foreach ($dcName in $Results.EventLogs.QueriedDCs) {
@@ -144,7 +144,7 @@ function Show-AssessmentSummary {
                 }
             }
         }
-        
+
         # Add failed DCs
         if ($Results.EventLogs.FailedDCs -and $Results.EventLogs.FailedDCs.Count -gt 0) {
             foreach ($failed in $Results.EventLogs.FailedDCs) {
@@ -158,7 +158,7 @@ function Show-AssessmentSummary {
                 }
             }
         }
-        
+
         # Display table with color coding
         if ($eventTable.Count -gt 0) {
             $eventTable | Format-Table -AutoSize -Wrap | Out-String -Stream | ForEach-Object {
@@ -175,7 +175,7 @@ function Show-AssessmentSummary {
                     Write-Host "  $_"
                 }
             }
-            
+
             # Summary statistics
             Write-Host "`n  Summary:" -ForegroundColor Cyan
             Write-Host "    Total Events Analyzed: $($Results.EventLogs.EventsAnalyzed)" -ForegroundColor White
@@ -208,14 +208,14 @@ function Show-AssessmentSummary {
         Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
         Write-Host "  Event log analysis was not performed (use -AnalyzeEventLogs parameter)" -ForegroundColor Gray
     }
-    
+
     # 3. Trust Summary Table (if trusts exist)
     if ($Results.Trusts -and $Results.Trusts.Details.Count -gt 0) {
         Write-Host "`n`n  TRUST ENCRYPTION SUMMARY" -ForegroundColor Cyan
         Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
-        
+
         $trustTable = @()
-        
+
         foreach ($trust in $Results.Trusts.Details) {
             # Determine risk level
             $risk = "LOW"
@@ -225,7 +225,7 @@ function Show-AssessmentSummary {
             elseif ($trust.EncryptionTypes -match "RC4") {
                 $risk = "HIGH"
             }
-            
+
             $trustTable += [PSCustomObject]@{
                 'Trust Name'       = $trust.Name
                 'Direction'        = $trust.Direction
@@ -233,7 +233,7 @@ function Show-AssessmentSummary {
                 'Risk Level'       = $risk
             }
         }
-        
+
         # Display table with color coding
         $trustTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
             if ($_ -match "CRITICAL") {
@@ -252,7 +252,7 @@ function Show-AssessmentSummary {
                 Write-Host "  $_"
             }
         }
-        
+
         # Summary statistics
         Write-Host "`n  Summary:" -ForegroundColor Cyan
         Write-Host "    Total Trusts: $($Results.Trusts.TotalTrusts)" -ForegroundColor White
@@ -266,12 +266,12 @@ function Show-AssessmentSummary {
             Write-Host "    AES Secure: $($Results.Trusts.AESSecure) trust(s)" -ForegroundColor Green
         }
     }
-    
+
     # 4. KRBTGT & Account Summary Table
     if ($Results.Accounts) {
         Write-Host "`n`n  KRBTGT & ACCOUNT ENCRYPTION SUMMARY" -ForegroundColor Cyan
         Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
-        
+
         # KRBTGT row
         $krbtgtTable = @()
         $krbtgtStatus = $Results.Accounts.KRBTGT.Status
@@ -283,7 +283,7 @@ function Show-AssessmentSummary {
             'Last Logon'       = 'N/A'
             'Encryption Types' = if ($Results.Accounts.KRBTGT.EncryptionTypes) { $Results.Accounts.KRBTGT.EncryptionTypes } else { "Not Set" }
         }
-        
+
         # DES flag accounts
         foreach ($acct in $Results.Accounts.DESFlagAccounts) {
             $krbtgtTable += [PSCustomObject]@{
@@ -295,7 +295,7 @@ function Show-AssessmentSummary {
                 'Encryption Types' = $acct.EncryptionTypes
             }
         }
-        
+
         # RC4/DES-only service accounts
         foreach ($svc in $Results.Accounts.RC4OnlyServiceAccounts) {
             $krbtgtTable += [PSCustomObject]@{
@@ -307,7 +307,7 @@ function Show-AssessmentSummary {
                 'Encryption Types' = $svc.EncryptionTypes
             }
         }
-        
+
         # Stale password service accounts (not already in RC4-only list)
         foreach ($svc in $Results.Accounts.StaleServiceAccounts) {
             if ($svc.Name -notin $Results.Accounts.RC4OnlyServiceAccounts.Name) {
@@ -321,7 +321,7 @@ function Show-AssessmentSummary {
                 }
             }
         }
-        
+
         # RC4-only MSAs
         foreach ($msa in $Results.Accounts.RC4OnlyMSAs) {
             $krbtgtTable += [PSCustomObject]@{
@@ -333,7 +333,7 @@ function Show-AssessmentSummary {
                 'Encryption Types' = $msa.EncryptionTypes
             }
         }
-        
+
         # DES-enabled accounts
         foreach ($des in $Results.Accounts.DESEnabledAccounts) {
             $krbtgtTable += [PSCustomObject]@{
@@ -345,7 +345,7 @@ function Show-AssessmentSummary {
                 'Encryption Types' = $des.EncryptionTypes
             }
         }
-        
+
         # RC4 exception accounts (RC4 + AES)
         foreach ($exc in $Results.Accounts.RC4ExceptionAccounts) {
             $excType = if ($exc.AccountType) { "RC4 Exception $($exc.AccountType)" } else { 'RC4 Exception' }
@@ -358,7 +358,7 @@ function Show-AssessmentSummary {
                 'Encryption Types' = $exc.EncryptionTypes
             }
         }
-        
+
         # Missing AES key accounts
         foreach ($acct in $Results.Accounts.MissingAESKeyAccounts) {
             $krbtgtTable += [PSCustomObject]@{
@@ -370,7 +370,7 @@ function Show-AssessmentSummary {
                 'Encryption Types' = 'Not Set'
             }
         }
-        
+
         # Display table with color coding
         $krbtgtTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
             if ($_ -match "CRITICAL") {
@@ -389,7 +389,7 @@ function Show-AssessmentSummary {
                 Write-Host "  $_"
             }
         }
-        
+
         # Summary statistics
         Write-Host "`n  Summary:" -ForegroundColor Cyan
         Write-Host "    KRBTGT Status: $($Results.Accounts.KRBTGT.Status)" -ForegroundColor $(
@@ -417,6 +417,6 @@ function Show-AssessmentSummary {
             Write-Host "    Missing AES Key Accounts: $($Results.Accounts.TotalMissingAES)" -ForegroundColor Yellow
         }
     }
-    
+
     Write-Host ""
 }

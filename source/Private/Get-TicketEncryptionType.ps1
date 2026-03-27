@@ -16,7 +16,7 @@ function Get-TicketEncryptionType {
         # Returns "RC4-HMAC"
     #>
     param([int]$EncryptionType)
-    
+
     # Event log encryption type values
     switch ($EncryptionType) {
         0x1 { return "DES-CBC-CRC" }

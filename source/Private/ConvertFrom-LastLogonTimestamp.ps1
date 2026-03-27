@@ -18,14 +18,14 @@ function ConvertFrom-LastLogonTimestamp {
         $result.LastLogonDaysAgo # Returns number of days since last logon
     #>
     param($RawValue)
-    
+
     $result = @{ LastLogon = $null; LastLogonDaysAgo = -1 }
     if ($RawValue) {
         try {
             $result.LastLogon = [DateTime]::FromFileTime($RawValue)
             $result.LastLogonDaysAgo = ((Get-Date) - $result.LastLogon).Days
         }
-        catch { }
+        catch { Write-Verbose "Could not convert FileTime value: $($_.Exception.Message)" }
     }
     return $result
 }

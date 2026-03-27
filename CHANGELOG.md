@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## v2.9.0 (March 2026) — Current
+## [Unreleased]
+
+### Changed
+
+- Migrated build pipeline to Sampler framework with ModuleBuilder, InvokeBuild, and Pester 5
+- Restructured project layout to Sampler conventions (source/Public, source/Private)
+- Added QA tests for module quality, help content, and changelog validation
+
+## [2.9.0] - 2026-03-27
 
 - **AES-configured but RC4-used correlation** (major feature): New `PasswordResetNeeded` detection cross-references event log RC4 accounts (Event IDs 4768/4769) with AD account `msDS-SupportedEncryptionTypes` to identify accounts that have AES configured but are still issuing RC4 tickets because their password was never reset to generate AES keys
   - Accounts using RC4 tickets that are NOT in the RC4-only/DES-only/DES-flag lists are looked up in AD
