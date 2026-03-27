@@ -809,7 +809,8 @@ try {
         # Export guidance text file (when both -ExportResults and -IncludeGuidance are used)
         if ($IncludeGuidance) {
             $guidancePath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Guidance_${domain}_${timestamp}.txt"
-            $guidanceText = Get-GuidancePlainText -Domain $results.Domain -AssessmentDate $results.AssessmentDate.ToString('yyyy-MM-dd HH:mm:ss') -Version $script:Version
+            $assessmentDateStr = if ($results.AssessmentDate) { $results.AssessmentDate.ToString('yyyy-MM-dd HH:mm:ss') } else { (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }
+            $guidanceText = Get-GuidancePlainText -Domain $results.Domain -AssessmentDate $assessmentDateStr -Version $script:Version
             $guidanceText | Out-File -FilePath $guidancePath -Encoding UTF8
             Write-Finding -Status "OK" -Message "Guidance export: $guidancePath"
         }
@@ -820,7 +821,8 @@ try {
 
     Write-Host "`n$([System.Char]::ConvertFromUtf32(0x1F4CA)) Summary:" -ForegroundColor Cyan
     Write-Host "  $([char]0x2022) Domain: $($results.Domain)" -ForegroundColor White
-    Write-Host "  $([char]0x2022) Assessment Date: $($results.AssessmentDate.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor White
+    $displayDate = if ($results.AssessmentDate) { $results.AssessmentDate.ToString('yyyy-MM-dd HH:mm:ss') } else { (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }
+    Write-Host "  $([char]0x2022) Assessment Date: $displayDate" -ForegroundColor White
     Write-Host "  $([char]0x2022) Overall Status: " -NoNewline -ForegroundColor White
 
     $statusColor = switch ($results.OverallStatus) {

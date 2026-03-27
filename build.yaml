@@ -25,6 +25,7 @@ BuildWorkflow:
 
 CopyPaths: []
 Encoding: UTF8
+prefix: prefix.ps1
 VersionedOutputDirectory: true
 BuiltModuleSubdirectory: builtModule
 
