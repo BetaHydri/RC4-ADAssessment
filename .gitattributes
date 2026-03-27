@@ -1,0 +1,19 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# PowerShell files
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+# Markdown
+*.md text eol=crlf
+
+# YAML
+*.yml text eol=crlf
+*.yaml text eol=crlf
+
+# Images
+*.png binary
+*.jpg binary
+*.gif binary
