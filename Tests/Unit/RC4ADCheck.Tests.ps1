@@ -12,9 +12,6 @@
 #>
 
 BeforeAll {
-    $projectRoot = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-    $sourceRoot = Join-Path -Path $projectRoot -ChildPath 'source'
-
     # Set script-level variables that functions depend on
     $script:Version = "3.0.0-preview"
     $script:AssessmentTimestamp = Get-Date
@@ -76,15 +73,10 @@ BeforeAll {
             $true
         }
     }
-
-    # Dot-source all functions from the source directory
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Private') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Public') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
 }
 
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-EncryptionTypeString' {
     It 'Returns "Not Set (Default)" for null input' {
         Get-EncryptionTypeString -Value $null | Should -Be "Not Set (Default)"
@@ -130,7 +122,9 @@ Describe 'Get-EncryptionTypeString' {
         Get-EncryptionTypeString -Value 31 | Should -Be "DES-CBC-CRC, DES-CBC-MD5, RC4-HMAC, AES128-HMAC, AES256-HMAC"
     }
 }
+}
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-TicketEncryptionType' {
     It 'Returns "DES-CBC-CRC" for 0x1' {
         Get-TicketEncryptionType -EncryptionType 0x1 | Should -Be "DES-CBC-CRC"
@@ -160,6 +154,7 @@ Describe 'Get-TicketEncryptionType' {
         Get-TicketEncryptionType -EncryptionType 0xFF | Should -Be "Unknown (0xFF)"
     }
 }
+}
 
 # ============================================================
 # Get-DomainControllerEncryption
@@ -168,7 +163,7 @@ Describe 'Get-TicketEncryptionType' {
 Describe 'Get-DomainControllerEncryption' {
     BeforeEach {
         # Standard domain info mock
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
@@ -176,18 +171,18 @@ Describe 'Get-DomainControllerEncryption' {
         }
 
         # Default: suppress Write-Host output during tests
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When all DCs have AES configured' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 @(
                     [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
                     [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
@@ -196,7 +191,7 @@ Describe 'Get-DomainControllerEncryption' {
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Returns correct total DC count' {
@@ -225,13 +220,13 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When a DC has RC4 only' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 @(
                     [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
                     [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
@@ -240,7 +235,7 @@ Describe 'Get-DomainControllerEncryption' {
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Counts RC4 configured DCs' {
@@ -257,10 +252,10 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When a DC has DES only' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC-LEGACY'; HostName = 'dc-legacy.contoso.com'; ComputerObjectDN = 'CN=DC-LEGACY,OU=Domain Controllers,DC=contoso,DC=com' }
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC-LEGACY*' { [PSCustomObject]@{ Name = 'DC-LEGACY'; 'msDS-SupportedEncryptionTypes' = 3; OperatingSystem = 'Windows Server 2008' } }
@@ -268,7 +263,7 @@ Describe 'Get-DomainControllerEncryption' {
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Counts DES configured DCs' {
@@ -284,10 +279,10 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When a DC has AES + RC4 + DES' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC-MIXED'; HostName = 'dc-mixed.contoso.com'; ComputerObjectDN = 'CN=DC-MIXED,OU=Domain Controllers,DC=contoso,DC=com' }
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC-MIXED*' { [PSCustomObject]@{ Name = 'DC-MIXED'; 'msDS-SupportedEncryptionTypes' = 31; OperatingSystem = 'Windows Server 2019' } }
@@ -295,7 +290,7 @@ Describe 'Get-DomainControllerEncryption' {
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Counts AES, RC4, and DES' {
@@ -313,13 +308,13 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When DCs have no encryption type set (inherit from GPO)' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 @(
                     [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
                     [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = 'Windows Server 2022' } }
@@ -328,7 +323,7 @@ Describe 'Get-DomainControllerEncryption' {
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Counts both as NotConfigured' {
@@ -339,10 +334,10 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When GPO is configured with AES' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' }
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = 'Windows Server 2022' } }
@@ -350,7 +345,7 @@ Describe 'Get-DomainControllerEncryption' {
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance {
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance {
                 [PSCustomObject]@{
                     GpoLinks = @(
                         [PSCustomObject]@{
@@ -361,7 +356,7 @@ Describe 'Get-DomainControllerEncryption' {
                     )
                 }
             }
-            Mock Get-GPOReport {
+            Mock -ModuleName 'RC4ADCheck' Get-GPOReport {
                 '<GPO><Computer><ExtensionData><Extension><SecurityOptions><KeyName name="Configure encryption types allowed for Kerberos"><decimal value="24"/></KeyName></SecurityOptions></Extension></ExtensionData></Computer></GPO>'
             }
         }
@@ -379,10 +374,10 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When GroupPolicy module is broken (SYSVOL fallback via gPLink AD attribute)' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' }
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
@@ -391,7 +386,7 @@ Describe 'Get-DomainControllerEncryption' {
                 }
             }
             # Simulate broken GroupPolicy module: GpoLinks returns strings instead of objects
-            Mock Get-GPInheritance {
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance {
                 [PSCustomObject]@{
                     GpoLinks = @(
                         'Microsoft.GroupPolicy.GpoLink',
@@ -400,7 +395,7 @@ Describe 'Get-DomainControllerEncryption' {
                 }
             }
             # AD-native fallback: gPLink attribute on DC OU
-            Mock Get-ADObject {
+            Mock -ModuleName 'RC4ADCheck' Get-ADObject {
                 param($Identity, $Filter)
                 if ("$Identity" -eq 'OU=Domain Controllers,DC=contoso,DC=com') {
                     [PSCustomObject]@{
@@ -412,8 +407,8 @@ Describe 'Get-DomainControllerEncryption' {
                     [PSCustomObject]@{ Name = '{12345678-1234-1234-1234-123456789012}'; DisplayName = 'Kerberos Encryption Policy' }
                 }
             }
-            Mock Test-Path { $true } -ParameterFilter { $LiteralPath -like '*GptTmpl.inf' }
-            Mock Get-Content {
+            Mock -ModuleName 'RC4ADCheck' Test-Path { $true } -ParameterFilter { $LiteralPath -like '*GptTmpl.inf' }
+            Mock -ModuleName 'RC4ADCheck' Get-Content {
                 @"
 [Unicode]
 Unicode=yes
@@ -439,24 +434,24 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
 
     Context 'With -Server parameter' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 if ("$Identity" -eq 'AzureADKerberos') { throw 'not found' }
                 $null
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Passes Server parameter to Get-ADDomain' {
             Get-DomainControllerEncryption -ServerParams @{ Server = 'dc01.contoso.com' }
-            Should -Invoke Get-ADDomain -Times 1 -ParameterFilter { $Server -eq 'dc01.contoso.com' }
+            Should -Invoke -ModuleName 'RC4ADCheck' Get-ADDomain -Times 1 -ParameterFilter { $Server -eq 'dc01.contoso.com' }
         }
     }
 
     Context 'When Get-ADDomain fails with Server parameter' {
         BeforeEach {
-            Mock Get-ADDomain { throw "Unable to contact the server" }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomain { throw "Unable to contact the server" }
         }
 
         It 'Returns assessment with zero counts (error handled)' {
@@ -468,14 +463,14 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
     Context 'When AzureADKerberos object is present alongside real DCs' {
         BeforeEach {
             # Get-ADDomainController only returns real DCs (no AzureADKerberos)
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 @(
                     [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
                     [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
             }
             # Get-ADComputer is called per-DC for properties, and for AzureADKerberos detection
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
@@ -484,7 +479,7 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Excludes AzureADKerberos from TotalDCs count' {
@@ -520,15 +515,15 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
     Context 'When AzureADKerberos is the only object in DC OU (no real DCs from DC Locator)' {
         BeforeEach {
             # Get-ADDomainController returns no results (AzureADKerberos is not a real DC)
-            Mock Get-ADDomainController { @() }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 if ("$Identity" -eq 'AzureADKerberos') {
                     [PSCustomObject]@{ Name = 'AzureADKerberos'; 'msDS-SupportedEncryptionTypes' = $null; OperatingSystem = $null }
                 }
                 else { $null }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'Reports zero DCs' {
@@ -550,10 +545,10 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
 
     Context 'When no AzureADKerberos object exists' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' }
             }
-            Mock Get-ADComputer {
+            Mock -ModuleName 'RC4ADCheck' Get-ADComputer {
                 param($Identity)
                 switch -Wildcard ($Identity) {
                     '*DC01*' { [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' } }
@@ -561,7 +556,7 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
                     default { $null }
                 }
             }
-            Mock Get-GPInheritance { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
         }
 
         It 'AzureADKerberos property remains null' {
@@ -582,18 +577,18 @@ MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Param
 
 Describe 'Get-TrustEncryptionAssessment' {
     BeforeEach {
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
             }
         }
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When no trusts exist' {
         BeforeEach {
-            Mock Get-ADTrust { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADTrust { $null }
         }
 
         It 'Returns zero trust count' {
@@ -609,7 +604,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'Post-November 2022: Trust with unset encryption (AES default)' {
         BeforeEach {
-            Mock Get-ADTrust {
+            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
                 [PSCustomObject]@{
                     Name                            = 'partner.com'
                     TrustDirection                  = 'Bidirectional'
@@ -637,7 +632,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'Trust with explicit AES (0x18)' {
         BeforeEach {
-            Mock Get-ADTrust {
+            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
                 [PSCustomObject]@{
                     Name                            = 'child.contoso.com'
                     TrustDirection                  = 'Bidirectional'
@@ -661,7 +656,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'Trust with AES + RC4 (0x1C)' {
         BeforeEach {
-            Mock Get-ADTrust {
+            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
                 [PSCustomObject]@{
                     Name                            = 'legacy.com'
                     TrustDirection                  = 'Inbound'
@@ -685,7 +680,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'Trust with RC4 only (0x4)' {
         BeforeEach {
-            Mock Get-ADTrust {
+            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
                 [PSCustomObject]@{
                     Name                            = 'old-partner.com'
                     TrustDirection                  = 'Outbound'
@@ -708,7 +703,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'Trust with DES only (0x3)' {
         BeforeEach {
-            Mock Get-ADTrust {
+            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
                 [PSCustomObject]@{
                     Name                            = 'ancient.com'
                     TrustDirection                  = 'Bidirectional'
@@ -731,7 +726,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'Multiple trusts with mixed encryption' {
         BeforeEach {
-            Mock Get-ADTrust {
+            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
                 @(
                     [PSCustomObject]@{
                         Name                            = 'aes-trust.com'
@@ -775,18 +770,18 @@ Describe 'Get-TrustEncryptionAssessment' {
 
 Describe 'Get-AccountEncryptionAssessment' {
     BeforeEach {
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
             }
         }
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'KRBTGT with healthy password age' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -798,7 +793,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Reports KRBTGT password age correctly' {
@@ -820,7 +815,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'KRBTGT with WARNING password age (181-365 days)' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -832,7 +827,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Sets KRBTGT status to WARNING' {
@@ -843,7 +838,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'KRBTGT with CRITICAL password age (>365 days)' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -855,7 +850,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Sets KRBTGT status to CRITICAL' {
@@ -871,7 +866,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'KRBTGT with RC4-only encryption' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -883,7 +878,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Reports RC4-HMAC encryption type' {
@@ -895,7 +890,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'Accounts with USE_DES_KEY_ONLY flag' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -929,7 +924,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Detects DES flag accounts' {
@@ -953,7 +948,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'Service accounts with RC4-only encryption' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -987,7 +982,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Detects RC4-only service accounts' {
@@ -1009,7 +1004,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'Stale service accounts with RC4' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -1032,7 +1027,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Detects stale service accounts with RC4 enabled' {
@@ -1053,7 +1048,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'Managed Service Accounts with RC4-only' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -1065,7 +1060,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount {
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount {
                 @(
                     [PSCustomObject]@{
                         SamAccountName                  = 'gmsa_app$'
@@ -1107,7 +1102,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'When Get-ADServiceAccount is unavailable' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -1119,7 +1114,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { throw "The term 'Get-ADServiceAccount' is not recognized" }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { throw "The term 'Get-ADServiceAccount' is not recognized" }
         }
 
         It 'Handles missing Get-ADServiceAccount gracefully' {
@@ -1130,7 +1125,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'DES-enabled accounts detection (DES bits alongside AES)' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -1162,7 +1157,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                     }
                 )
             }
-            Mock Get-ADServiceAccount {
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount {
                 @(
                     [PSCustomObject]@{
                         SamAccountName                  = 'gmsa_des$'
@@ -1199,7 +1194,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
         It 'Does not flag DES-only accounts (no AES) as DES-enabled' {
             # DES-only accounts are caught by the RC4OnlyServiceAccounts check instead
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -1221,7 +1216,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                     }
                 )
             }
-            Mock Get-ADServiceAccount { return $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { return $null }
             $result = Get-AccountEncryptionAssessment -ServerParams @{}
             $result.TotalDESEnabled | Should -Be 0
         }
@@ -1229,7 +1224,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'Clean environment (no issues)' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -1241,7 +1236,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Returns all-clear assessment' {
@@ -1257,7 +1252,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'RC4 exception accounts detection (RC4 + AES = 0x1C)' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -1298,7 +1293,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                     }
                 )
             }
-            Mock Get-ADServiceAccount {
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount {
                 @(
                     [PSCustomObject]@{
                         SamAccountName                  = 'gmsa_exc$'
@@ -1352,18 +1347,18 @@ Describe 'Get-AccountEncryptionAssessment' {
 
 Describe 'Get-EventLogEncryptionAnalysis' {
     BeforeEach {
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
             }
         }
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment' {
@@ -1383,10 +1378,10 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When DC is unreachable' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Test-Connection { $false }
+            Mock -ModuleName 'RC4ADCheck' Test-Connection { $false }
         }
 
         It 'Adds DC to FailedDCs list' {
@@ -1403,11 +1398,11 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When events are retrieved successfully with AES tickets' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Test-Connection { $true }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Test-Connection { $true }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 # Invoke-Command now returns pre-parsed PSCustomObjects
                 # (event XML is parsed on the remote side to avoid deserialization issues)
                 @(
@@ -1444,11 +1439,11 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When RC4 and DES tickets are detected' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Test-Connection { $true }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Test-Connection { $true }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 # Invoke-Command now returns pre-parsed PSCustomObjects
                 @(
                     # RC4 ticket
@@ -1493,12 +1488,12 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When WinRM fails and RPC fallback succeeds' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Test-Connection { $true }
-            Mock Invoke-Command { throw "WinRM connection failed" }
-            Mock Get-WinEvent {
+            Mock -ModuleName 'RC4ADCheck' Test-Connection { $true }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw "WinRM connection failed" }
+            Mock -ModuleName 'RC4ADCheck' Get-WinEvent {
                 $evt = New-Object PSObject
                 $evt | Add-Member -MemberType ScriptMethod -Name ToXml -Value {
                     '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="TargetUserName">user1</Data><Data Name="TicketEncryptionType">0x12</Data></EventData></Event>'
@@ -1517,12 +1512,12 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When both WinRM and RPC fail' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Test-Connection { $true }
-            Mock Invoke-Command { throw "WinRM connection failed" }
-            Mock Get-WinEvent { throw "RPC server is unavailable" }
+            Mock -ModuleName 'RC4ADCheck' Test-Connection { $true }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw "WinRM connection failed" }
+            Mock -ModuleName 'RC4ADCheck' Get-WinEvent { throw "RPC server is unavailable" }
         }
 
         It 'Adds DC to FailedDCs with error' {
@@ -1534,7 +1529,7 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'TimeRange parameter' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
         }
 
         It 'Uses provided Hours value' {
@@ -1555,7 +1550,7 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
 Describe 'Show-AssessmentSummary' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'With complete results' {
@@ -1711,9 +1706,10 @@ Describe 'Get-GuidancePlainText' {
 # Write-Finding (display helper)
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Write-Finding' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Handles OK status without error' {
@@ -1734,22 +1730,24 @@ Describe 'Write-Finding' {
 
     It 'Displays detail when provided' {
         Write-Finding -Status 'OK' -Message 'Test' -Detail 'Extra detail'
-        Should -Invoke Write-Host -Times 2  # One for message, one for detail
+        Should -Invoke -ModuleName 'RC4ADCheck' Write-Host -Times 2  # One for message, one for detail
     }
 
     It 'Does not display detail line when not provided' {
         Write-Finding -Status 'OK' -Message 'Test'
-        Should -Invoke Write-Host -Times 1
+        Should -Invoke -ModuleName 'RC4ADCheck' Write-Host -Times 1
     }
+}
 }
 
 # ============================================================
 # Write-Header and Write-Section
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Write-Header' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Displays header without error' {
@@ -1758,13 +1756,15 @@ Describe 'Write-Header' {
 
     It 'Calls Write-Host 3 times (top line, title, bottom line)' {
         Write-Header -Title 'Test Header'
-        Should -Invoke Write-Host -Times 3
+        Should -Invoke -ModuleName 'RC4ADCheck' Write-Host -Times 3
     }
 }
+}
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Write-Section' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Displays section without error' {
@@ -1773,8 +1773,9 @@ Describe 'Write-Section' {
 
     It 'Calls Write-Host 2 times (title, separator)' {
         Write-Section -Title 'Test Section'
-        Should -Invoke Write-Host -Times 2
+        Should -Invoke -ModuleName 'RC4ADCheck' Write-Host -Times 2
     }
+}
 }
 
 # ============================================================
@@ -1906,18 +1907,18 @@ Describe 'Overall Assessment Scoring Logic' {
 
 Describe 'Get-KdcRegistryAssessment' {
     BeforeEach {
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
             }
         }
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment' {
@@ -1930,10 +1931,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When RC4DefaultDisablementPhase is set to 1' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = $null
                     RC4DefaultDisablementPhase     = 1
@@ -1956,10 +1957,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When RC4DefaultDisablementPhase is set to 0' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = $null
                     RC4DefaultDisablementPhase     = 0
@@ -1975,10 +1976,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When DefaultDomainSupportedEncTypes is AES-only' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = 24  # AES128 + AES256
                     RC4DefaultDisablementPhase     = $null
@@ -1997,10 +1998,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When DefaultDomainSupportedEncTypes includes RC4 and AES' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = 28  # RC4 + AES128 + AES256
                     RC4DefaultDisablementPhase     = 1
@@ -2017,10 +2018,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When DefaultDomainSupportedEncTypes has no AES' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = 4  # RC4 only
                     RC4DefaultDisablementPhase     = $null
@@ -2037,10 +2038,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When WinRM fails on a DC' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command { throw "WinRM connection failed" }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw "WinRM connection failed" }
         }
 
         It 'Adds DC to FailedDCs list' {
@@ -2052,10 +2053,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When neither registry key is set' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = $null
                     RC4DefaultDisablementPhase     = $null
@@ -2072,10 +2073,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When RC4DefaultDisablementPhase is set to 2 (Enforcement)' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = $null
                     RC4DefaultDisablementPhase     = 2
@@ -2094,10 +2095,10 @@ Describe 'Get-KdcRegistryAssessment' {
     Context 'When AzureADKerberos object is present alongside real DCs' {
         BeforeEach {
             # Get-ADDomainController only returns real DCs
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     DefaultDomainSupportedEncTypes = $null
                     RC4DefaultDisablementPhase     = 1
@@ -2114,7 +2115,7 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When no DCs found (AzureADKerberos only exists in OU but not as real DC)' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment with no queried DCs' {
@@ -2132,18 +2133,18 @@ Describe 'Get-KdcRegistryAssessment' {
 
 Describe 'Get-KdcSvcEventAssessment' {
     BeforeEach {
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
             }
         }
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment' {
@@ -2155,10 +2156,10 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When no KDCSVC events are found' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command { @() }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { @() }
         }
 
         It 'Returns OK status with no events' {
@@ -2171,10 +2172,10 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When KDCSVC events are found' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @(
                     [PSCustomObject]@{ Id = 201; TimeCreated = (Get-Date); Message = 'RC4 service ticket requested' },
                     [PSCustomObject]@{ Id = 205; TimeCreated = (Get-Date); Message = 'Insecure DefaultDomainSupportedEncTypes' }
@@ -2199,10 +2200,10 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When WinRM fails with No events found' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command { throw 'No events were found that match the specified selection criteria.' }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw 'No events were found that match the specified selection criteria.' }
         }
 
         It 'Returns OK when no events match' {
@@ -2215,11 +2216,11 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When WinRM fails completely' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command { throw 'WinRM connection failed' }
-            Mock Get-WinEvent { throw 'RPC server unavailable' }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw 'WinRM connection failed' }
+            Mock -ModuleName 'RC4ADCheck' Get-WinEvent { throw 'RPC server unavailable' }
         }
 
         It 'Adds DC to FailedDCs list' {
@@ -2232,10 +2233,10 @@ Describe 'Get-KdcSvcEventAssessment' {
     Context 'When AzureADKerberos object is present alongside real DCs' {
         BeforeEach {
             # Get-ADDomainController only returns real DCs
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command { @() }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { @() }
         }
 
         It 'Only queries real DCs (AzureADKerberos automatically excluded)' {
@@ -2247,7 +2248,7 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When no DCs found (AzureADKerberos only in OU)' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
         }
 
         It 'Returns empty assessment with no queried DCs' {
@@ -2264,18 +2265,18 @@ Describe 'Get-KdcSvcEventAssessment' {
 
 Describe 'Get-AuditPolicyCheck' {
     BeforeEach {
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
             }
         }
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When no DC is found' {
         BeforeEach {
-            Mock Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
         }
 
         It 'Returns unknown status' {
@@ -2286,10 +2287,10 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When both audit policies are enabled' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     AuthService = "Kerberos Authentication Service  Success and Failure"
                     TicketOps   = "Kerberos Service Ticket Operations  Success and Failure"
@@ -2312,10 +2313,10 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When no audit policies are enabled' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     AuthService = "Kerberos Authentication Service  No Auditing"
                     TicketOps   = "Kerberos Service Ticket Operations  No Auditing"
@@ -2333,10 +2334,10 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When only one audit policy is enabled' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command {
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
                 @{
                     AuthService = "Kerberos Authentication Service  Success"
                     TicketOps   = "Kerberos Service Ticket Operations  No Auditing"
@@ -2354,10 +2355,10 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When WinRM fails' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
             }
-            Mock Invoke-Command { throw "WinRM connection failed" }
+            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw "WinRM connection failed" }
         }
 
         It 'Reports UNKNOWN status' {
@@ -2373,19 +2374,19 @@ Describe 'Get-AuditPolicyCheck' {
 
 Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
     BeforeEach {
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
                 DomainMode        = 'Windows2016Domain'
             }
         }
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When accounts with very old passwords exist' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -2421,7 +2422,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Detects accounts missing AES keys' {
@@ -2458,7 +2459,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
 
     Context 'When no old accounts exist' {
         BeforeEach {
-            Mock Get-ADUser {
+            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -2470,7 +2471,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
                 }
                 return $null
             }
-            Mock Get-ADServiceAccount { $null }
+            Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
         }
 
         It 'Returns zero missing AES accounts' {

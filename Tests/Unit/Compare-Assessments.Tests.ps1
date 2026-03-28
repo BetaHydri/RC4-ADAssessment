@@ -10,21 +10,10 @@
     Requires: Pester 5.x
 #>
 
-BeforeAll {
-    $projectRoot = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-    $sourceRoot = Join-Path -Path $projectRoot -ChildPath 'source'
-
-    # Dot-source all functions from the source directory
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Private') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Public') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
-}
-
 
 Describe 'Get-ChangeIndicator' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When value improved (decreased)' {
@@ -90,28 +79,32 @@ Describe 'Get-ChangeIndicator' {
 # Write-ComparisonHeader
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Write-ComparisonHeader' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Does not throw' {
         { Write-ComparisonHeader -Title 'Test Comparison' } | Should -Not -Throw
     }
 }
+}
 
 # ============================================================
 # Write-ComparisonSection
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Write-ComparisonSection' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Does not throw' {
         { Write-ComparisonSection -Title 'Section Test' } | Should -Not -Throw
     }
+}
 }
 
 # ============================================================

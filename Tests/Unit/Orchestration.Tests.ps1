@@ -11,9 +11,6 @@
 #>
 
 BeforeAll {
-    $projectRoot = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-    $sourceRoot = Join-Path -Path $projectRoot -ChildPath 'source'
-
     $script:Version = '3.0.0-preview'
     $script:AssessmentTimestamp = Get-Date
 
@@ -51,12 +48,6 @@ BeforeAll {
     if (-not (Get-Command 'Test-Connection' -ErrorAction SilentlyContinue)) {
         function global:Test-Connection { param([string]$ComputerName, [int]$Count, [switch]$Quiet, $ErrorAction) $true }
     }
-
-    # Dot-source all functions
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Private') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Public') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
 }
 
 # ============================================================
@@ -65,18 +56,18 @@ BeforeAll {
 
 Describe 'Invoke-RC4Assessment' {
     BeforeEach {
-        Mock Write-Host {}
-        Mock Write-Warning {}
-        Mock Get-ADDomain {
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Warning {}
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
             [PSCustomObject]@{
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
             }
         }
-        Mock Get-ADDomainController { @() }
-        Mock Get-ADComputer { $null }
-        Mock Get-ADTrust { $null }
-        Mock Get-ADUser {
+        Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
+        Mock -ModuleName 'RC4ADCheck' Get-ADComputer { $null }
+        Mock -ModuleName 'RC4ADCheck' Get-ADTrust { $null }
+        Mock -ModuleName 'RC4ADCheck' Get-ADUser {
             if ("$Identity" -eq 'krbtgt') {
                 return [PSCustomObject]@{
                     SamAccountName                  = 'krbtgt'
@@ -88,8 +79,8 @@ Describe 'Invoke-RC4Assessment' {
             }
             return $null
         }
-        Mock Get-ADServiceAccount { $null }
-        Mock Test-Connection { $true }
+        Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
+        Mock -ModuleName 'RC4ADCheck' Test-Connection { $true }
     }
 
     It 'Returns a results hashtable' {
@@ -254,7 +245,7 @@ Describe 'Invoke-AssessmentComparison' {
     }
 
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Does not throw with valid JSON files' {

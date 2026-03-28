@@ -1,14 +1,20 @@
-<#
-    .SYNOPSIS
-        Unit tests for Write-Section.
-
-    .NOTES
-        Detailed tests exist in the main test files.
-        This file satisfies the per-function test file naming convention.
-#>
-
-Describe 'Write-Section' {
-    It 'Should have a command available' {
-        $true | Should -Be $true
+InModuleScope 'RC4ADCheck' {
+    Describe 'Write-Section' {
+    BeforeEach {
+        Mock Write-Host {}
     }
+
+    It 'Does not throw with a title' {
+        { Write-Section -Title 'Test Section' } | Should -Not -Throw
+    }
+
+    It 'Calls Write-Host 2 times (title + separator)' {
+        Write-Section -Title 'Test'
+        Should -Invoke Write-Host -Times 2 -Exactly
+    }
+
+    It 'Accepts a custom Color parameter' {
+        { Write-Section -Title 'Test' -Color 'Cyan' } | Should -Not -Throw
+    }
+}
 }

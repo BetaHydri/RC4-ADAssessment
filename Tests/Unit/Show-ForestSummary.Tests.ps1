@@ -1,14 +1,46 @@
-<#
-    .SYNOPSIS
-        Unit tests for Show-ForestSummary.
-
-    .NOTES
-        Detailed tests exist in the main test files.
-        This file satisfies the per-function test file naming convention.
-#>
-
 Describe 'Show-ForestSummary' {
-    It 'Should have a command available' {
-        $true | Should -Be $true
+    BeforeEach {
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+    }
+
+    It 'Does not throw with a single domain result' {
+        $forestResults = @{
+            ForestName    = 'contoso.com'
+            TotalDomains  = 1
+            DomainResults = @(
+                @{
+                    Domain = 'contoso.com'
+                    Status = 'OK'
+                    Data   = @{
+                        DomainControllers = @{ Details = @(
+                            @{ Name = 'DC01'; Status = 'OK'; EncryptionTypes = 'AES256-HMAC'; EncryptionValue = 16; OperatingSystem = 'Windows Server 2022' }
+                        )}
+                        EventLogs = $null
+                        Trusts    = @{ Details = @() }
+                    }
+                }
+            )
+        }
+        { Show-ForestSummary -ForestResults $forestResults } | Should -Not -Throw
+    }
+
+    It 'Does not throw with empty domain results' {
+        $forestResults = @{
+            ForestName    = 'contoso.com'
+            TotalDomains  = 0
+            DomainResults = @()
+        }
+        { Show-ForestSummary -ForestResults $forestResults } | Should -Not -Throw
+    }
+
+    It 'Handles a failed domain without throwing' {
+        $forestResults = @{
+            ForestName    = 'contoso.com'
+            TotalDomains  = 1
+            DomainResults = @(
+                @{ Domain = 'failed.contoso.com'; Status = 'Failed'; Data = $null }
+            )
+        }
+        { Show-ForestSummary -ForestResults $forestResults } | Should -Not -Throw
     }
 }

@@ -1,14 +1,14 @@
-<#
-    .SYNOPSIS
-        Unit tests for Show-ManualValidationGuidance.
-
-    .NOTES
-        Detailed tests exist in the main test files.
-        This file satisfies the per-function test file naming convention.
-#>
-
 Describe 'Show-ManualValidationGuidance' {
-    It 'Should have a command available' {
-        $true | Should -Be $true
+    BeforeEach {
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+    }
+
+    It 'Does not throw' {
+        { Show-ManualValidationGuidance } | Should -Not -Throw
+    }
+
+    It 'Calls Write-Host multiple times' {
+        Show-ManualValidationGuidance | Out-Null
+        Should -Invoke -ModuleName 'RC4ADCheck' -CommandName Write-Host -Times 5 -Exactly:$false
     }
 }
