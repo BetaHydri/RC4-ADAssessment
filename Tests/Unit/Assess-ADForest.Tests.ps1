@@ -11,9 +11,6 @@
 #>
 
 BeforeAll {
-    $projectRoot = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-    $sourceRoot = Join-Path -Path $projectRoot -ChildPath 'source'
-
     # Create AD module stubs if not available (with proper parameters for mock binding)
     if (-not (Get-Command 'Get-ADDomain' -ErrorAction SilentlyContinue)) {
         function global:Get-ADDomain {
@@ -50,18 +47,11 @@ BeforeAll {
             param([string]$Identity, [string]$Filter, [string[]]$Properties, [string]$Server, $ErrorAction)
         }
     }
-
-    # Dot-source all functions from the source directory
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Private') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
-    Get-ChildItem -Path (Join-Path $sourceRoot 'Public') -Filter '*.ps1' -ErrorAction SilentlyContinue |
-        ForEach-Object { . $_.FullName }
 }
-
 
 Describe 'Show-ForestSummary' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'With healthy forest results' {
@@ -204,7 +194,7 @@ Describe 'Show-ForestSummary' {
             { Show-ForestSummary -ForestResults $forestResults } | Should -Not -Throw
         }
     }
-}
+} # close InModuleScope for Show-ForestSummary
 
 # ============================================================
 # Forest Status Aggregation Logic
@@ -331,18 +321,18 @@ Describe 'Forest Status Aggregation' {
 
 Describe 'Invoke-DomainAssessment' {
     BeforeEach {
-        Mock Write-Host {}
-        Mock Write-Warning {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Warning {}
     }
 
     Context 'When DC discovery succeeds' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{
                     HostName = 'dc01.contoso.com'
                 }
             }
-            Mock Invoke-RC4Assessment {
+            Mock -ModuleName 'RC4ADCheck' Invoke-RC4Assessment {
                 @{
                     OverallStatus = 'OK'
                     Domain        = 'contoso.com'
@@ -358,8 +348,8 @@ Describe 'Invoke-DomainAssessment' {
 
     Context 'When DC discovery fails' {
         BeforeEach {
-            Mock Get-ADDomainController { throw "Cannot locate DC" }
-            Mock Invoke-RC4Assessment {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { throw "Cannot locate DC" }
+            Mock -ModuleName 'RC4ADCheck' Invoke-RC4Assessment {
                 @{
                     OverallStatus = 'OK'
                     Domain        = 'contoso.com'
@@ -375,12 +365,12 @@ Describe 'Invoke-DomainAssessment' {
 
     Context 'When assessment script fails' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{
                     HostName = 'dc01.contoso.com'
                 }
             }
-            Mock Invoke-RC4Assessment { throw "Assessment failed due to permissions" }
+            Mock -ModuleName 'RC4ADCheck' Invoke-RC4Assessment { throw "Assessment failed due to permissions" }
         }
 
         It 'Returns failed status with error message' {
@@ -392,12 +382,12 @@ Describe 'Invoke-DomainAssessment' {
 
     Context 'When AnalyzeLogs is enabled' {
         BeforeEach {
-            Mock Get-ADDomainController {
+            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
                 [PSCustomObject]@{
                     HostName = 'dc01.contoso.com'
                 }
             }
-            Mock Invoke-RC4Assessment {
+            Mock -ModuleName 'RC4ADCheck' Invoke-RC4Assessment {
                 @{
                     OverallStatus    = 'OK'
                     AnalyzeEventLogs = $true

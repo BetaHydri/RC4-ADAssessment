@@ -1,14 +1,16 @@
-<#
-    .SYNOPSIS
-        Unit tests for Write-ComparisonHeader.
-
-    .NOTES
-        Detailed tests exist in the main test files.
-        This file satisfies the per-function test file naming convention.
-#>
-
-Describe 'Write-ComparisonHeader' {
-    It 'Should have a command available' {
-        $true | Should -Be $true
+InModuleScope 'RC4ADCheck' {
+    Describe 'Write-ComparisonHeader' {
+    BeforeEach {
+        Mock Write-Host {}
     }
+
+    It 'Does not throw with a title' {
+        { Write-ComparisonHeader -Title 'Test Header' } | Should -Not -Throw
+    }
+
+    It 'Calls Write-Host at least 3 times (top line, title, bottom line)' {
+        Write-ComparisonHeader -Title 'Test'
+        Should -Invoke Write-Host -Times 3 -Exactly
+    }
+}
 }

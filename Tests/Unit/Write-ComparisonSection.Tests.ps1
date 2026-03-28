@@ -1,14 +1,16 @@
-<#
-    .SYNOPSIS
-        Unit tests for Write-ComparisonSection.
-
-    .NOTES
-        Detailed tests exist in the main test files.
-        This file satisfies the per-function test file naming convention.
-#>
-
-Describe 'Write-ComparisonSection' {
-    It 'Should have a command available' {
-        $true | Should -Be $true
+InModuleScope 'RC4ADCheck' {
+    Describe 'Write-ComparisonSection' {
+    BeforeEach {
+        Mock Write-Host {}
     }
+
+    It 'Does not throw with a title' {
+        { Write-ComparisonSection -Title 'Test Section' } | Should -Not -Throw
+    }
+
+    It 'Calls Write-Host exactly 2 times (title + separator)' {
+        Write-ComparisonSection -Title 'Test'
+        Should -Invoke Write-Host -Times 2 -Exactly
+    }
+}
 }
