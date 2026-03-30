@@ -22,17 +22,33 @@ Import-Module ./output/builtModule/RC4-ADAssessment
 
 ### Quick Scan (Fastest - No Event Logs)
 ```powershell
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 ```
 **Runtime**: ~30 seconds
-**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), KDC Registry, KDCSVC Events (CVE-2026-20833), DES flags, Missing AES keys, RC4 exceptions, AzureADKerberos detection
+**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), DES flags, Missing AES keys, RC4 exceptions, AzureADKerberos detection
+
+### Deep Scan (Extended Account Coverage)
+```powershell
+Invoke-RC4Assessment -DeepScan
+```
+**Runtime**: ~1-2 minutes
+**Checks**: All of the above + all enabled user accounts (not just SPN-bearing) + all computer accounts (excluding DCs) for RC4/DES configurations
+
+> **Note**: `-DeepScan` does NOT analyze event logs or query remote DC registries. Combine with `-AnalyzeEventLogs` for maximum coverage.
 
 ### Full Assessment (Recommended)
 ```powershell
 Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 24
 ```
 **Runtime**: 2-5 minutes
-**Checks**: All of the above + audit policy verification + 24 hours of event logs for actual DES/RC4 usage
+**Checks**: Quick scan + KDC registry, KDCSVC events (CVE-2026-20833), audit policy, Security event logs (4768/4769)
+
+### Maximum Coverage
+```powershell
+Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+```
+**Runtime**: 3-10 minutes
+**Checks**: Everything — deep account scan + 7 days of event logs + full remote DC analysis
 
 ### With Export
 ```powershell
@@ -318,15 +334,15 @@ Every finding includes copy-paste PowerShell commands to fix the issue, includin
 
 ### Phase 1: Initial AD Scan
 ```powershell
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment -DeepScan -ExportResults
 ```
-Get baseline configuration (DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry).
+Get baseline configuration including all user and computer accounts.
 
 ### Phase 2: Usage Analysis
 ```powershell
-Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 ```
-Analyze 7 days of event logs to detect actual DES/RC4 usage. Export for comparison.
+Full scan: deep account analysis + 7 days of event logs. Export for comparison.
 
 ### Phase 3: Remediate
 Follow the inline fix commands shown with every finding:
@@ -392,9 +408,9 @@ Invoke-RC4Assessment -Domain child.contoso.com -Server DC01.child.contoso.com -A
 **Solution**: Already fixed in v2.0.1! Script uses UTF-8 encoding and compatible Unicode characters for PowerShell 5.1
 
 ### Script runs very slowly
-**Solution**: Use `-QuickScan` to skip event log analysis
+**Solution**: Run without `-AnalyzeEventLogs` to skip remote DC queries
 ```powershell
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 ```
 
 ---
@@ -496,19 +512,31 @@ Invoke-RC4Assessment -QuickScan
 ### Workflow 1: Quick Domain Health Check (1 minute)
 ```powershell
 # Single command for domain readiness
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 
 # Expected output includes:
 # ✅ All Domain Controllers have AES encryption configured
 # ✅ KRBTGT password age: 21 days
 # ✅ No service accounts with RC4/DES-only encryption
 # ✅ Trusts use AES by default
-# ⚠️  RC4DefaultDisablementPhase not set (inline fix shown)
+# ℹ️  Remote DC analysis skipped. Use -AnalyzeEventLogs to enable.
 ```
 
 ---
 
-### Workflow 2: Deep Event Log Analysis (5 minutes)
+### Workflow 2: Deep Account Scan (1-2 minutes)
+```powershell
+# Scan all user and computer accounts for RC4/DES issues
+Invoke-RC4Assessment -DeepScan
+
+# Note: This does NOT query event logs or remote DC registries.
+# For full coverage, combine both switches:
+Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+```
+
+---
+
+### Workflow 3: Deep Event Log Analysis (5 minutes)
 ```powershell
 # Analyze 7 days of actual usage across ALL DCs
 Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
@@ -561,7 +589,7 @@ Invoke-RC4AssessmentComparison -BaselineFile old.json -CurrentFile new.json -Sho
 
 ## 💡 Pro Tips
 
-1. **Start with QuickScan** - Get quick results, then add event log analysis
+1. **Start with a quick scan** - Run `Invoke-RC4Assessment` for quick results, then add `-DeepScan` for full account coverage, and `-AnalyzeEventLogs` for remote DC analysis
 2. **Use Forest Assessment for multi-domain environments** - `Assess-ADForest.ps1` automates domain enumeration
 3. **Enable parallel processing** - Use `-Parallel` with PowerShell 7+ for faster forest assessments
 4. **Monitor for 7+ days** - Use `-EventLogHours 168` to capture weekly activity patterns

@@ -56,13 +56,16 @@ Install-Module -Name RC4-ADAssessment
 Import-Module RC4-ADAssessment
 
 # Quick scan (config only, ~30 seconds)
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
+
+# Deep scan — also checks all user and computer accounts (~1-2 minutes)
+Invoke-RC4Assessment -DeepScan
 
 # Full scan with event logs (~3-5 minutes)
 Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168
 
-# Full scan + export + reference manual
-Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults -IncludeGuidance
+# Maximum coverage — deep scan + event logs + export + reference manual
+Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults -IncludeGuidance
 
 # Full scan for a specific domain + export + reference manual
 Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs -ExportResults -IncludeGuidance
@@ -109,11 +112,11 @@ Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json
 |-----------|-------------|---------|
 | `-Domain` | Target domain | Current domain |
 | `-Server` | Specific DC to query | Auto-discovered |
-| `-AnalyzeEventLogs` | Analyze events 4768/4769 for actual RC4/DES usage | Off |
+| `-AnalyzeEventLogs` | Enable remote DC analysis: KDC registry, KDCSVC events, audit policy, and Security event logs (4768/4769) | Off |
 | `-EventLogHours` | Hours of events to analyze (1-168) | 24 |
 | `-ExportResults` | Export to JSON + CSV (+ guidance .txt with `-IncludeGuidance`) in `.\Exports\` | Off |
 | `-IncludeGuidance` | Show full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline) | Off |
-| `-QuickScan` | Config-only scan (no event logs) | Default mode |
+| `-DeepScan` | Scan all enabled user accounts (not just SPN-bearing) and all computer accounts (excl. DCs) for RC4/DES. Does NOT enable event log analysis — combine with `-AnalyzeEventLogs` for full coverage | Off |
 
 ### Invoke-RC4ForestAssessment
 
@@ -124,6 +127,7 @@ Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json
 | `-EventLogHours` | Hours of events (1-168) | 24 |
 | `-ExportResults` | Export per-domain + forest summary | Off |
 | `-IncludeGuidance` | Include reference manual per domain | Off |
+| `-DeepScan` | Extended user/computer account scan per domain | Off |
 | `-Parallel` | Process domains concurrently (PS 7+) | Off |
 | `-MaxParallelDomains` | Max concurrent domains (1-10) | 3 |
 
@@ -230,18 +234,21 @@ Event Log Analysis - Actual DES/RC4 Usage
 ## Recommended Workflow
 
 ```
-Phase 1: Discovery                    Phase 2: Deep Analysis
+Phase 1: Discovery                    Phase 2: Deep Scan
 Invoke-RC4Assessment `                Invoke-RC4Assessment `
-    -QuickScan                            -AnalyzeEventLogs `
+    -ExportResults                        -DeepScan -ExportResults
+                                     
+         │                            Phase 3: Full Analysis
+         ├── ✅ All OK → Monitor      Invoke-RC4Assessment `
+         └── ⚠ Issues → ──────────>      -DeepScan -AnalyzeEventLogs `
                                           -EventLogHours 168 `
-         │                                -ExportResults
-         ├── ✅ All OK → Monitor          
-         └── ⚠ Issues → ─────────────────────┘
+                                          -ExportResults
                                               │
-Phase 3: Remediate                    Phase 4: Validate
+Phase 4: Remediate                    Phase 5: Validate
 Follow inline fix commands            Invoke-RC4Assessment `
-  • Set-ADComputer for DCs                -AnalyzeEventLogs -ExportResults
-  • Set RC4DefaultDisablementPhase    Invoke-RC4AssessmentComparison `
+  • Set-ADComputer for DCs                -DeepScan -AnalyzeEventLogs `
+  • Set RC4DefaultDisablementPhase        -ExportResults
+  • Reset service account passwords   Invoke-RC4AssessmentComparison `
   • Reset service account passwords       -BaselineFile before.json `
   • klist purge after changes             -CurrentFile after.json -ShowDetails
          │                                    │
@@ -733,11 +740,11 @@ v3.0 replaces the standalone `.ps1` scripts with the **RC4-ADAssessment** PowerS
 
 ```powershell
 # v2.x: Quick scan
-.\RC4_DES_Assessment.ps1 -QuickScan
+.\RC4_DES_Assessment.ps1
 
 # v3.0: Quick scan
 Import-Module RC4-ADAssessment
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 ```
 
 ```powershell

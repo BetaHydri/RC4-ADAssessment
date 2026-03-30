@@ -1,11 +1,14 @@
-function Invoke-RC4Assessment {
+﻿function Invoke-RC4Assessment {
 <#
 .SYNOPSIS
     Run a DES/RC4 Kerberos encryption assessment for a single Active Directory domain.
 .DESCRIPTION
-    Orchestrates all assessment functions: DC encryption, trusts, KRBTGT, service accounts,
-    KDC registry, KDCSVC events, audit policy, event log analysis, and AES/RC4 correlation.
-    Produces a structured results hashtable and optional JSON/CSV/guidance exports.
+    Orchestrates all assessment functions for a single AD domain. By default, performs
+    a fast config-only scan (DC encryption, trusts, KRBTGT, service accounts) using only
+    AD attribute queries. When -AnalyzeEventLogs is specified, additionally connects to
+    each DC for KDC registry settings, KDCSVC events (CVE-2026-20833), audit policy,
+    and Security event log analysis (4768/4769). Produces a structured results hashtable
+    and optional JSON/CSV/guidance exports.
 .PARAMETER Domain
     Target domain to assess. Defaults to the current domain.
 .PARAMETER Server
@@ -18,11 +21,26 @@ function Invoke-RC4Assessment {
     Export assessment results to JSON, CSV, and optionally guidance text files.
 .PARAMETER IncludeGuidance
     Show full reference manual and export guidance text file when combined with -ExportResults.
-.PARAMETER QuickScan
-    Fast scan mode - DC/GPO/Trust assessment only, no event log analysis.
+.PARAMETER DeepScan
+    Extends the assessment to scan all enabled user accounts (not just those with SPNs)
+    and all enabled computer accounts (excluding DCs) for RC4/DES encryption configurations.
+    Computers with the OS-default value 0x1C are reported as an INFO summary count;
+    non-default RC4/DES computers are listed individually as WARNING.
 .EXAMPLE
     Invoke-RC4Assessment
 
+    Quick config-only scan: DCs, GPOs, trusts, KRBTGT, service accounts. No remote
+    event log or registry queries. Fastest mode, safe for large environments.
+.EXAMPLE
+    Invoke-RC4Assessment -DeepScan
+
+    Extended scan: also checks all enabled user accounts (not just SPN-bearing) and
+    all computer accounts (excluding DCs). Still no remote DC queries — safe and fast.
+.EXAMPLE
+    Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+
+    Maximum coverage: deep account scan + KDC registry + KDCSVC events + 7 days of
+    event logs. Connects remotely to every DC.
 .EXAMPLE
     Invoke-RC4Assessment -Domain "contoso.com" -AnalyzeEventLogs -EventLogHours 48 -ExportResults
 .EXAMPLE
@@ -30,33 +48,29 @@ function Invoke-RC4Assessment {
 
     Full entry-point: assess a specific domain with event logs, export JSON/CSV/guidance, and display the reference manual.
 #>
-[CmdletBinding(DefaultParameterSetName = 'QuickScan')]
+[CmdletBinding()]
 param(
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [string]$Domain,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [string]$Server,
 
-    [Parameter(ParameterSetName = 'FullScan', Mandatory = $true)]
+    [Parameter()]
     [switch]$AnalyzeEventLogs,
 
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [ValidateRange(1, 168)]
     [int]$EventLogHours = 24,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [switch]$ExportResults,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [switch]$IncludeGuidance,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [switch]$QuickScan
+    [Parameter()]
+    [switch]$DeepScan
 )
 
 # Display header
@@ -140,22 +154,23 @@ try {
     $results.Trusts = Get-TrustEncryptionAssessment -ServerParams $serverParams
 
     # 3. KRBTGT & Account Assessment
-    $results.Accounts = Get-AccountEncryptionAssessment -ServerParams $serverParams
+    $results.Accounts = Get-AccountEncryptionAssessment -ServerParams $serverParams -DeepScan:$DeepScan
 
-    # 4. KDC Registry Assessment
-    $results.KdcRegistry = Get-KdcRegistryAssessment -ServerParams $serverParams
-
-    # 4b. KDCSVC System Event Assessment (CVE-2026-20833)
-    $results.KdcSvcEvents = Get-KdcSvcEventAssessment -ServerParams $serverParams
-
-    # 5. Event Log Analysis (if requested)
+    # 4-5. Remote DC analysis (KDC registry, KDCSVC events, Security event logs)
+    #       Gated behind -AnalyzeEventLogs because these require remote
+    #       WinRM/RPC connections to every DC and can be slow in large environments.
     if ($AnalyzeEventLogs) {
+        # 4. KDC Registry Assessment
+        $results.KdcRegistry = Get-KdcRegistryAssessment -ServerParams $serverParams
+
+        # 4b. KDCSVC System Event Assessment (CVE-2026-20833)
+        $results.KdcSvcEvents = Get-KdcSvcEventAssessment -ServerParams $serverParams
+
         # 5a. Check audit policy first
         $results.AuditPolicy = Get-AuditPolicyCheck -ServerParams $serverParams
 
         # 5b. Analyze event logs
         $results.EventLogs = Get-EventLogEncryptionAnalysis -ServerParams $serverParams -Hours $EventLogHours
-
         # 5c. Correlate: accounts with AES configured in AD but using RC4 tickets (need password reset)
         if ($results.EventLogs.RC4Accounts.Count -gt 0 -and $results.Accounts) {
             # Correlate: accounts with AES configured in AD but using RC4 tickets (need password reset)
@@ -228,11 +243,12 @@ try {
             }
         }
     }
-    elseif (-not $QuickScan) {
-        Write-Section "Event Log Analysis" -Color "Yellow"
-        Write-Finding -Status "INFO" -Message "Event log analysis skipped. Use -AnalyzeEventLogs to enable."
-        Write-Host "  This provides real-world usage data showing actual DES/RC4 tickets." -ForegroundColor Gray
-        Write-Host "  Example: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 48" -ForegroundColor Gray
+    else {
+        Write-Section "Remote DC Analysis (KDC Registry, KDCSVC Events, Event Logs)"
+        Write-Finding -Status "INFO" -Message "Remote DC analysis skipped. Use -AnalyzeEventLogs to enable."
+        Write-Host "  This queries each DC for KDC registry settings, KDCSVC events (CVE-2026-20833)," -ForegroundColor Gray
+        Write-Host "  audit policy, and Security event logs (4768/4769) for actual DES/RC4 ticket usage." -ForegroundColor Gray
+        Write-Host "  Example: Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 48" -ForegroundColor Gray
     }
 
     # 5. Overall Assessment
@@ -483,6 +499,86 @@ try {
                     "# If AES is still not used after password reset, explicitly set AES:"
                     "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                )
+            }
+        }
+
+        # DeepScan recommendations
+        if ($results.Accounts.TotalDeepScanRC4OnlyUsers -gt 0) {
+            $criticalIssues++
+            $dsNames = ($results.Accounts.DeepScanRC4OnlyUsers | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "CRITICAL"
+                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanRC4OnlyUsers) user account(s) have RC4-only encryption: $dsNames"
+                Fix     = @(
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                )
+            }
+        }
+
+        if ($results.Accounts.TotalDeepScanDESOnlyUsers -gt 0) {
+            $criticalIssues++
+            $dsNames = ($results.Accounts.DeepScanDESOnlyUsers | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "CRITICAL"
+                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanDESOnlyUsers) user account(s) have DES-only encryption: $dsNames"
+                Fix     = @(
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                )
+            }
+        }
+
+        if ($results.Accounts.TotalDeepScanDESEnabledUsers -gt 0) {
+            $warnings++
+            $dsNames = ($results.Accounts.DeepScanDESEnabledUsers | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanDESEnabledUsers) user account(s) have DES bits enabled alongside AES: $dsNames"
+                Fix     = @(
+                    "# Remove DES bits and set AES-only:"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                )
+            }
+        }
+
+        if ($results.Accounts.TotalDeepScanRC4ExceptionUsers -gt 0) {
+            $warnings++
+            $dsNames = ($results.Accounts.DeepScanRC4ExceptionUsers | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanRC4ExceptionUsers) user account(s) have explicit RC4 exception: $dsNames"
+                Fix     = @(
+                    "# Remove RC4 when possible:"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
+                )
+            }
+        }
+
+        if ($results.Accounts.DeepScanComputersOSDefault -gt 0) {
+            $warnings++
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.DeepScanComputersOSDefault) computer(s) have OS-default encryption (0x1C = RC4+AES) - deploy AES-only GPO"
+                Fix     = @(
+                    "# Deploy domain-level GPO:"
+                    "# Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > Security Options"
+                    "# 'Network security: Configure encryption types allowed for Kerberos' = AES128_HMAC_SHA1 + AES256_HMAC_SHA1"
+                )
+            }
+        }
+
+        if ($results.Accounts.TotalDeepScanComputersProblematic -gt 0) {
+            $warnings++
+            $dsNames = ($results.Accounts.DeepScanComputersProblematic | Select-Object -First 5).Name -join ', '
+            $results.Recommendations += @{
+                Level   = "WARNING"
+                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanComputersProblematic) computer(s) have non-default RC4/DES encryption: $dsNames"
+                Fix     = @(
+                    "# Investigate each computer and update to AES-only:"
+                    "Set-ADComputer '<ComputerName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
                 )
             }
         }
@@ -766,6 +862,78 @@ try {
                     EncryptionValue  = $null
                     LastLogon        = if ($acct.LastLogon) { $acct.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
                     LastLogonDaysAgo = $acct.LastLogonDaysAgo
+                }
+            }
+
+            # Add DeepScan user accounts
+            foreach ($u in $results.Accounts.DeepScanRC4OnlyUsers) {
+                $csvData += [PSCustomObject]@{
+                    Type             = "DeepScan RC4-Only User"
+                    Name             = $u.Name
+                    Status           = "RC4-Only (no SPN)"
+                    EncryptionTypes  = $u.EncryptionTypes
+                    EncryptionValue  = $u.EncryptionValue
+                    LastLogon        = if ($u.LastLogon) { $u.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $u.LastLogonDaysAgo
+                }
+            }
+            foreach ($u in $results.Accounts.DeepScanDESOnlyUsers) {
+                $csvData += [PSCustomObject]@{
+                    Type             = "DeepScan DES-Only User"
+                    Name             = $u.Name
+                    Status           = "DES-Only (no SPN)"
+                    EncryptionTypes  = $u.EncryptionTypes
+                    EncryptionValue  = $u.EncryptionValue
+                    LastLogon        = if ($u.LastLogon) { $u.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $u.LastLogonDaysAgo
+                }
+            }
+            foreach ($u in $results.Accounts.DeepScanDESEnabledUsers) {
+                $csvData += [PSCustomObject]@{
+                    Type             = "DeepScan DES-Enabled User"
+                    Name             = $u.Name
+                    Status           = "DES bits enabled alongside AES"
+                    EncryptionTypes  = $u.EncryptionTypes
+                    EncryptionValue  = $u.EncryptionValue
+                    LastLogon        = if ($u.LastLogon) { $u.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $u.LastLogonDaysAgo
+                }
+            }
+            foreach ($u in $results.Accounts.DeepScanRC4ExceptionUsers) {
+                $csvData += [PSCustomObject]@{
+                    Type             = "DeepScan RC4 Exception User"
+                    Name             = $u.Name
+                    Status           = "Explicit RC4 exception (no SPN)"
+                    EncryptionTypes  = $u.EncryptionTypes
+                    EncryptionValue  = $u.EncryptionValue
+                    LastLogon        = if ($u.LastLogon) { $u.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $u.LastLogonDaysAgo
+                }
+            }
+
+            # Add DeepScan problematic computers
+            foreach ($c in $results.Accounts.DeepScanComputersProblematic) {
+                $csvData += [PSCustomObject]@{
+                    Type             = "DeepScan Problematic Computer"
+                    Name             = $c.Name
+                    Status           = "Non-default RC4/DES encryption"
+                    EncryptionTypes  = $c.EncryptionTypes
+                    EncryptionValue  = $c.EncryptionValue
+                    LastLogon        = if ($c.LastLogon) { $c.LastLogon.ToString('yyyy-MM-dd HH:mm') } else { 'Never' }
+                    LastLogonDaysAgo = $c.LastLogonDaysAgo
+                }
+            }
+
+            # Add DeepScan OS-default computer summary
+            if ($results.Accounts.DeepScanComputersOSDefault -gt 0) {
+                $csvData += [PSCustomObject]@{
+                    Type             = "DeepScan OS-Default Computers"
+                    Name             = "(summary)"
+                    Status           = "$($results.Accounts.DeepScanComputersOSDefault) computer(s) with 0x1C - deploy AES-only GPO"
+                    EncryptionTypes  = "RC4_HMAC_MD5, AES128-HMAC, AES256-HMAC"
+                    EncryptionValue  = 0x1C
+                    LastLogon        = ''
+                    LastLogonDaysAgo = ''
                 }
             }
         }

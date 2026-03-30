@@ -371,6 +371,66 @@ function Show-AssessmentSummary {
             }
         }
 
+        # DeepScan: RC4-only users (no SPN)
+        foreach ($u in $Results.Accounts.DeepScanRC4OnlyUsers) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $u.Name
+                'Type'             = 'DeepScan RC4-Only User'
+                'Status'           = 'CRITICAL'
+                'Password Age'     = if ($u.PasswordLastSet) { "$([int]((Get-Date) - $u.PasswordLastSet).TotalDays) days" } else { "Unknown" }
+                'Last Logon'       = if ($u.LastLogon) { "$($u.LastLogon.ToString('yyyy-MM-dd')) ($($u.LastLogonDaysAgo)d)" } else { "Never" }
+                'Encryption Types' = $u.EncryptionTypes
+            }
+        }
+
+        # DeepScan: DES-only users (no SPN)
+        foreach ($u in $Results.Accounts.DeepScanDESOnlyUsers) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $u.Name
+                'Type'             = 'DeepScan DES-Only User'
+                'Status'           = 'CRITICAL'
+                'Password Age'     = if ($u.PasswordLastSet) { "$([int]((Get-Date) - $u.PasswordLastSet).TotalDays) days" } else { "Unknown" }
+                'Last Logon'       = if ($u.LastLogon) { "$($u.LastLogon.ToString('yyyy-MM-dd')) ($($u.LastLogonDaysAgo)d)" } else { "Never" }
+                'Encryption Types' = $u.EncryptionTypes
+            }
+        }
+
+        # DeepScan: DES-enabled users (no SPN)
+        foreach ($u in $Results.Accounts.DeepScanDESEnabledUsers) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $u.Name
+                'Type'             = 'DeepScan DES-Enabled User'
+                'Status'           = 'WARNING'
+                'Password Age'     = if ($u.PasswordLastSet) { "$([int]((Get-Date) - $u.PasswordLastSet).TotalDays) days" } else { "Unknown" }
+                'Last Logon'       = if ($u.LastLogon) { "$($u.LastLogon.ToString('yyyy-MM-dd')) ($($u.LastLogonDaysAgo)d)" } else { "Never" }
+                'Encryption Types' = $u.EncryptionTypes
+            }
+        }
+
+        # DeepScan: RC4-exception users (no SPN)
+        foreach ($u in $Results.Accounts.DeepScanRC4ExceptionUsers) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $u.Name
+                'Type'             = 'DeepScan RC4 Exception User'
+                'Status'           = 'WARNING'
+                'Password Age'     = if ($u.PasswordLastSet) { "$([int]((Get-Date) - $u.PasswordLastSet).TotalDays) days" } else { "Unknown" }
+                'Last Logon'       = if ($u.LastLogon) { "$($u.LastLogon.ToString('yyyy-MM-dd')) ($($u.LastLogonDaysAgo)d)" } else { "Never" }
+                'Encryption Types' = $u.EncryptionTypes
+            }
+        }
+
+        # DeepScan: Problematic computers
+        foreach ($c in $Results.Accounts.DeepScanComputersProblematic) {
+            $krbtgtTable += [PSCustomObject]@{
+                'Account'          = $c.Name
+                'Type'             = 'DeepScan Problematic Computer'
+                'Status'           = 'WARNING'
+                'Password Age'     = if ($c.PasswordLastSet) { "$([int]((Get-Date) - $c.PasswordLastSet).TotalDays) days" } else { "Unknown" }
+                'Last Logon'       = if ($c.LastLogon) { "$($c.LastLogon.ToString('yyyy-MM-dd')) ($($c.LastLogonDaysAgo)d)" } else { "Never" }
+                'Encryption Types' = $c.EncryptionTypes
+            }
+        }
+
         # Display table with color coding
         $krbtgtTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
             if ($_ -match "CRITICAL") {
@@ -415,6 +475,24 @@ function Show-AssessmentSummary {
         }
         if ($Results.Accounts.TotalMissingAES -gt 0) {
             Write-Host "    Missing AES Key Accounts: $($Results.Accounts.TotalMissingAES)" -ForegroundColor Yellow
+        }
+        if ($Results.Accounts.TotalDeepScanRC4OnlyUsers -gt 0) {
+            Write-Host "    [DeepScan] RC4-Only Users: $($Results.Accounts.TotalDeepScanRC4OnlyUsers)" -ForegroundColor Red
+        }
+        if ($Results.Accounts.TotalDeepScanDESOnlyUsers -gt 0) {
+            Write-Host "    [DeepScan] DES-Only Users: $($Results.Accounts.TotalDeepScanDESOnlyUsers)" -ForegroundColor Red
+        }
+        if ($Results.Accounts.TotalDeepScanDESEnabledUsers -gt 0) {
+            Write-Host "    [DeepScan] DES-Enabled Users: $($Results.Accounts.TotalDeepScanDESEnabledUsers)" -ForegroundColor Yellow
+        }
+        if ($Results.Accounts.TotalDeepScanRC4ExceptionUsers -gt 0) {
+            Write-Host "    [DeepScan] RC4 Exception Users: $($Results.Accounts.TotalDeepScanRC4ExceptionUsers)" -ForegroundColor Yellow
+        }
+        if ($Results.Accounts.DeepScanComputersOSDefault -gt 0) {
+            Write-Host "    [DeepScan] Computers OS-Default (0x1C): $($Results.Accounts.DeepScanComputersOSDefault) (deploy AES-only GPO)" -ForegroundColor Cyan
+        }
+        if ($Results.Accounts.TotalDeepScanComputersProblematic -gt 0) {
+            Write-Host "    [DeepScan] Problematic Computers: $($Results.Accounts.TotalDeepScanComputersProblematic)" -ForegroundColor Yellow
         }
     }
 

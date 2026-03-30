@@ -14,13 +14,21 @@
         A hashtable of parameters passed through to Active Directory cmdlets. Supports a
         'Server' key to target a specific Domain Controller.
 
+    .PARAMETER DeepScan
+        When specified, extends the assessment to scan all enabled user accounts (not just
+        those with SPNs) and all enabled computer accounts (excluding DCs) for RC4/DES
+        encryption configurations. Computer accounts with the OS-default value 0x1C are
+        reported as an INFO summary count; others are listed individually as WARNING.
+
     .EXAMPLE
         $params = @{ Server = 'dc01.contoso.com' }
         $result = Get-AccountEncryptionAssessment -ServerParams $params
         $result.KRBTGT.Status
     #>
     param(
-        [hashtable]$ServerParams
+        [hashtable]$ServerParams,
+
+        [switch]$DeepScan
     )
 
     Write-Section "KRBTGT & Service Account Encryption Assessment"
@@ -46,8 +54,19 @@
         TotalRC4Exception      = 0
         TotalDESEnabled        = 0
         TotalStaleSvc          = 0
-        TotalMissingAES        = 0
-        Details                = @()
+        TotalMissingAES                   = 0
+        Details                           = @()
+        DeepScanRC4OnlyUsers              = @()
+        DeepScanDESOnlyUsers              = @()
+        DeepScanDESEnabledUsers           = @()
+        DeepScanRC4ExceptionUsers         = @()
+        DeepScanComputersProblematic      = @()
+        DeepScanComputersOSDefault        = 0
+        TotalDeepScanRC4OnlyUsers         = 0
+        TotalDeepScanDESOnlyUsers         = 0
+        TotalDeepScanDESEnabledUsers      = 0
+        TotalDeepScanRC4ExceptionUsers    = 0
+        TotalDeepScanComputersProblematic = 0
     }
 
     try {
@@ -528,6 +547,184 @@
         }
 
         # ────────────────────────────────────────────────
+        # 6. DeepScan: All enabled user accounts (non-SPN)
+        # ────────────────────────────────────────────────
+        if ($DeepScan) {
+            Write-Host "`n  [DeepScan] Checking all enabled user accounts (without SPNs)..." -ForegroundColor Cyan
+
+            try {
+                # Get enabled users with msDS-SupportedEncryptionTypes set, excluding SPN-bearing accounts (already covered)
+                $deepUsers = Get-ADUser -LDAPFilter '(&(!(userAccountControl:1.2.840.113556.1.4.803:=2))(msDS-SupportedEncryptionTypes=*)(!(servicePrincipalName=*)))' `
+                    -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, Enabled, DisplayName, lastLogonTimestamp @ServerParams -ErrorAction Stop
+
+                if ($deepUsers) {
+                    $deepUserList = @($deepUsers) | Where-Object { $_.SamAccountName -ne 'krbtgt' }
+                    Write-Finding -Status "INFO" -Message "[DeepScan] Evaluating $($deepUserList.Count) enabled user account(s) with explicit encryption types (no SPNs)"
+
+                    foreach ($user in $deepUserList) {
+                        $encValue = $user.'msDS-SupportedEncryptionTypes'
+                        $logon = ConvertFrom-LastLogonTimestamp -RawValue $user.lastLogonTimestamp
+
+                        $userInfo = @{
+                            Name             = $user.SamAccountName
+                            DN               = $user.DistinguishedName
+                            Enabled          = $user.Enabled
+                            PasswordLastSet  = $user.PasswordLastSet
+                            EncryptionValue  = $encValue
+                            EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                            LastLogon        = $logon.LastLogon
+                            LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            AccountType      = "User Account (no SPN)"
+                        }
+
+                        # RC4-only: has RC4 but no AES (includes DES+RC4 combos without AES)
+                        if ($encValue -band 0x4 -and -not ($encValue -band 0x18)) {
+                            $assessment.DeepScanRC4OnlyUsers += $userInfo
+                        }
+
+                        # DES-only: has DES but no RC4 and no AES
+                        if ($encValue -band 0x3 -and -not ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
+                            $assessment.DeepScanDESOnlyUsers += $userInfo
+                        }
+
+                        # DES-enabled: DES bits alongside AES
+                        if ($encValue -band 0x3 -and ($encValue -band 0x18)) {
+                            $assessment.DeepScanDESEnabledUsers += $userInfo
+                        }
+
+                        # RC4 exception: RC4 alongside AES
+                        if ($encValue -band 0x4 -and ($encValue -band 0x18)) {
+                            $assessment.DeepScanRC4ExceptionUsers += $userInfo
+                        }
+                    }
+
+                    # Update totals
+                    $assessment.TotalDeepScanRC4OnlyUsers = $assessment.DeepScanRC4OnlyUsers.Count
+                    $assessment.TotalDeepScanDESOnlyUsers = $assessment.DeepScanDESOnlyUsers.Count
+                    $assessment.TotalDeepScanDESEnabledUsers = $assessment.DeepScanDESEnabledUsers.Count
+                    $assessment.TotalDeepScanRC4ExceptionUsers = $assessment.DeepScanRC4ExceptionUsers.Count
+
+                    # Display findings
+                    if ($assessment.DeepScanRC4OnlyUsers.Count -gt 0) {
+                        Write-Finding -Status "CRITICAL" -Message "[DeepScan] $($assessment.DeepScanRC4OnlyUsers.Count) user account(s) have RC4-only encryption configured"
+                        foreach ($u in $assessment.DeepScanRC4OnlyUsers) {
+                            $logonStr = if ($u.LastLogon) { ", Last logon: $($u.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                            Write-Host "    $([char]0x2022) $($u.Name) - $($u.EncryptionTypes)$logonStr" -ForegroundColor Red
+                        }
+                    }
+
+                    if ($assessment.DeepScanDESOnlyUsers.Count -gt 0) {
+                        Write-Finding -Status "CRITICAL" -Message "[DeepScan] $($assessment.DeepScanDESOnlyUsers.Count) user account(s) have DES-only encryption configured"
+                        foreach ($u in $assessment.DeepScanDESOnlyUsers) {
+                            $logonStr = if ($u.LastLogon) { ", Last logon: $($u.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                            Write-Host "    $([char]0x2022) $($u.Name) - $($u.EncryptionTypes)$logonStr" -ForegroundColor Red
+                        }
+                    }
+
+                    if ($assessment.DeepScanDESEnabledUsers.Count -gt 0) {
+                        Write-Finding -Status "WARNING" -Message "[DeepScan] $($assessment.DeepScanDESEnabledUsers.Count) user account(s) have DES encryption bits enabled alongside AES"
+                        foreach ($u in $assessment.DeepScanDESEnabledUsers) {
+                            $logonStr = if ($u.LastLogon) { ", Last logon: $($u.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                            Write-Host "    $([char]0x2022) $($u.Name) - $($u.EncryptionTypes)$logonStr" -ForegroundColor Yellow
+                        }
+                    }
+
+                    if ($assessment.DeepScanRC4ExceptionUsers.Count -gt 0) {
+                        Write-Finding -Status "WARNING" -Message "[DeepScan] $($assessment.DeepScanRC4ExceptionUsers.Count) user account(s) have explicit RC4 exception (RC4 + AES)"
+                        foreach ($u in $assessment.DeepScanRC4ExceptionUsers) {
+                            $logonStr = if ($u.LastLogon) { ", Last logon: $($u.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                            Write-Host "    $([char]0x2022) $($u.Name) - $($u.EncryptionTypes)$logonStr" -ForegroundColor Yellow
+                        }
+                    }
+
+                    if ($assessment.DeepScanRC4OnlyUsers.Count -eq 0 -and $assessment.DeepScanDESOnlyUsers.Count -eq 0 -and
+                        $assessment.DeepScanDESEnabledUsers.Count -eq 0 -and $assessment.DeepScanRC4ExceptionUsers.Count -eq 0) {
+                        Write-Finding -Status "OK" -Message "[DeepScan] No user accounts (without SPNs) have problematic encryption configurations"
+                    }
+                }
+                else {
+                    Write-Finding -Status "OK" -Message "[DeepScan] No enabled user accounts found with explicit encryption types set"
+                }
+            }
+            catch {
+                Write-Finding -Status "WARNING" -Message "[DeepScan] Could not query user accounts: $($_.Exception.Message)"
+            }
+
+            # ────────────────────────────────────────────────
+            # 7. DeepScan: Computer accounts (excluding DCs)
+            # ────────────────────────────────────────────────
+            Write-Host "`n  [DeepScan] Checking enabled computer accounts (excluding DCs)..." -ForegroundColor Cyan
+
+            try {
+                # Get enabled computers with msDS-SupportedEncryptionTypes set, excluding DCs (PrimaryGroupID 516)
+                $deepComputers = Get-ADComputer -LDAPFilter '(&(!(primaryGroupID=516))(!(userAccountControl:1.2.840.113556.1.4.803:=2))(msDS-SupportedEncryptionTypes=*))' `
+                    -Properties 'msDS-SupportedEncryptionTypes', OperatingSystem, PasswordLastSet, lastLogonTimestamp @ServerParams -ErrorAction Stop
+
+                if ($deepComputers) {
+                    $computerList = @($deepComputers)
+                    Write-Finding -Status "INFO" -Message "[DeepScan] Evaluating $($computerList.Count) enabled computer account(s) with explicit encryption types"
+
+                    foreach ($comp in $computerList) {
+                        $encValue = $comp.'msDS-SupportedEncryptionTypes'
+
+                        # Skip AES-only (0x18) — already secure
+                        if ($encValue -eq 0x18) { continue }
+
+                        # OS-default: Windows stamps 0x1C (RC4+AES128+AES256) on domain join
+                        if ($encValue -eq 0x1C) {
+                            $assessment.DeepScanComputersOSDefault++
+                            continue
+                        }
+
+                        # Any other value with RC4 or DES bits is problematic
+                        if ($encValue -band 0x7) {
+                            $logon = ConvertFrom-LastLogonTimestamp -RawValue $comp.lastLogonTimestamp
+                            $compInfo = @{
+                                Name             = $comp.SamAccountName -replace '\$$'
+                                DN               = $comp.DistinguishedName
+                                OperatingSystem  = $comp.OperatingSystem
+                                PasswordLastSet  = $comp.PasswordLastSet
+                                EncryptionValue  = $encValue
+                                EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
+                                LastLogon        = $logon.LastLogon
+                                LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                            }
+                            $assessment.DeepScanComputersProblematic += $compInfo
+                        }
+                    }
+
+                    $assessment.TotalDeepScanComputersProblematic = $assessment.DeepScanComputersProblematic.Count
+
+                    # Report OS-default computers (INFO — fix with a single GPO)
+                    if ($assessment.DeepScanComputersOSDefault -gt 0) {
+                        Write-Finding -Status "INFO" -Message "[DeepScan] $($assessment.DeepScanComputersOSDefault) computer(s) have OS-default encryption (0x1C = RC4+AES)" `
+                            -Detail "Windows stamps RC4+AES on domain join. Deploy a domain-level GPO to set 'Network security: Configure encryption types allowed for Kerberos' = AES128 + AES256 only"
+                    }
+
+                    # Report problematic computers (WARNING — need per-computer investigation)
+                    if ($assessment.DeepScanComputersProblematic.Count -gt 0) {
+                        Write-Finding -Status "WARNING" -Message "[DeepScan] $($assessment.DeepScanComputersProblematic.Count) computer(s) have non-default RC4/DES encryption types"
+                        foreach ($c in $assessment.DeepScanComputersProblematic) {
+                            $logonStr = if ($c.LastLogon) { ", Last logon: $($c.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
+                            $osStr = if ($c.OperatingSystem) { " [$($c.OperatingSystem)]" } else { "" }
+                            Write-Host "    $([char]0x2022) $($c.Name)$osStr - $($c.EncryptionTypes) (0x$($c.EncryptionValue.ToString('X')))$logonStr" -ForegroundColor Yellow
+                        }
+                    }
+
+                    if ($assessment.DeepScanComputersOSDefault -eq 0 -and $assessment.DeepScanComputersProblematic.Count -eq 0) {
+                        Write-Finding -Status "OK" -Message "[DeepScan] No computer accounts have problematic encryption configurations"
+                    }
+                }
+                else {
+                    Write-Finding -Status "OK" -Message "[DeepScan] No computer accounts found with explicit encryption types set"
+                }
+            }
+            catch {
+                Write-Finding -Status "WARNING" -Message "[DeepScan] Could not query computer accounts: $($_.Exception.Message)"
+            }
+        }
+
+        # ────────────────────────────────────────────────
         # Summary
         # ────────────────────────────────────────────────
         Write-Host ""
@@ -547,6 +744,14 @@
         Write-Host "  $([char]0x2022) RC4 Exception Accounts (RC4+AES): $($assessment.TotalRC4Exception)" -ForegroundColor $(if ($assessment.TotalRC4Exception -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Accounts Missing AES Keys (pwd >5yr): $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
+        if ($DeepScan) {
+            Write-Host "  $([char]0x2022) [DeepScan] RC4-Only Users (no SPN): $($assessment.TotalDeepScanRC4OnlyUsers)" -ForegroundColor $(if ($assessment.TotalDeepScanRC4OnlyUsers -gt 0) { "Red" } else { "Green" })
+            Write-Host "  $([char]0x2022) [DeepScan] DES-Only Users (no SPN): $($assessment.TotalDeepScanDESOnlyUsers)" -ForegroundColor $(if ($assessment.TotalDeepScanDESOnlyUsers -gt 0) { "Red" } else { "Green" })
+            Write-Host "  $([char]0x2022) [DeepScan] DES-Enabled Users (no SPN): $($assessment.TotalDeepScanDESEnabledUsers)" -ForegroundColor $(if ($assessment.TotalDeepScanDESEnabledUsers -gt 0) { "Yellow" } else { "Green" })
+            Write-Host "  $([char]0x2022) [DeepScan] RC4 Exception Users (no SPN): $($assessment.TotalDeepScanRC4ExceptionUsers)" -ForegroundColor $(if ($assessment.TotalDeepScanRC4ExceptionUsers -gt 0) { "Yellow" } else { "Green" })
+            Write-Host "  $([char]0x2022) [DeepScan] Computers OS-Default (0x1C): $($assessment.DeepScanComputersOSDefault)" -ForegroundColor $(if ($assessment.DeepScanComputersOSDefault -gt 0) { "Cyan" } else { "Green" })
+            Write-Host "  $([char]0x2022) [DeepScan] Computers Problematic (non-default): $($assessment.TotalDeepScanComputersProblematic)" -ForegroundColor $(if ($assessment.TotalDeepScanComputersProblematic -gt 0) { "Yellow" } else { "Green" })
+        }
     }
     catch {
         $errorMsg = $_.Exception.Message
