@@ -12,6 +12,17 @@ All notable changes to this project will be documented in this file.
 - Migrated build pipeline to Sampler framework with ModuleBuilder, InvokeBuild, and Pester 5
 - Restructured project layout to Sampler conventions (source/Public, source/Private)
 - Added QA tests for module quality, help content, and changelog validation
+- Recommended Workflow section replaced ASCII art with a Mermaid flowchart diagram and companion command reference table
+
+### Fixed
+
+- Module Commands table listed 12 private functions as user-callable commands — now shows only the 3 exported commands
+- Internal Function Mapping incorrectly marked 12 private functions as "Public" — corrected to "Private"
+- Project Structure file counts: Public 16 → 3, Private 8 → 20, Unit 29 → 27
+- Test count: 407 tests across 29 files → 344 tests across 28 files
+- Duplicate "Reset service account passwords" line in Recommended Workflow
+- Folder casing `tests/` → `Tests/` in Project Structure diagram
+- QUICK_START.md sample output version `v2.4.0` → `v2.9.0`
 
 ## [2.9.0] - 2026-03-27
 

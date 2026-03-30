@@ -101,7 +101,7 @@ Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json
 ### Successful Quick Scan
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.4.0
+DES/RC4 Kerberos Encryption Assessment v2.9.0
 ================================================================================
 
 Domain Controller Encryption Configuration

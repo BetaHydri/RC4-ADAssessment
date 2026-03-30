@@ -86,23 +86,15 @@ Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json
 
 ## Module Commands
 
+The module exports three commands:
+
 | Command | Purpose |
 |---------|---------|
 | `Invoke-RC4Assessment` | Main assessment for a single domain (replaces `RC4_DES_Assessment.ps1`) |
 | `Invoke-RC4ForestAssessment` | Forest-wide assessment across all domains (replaces `Assess-ADForest.ps1`) |
 | `Invoke-RC4AssessmentComparison` | Compare two JSON exports to track progress (replaces `Compare-Assessments.ps1`) |
-| `Get-DomainControllerEncryption` | DC encryption + GPO assessment |
-| `Get-TrustEncryptionAssessment` | Trust encryption evaluation |
-| `Get-KdcRegistryAssessment` | KDC registry key checks |
-| `Get-KdcSvcEventAssessment` | KDCSVC event scanning (CVE-2026-20833) |
-| `Get-AuditPolicyCheck` | Audit policy verification |
-| `Get-EventLogEncryptionAnalysis` | Event log 4768/4769 analysis |
-| `Get-AccountEncryptionAssessment` | Account encryption status |
-| `Show-AssessmentSummary` | Display assessment results |
-| `Show-ForestSummary` | Display forest-wide results |
-| `Show-ManualValidationGuidance` | Display reference manual |
-| `Get-GuidancePlainText` | Export guidance as plain text |
-| `Get-ChangeIndicator` | Change markers for comparison display |
+
+> **Note:** The module also contains 20 private/internal functions (e.g. `Get-DomainControllerEncryption`, `Show-AssessmentSummary`) that are called internally by the three exported commands. See [Internal Function Mapping](#internal-function-mapping) for the full list.
 
 ## Parameters
 
@@ -233,29 +225,47 @@ Event Log Analysis - Actual DES/RC4 Usage
 
 ## Recommended Workflow
 
+```mermaid
+flowchart TD
+    Start(["Start Assessment"])
+    Start --> P1
+
+    P1["Phase 1: Discovery"]
+    P1 --> Decision{"Results?"}
+
+    Decision -- "All OK" --> Monitor(["Monitor periodically"])
+    Decision -- "Issues found" --> P2
+
+    P2["Phase 2: Deep Scan"]
+    P2 --> P3
+
+    P3["Phase 3: Full Analysis"]
+    P3 --> P4
+
+    P4["Phase 4: Remediate"]
+    P4 --> P4a["Set-ADComputer for DCs"]
+    P4 --> P4b["Set RC4DefaultDisablementPhase"]
+    P4 --> P4c["Reset service account passwords"]
+    P4 --> P4d["klist purge after changes"]
+
+    P4a & P4b & P4c & P4d --> P5
+
+    P5["Phase 5: Validate"]
+    P5 --> Compare["Compare assessments"]
+    Compare --> Check{"All clean?"}
+
+    Check -- "No" --> P4
+    Check -- "Yes" --> Done(["Ready for July 2026"])
 ```
-Phase 1: Discovery                    Phase 2: Deep Scan
-Invoke-RC4Assessment `                Invoke-RC4Assessment `
-    -ExportResults                        -DeepScan -ExportResults
-                                     
-         │                            Phase 3: Full Analysis
-         ├── ✅ All OK → Monitor      Invoke-RC4Assessment `
-         └── ⚠ Issues → ──────────>      -DeepScan -AnalyzeEventLogs `
-                                          -EventLogHours 168 `
-                                          -ExportResults
-                                              │
-Phase 4: Remediate                    Phase 5: Validate
-Follow inline fix commands            Invoke-RC4Assessment `
-  • Set-ADComputer for DCs                -DeepScan -AnalyzeEventLogs `
-  • Set RC4DefaultDisablementPhase        -ExportResults
-  • Reset service account passwords   Invoke-RC4AssessmentComparison `
-  • Reset service account passwords       -BaselineFile before.json `
-  • klist purge after changes             -CurrentFile after.json -ShowDetails
-         │                                    │
-         └─── Repeat until OK ────────────────┘
-                    │
-         Ready for July 2026 RC4 removal
-```
+
+| Phase | Command |
+|-------|---------|
+| **1 — Discovery** | `Invoke-RC4Assessment -ExportResults` |
+| **2 — Deep Scan** | `Invoke-RC4Assessment -DeepScan -ExportResults` |
+| **3 — Full Analysis** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults` |
+| **4 — Remediate** | Follow inline fix commands (Set-ADComputer, registry, password resets, klist purge) |
+| **5 — Validate** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults` |
+| **Compare** | `Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails` |
 
 ## July 2026 RC4 Removal Timeline
 
@@ -777,22 +787,22 @@ Functions that were embedded inside the standalone scripts are now individual fi
 
 | v2.x Location | v3.0 Module Function | Visibility |
 |---|---|---|
-| `RC4_DES_Assessment.ps1` → `Get-DomainControllerEncryption` | `Get-DomainControllerEncryption` | Public |
-| `RC4_DES_Assessment.ps1` → `Get-TrustEncryptionAssessment` | `Get-TrustEncryptionAssessment` | Public |
-| `RC4_DES_Assessment.ps1` → `Get-KdcRegistryAssessment` | `Get-KdcRegistryAssessment` | Public |
-| `RC4_DES_Assessment.ps1` → `Get-KdcSvcEventAssessment` | `Get-KdcSvcEventAssessment` | Public |
-| `RC4_DES_Assessment.ps1` → `Get-AuditPolicyCheck` | `Get-AuditPolicyCheck` | Public |
-| `RC4_DES_Assessment.ps1` → `Get-EventLogEncryptionAnalysis` | `Get-EventLogEncryptionAnalysis` | Public |
-| `RC4_DES_Assessment.ps1` → `Get-AccountEncryptionAssessment` | `Get-AccountEncryptionAssessment` | Public |
-| `RC4_DES_Assessment.ps1` → `Show-AssessmentSummary` | `Show-AssessmentSummary` | Public |
-| `RC4_DES_Assessment.ps1` → `Show-ManualValidationGuidance` | `Show-ManualValidationGuidance` | Public |
-| `RC4_DES_Assessment.ps1` → `Get-GuidancePlainText` | `Get-GuidancePlainText` | Public |
+| `RC4_DES_Assessment.ps1` → `Get-DomainControllerEncryption` | `Get-DomainControllerEncryption` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-TrustEncryptionAssessment` | `Get-TrustEncryptionAssessment` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-KdcRegistryAssessment` | `Get-KdcRegistryAssessment` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-KdcSvcEventAssessment` | `Get-KdcSvcEventAssessment` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-AuditPolicyCheck` | `Get-AuditPolicyCheck` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-EventLogEncryptionAnalysis` | `Get-EventLogEncryptionAnalysis` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-AccountEncryptionAssessment` | `Get-AccountEncryptionAssessment` | Private |
+| `RC4_DES_Assessment.ps1` → `Show-AssessmentSummary` | `Show-AssessmentSummary` | Private |
+| `RC4_DES_Assessment.ps1` → `Show-ManualValidationGuidance` | `Show-ManualValidationGuidance` | Private |
+| `RC4_DES_Assessment.ps1` → `Get-GuidancePlainText` | `Get-GuidancePlainText` | Private |
 | `RC4_DES_Assessment.ps1` → main execution block (~800 lines) | `Invoke-RC4Assessment` | Public |
-| `Assess-ADForest.ps1` → `Show-ForestSummary` | `Show-ForestSummary` | Public |
+| `Assess-ADForest.ps1` → `Show-ForestSummary` | `Show-ForestSummary` | Private |
 | `Assess-ADForest.ps1` → main execution block | `Invoke-RC4ForestAssessment` | Public |
 | `Compare-Assessments.ps1` → `Write-ComparisonHeader` | `Write-ComparisonHeader` | Private |
 | `Compare-Assessments.ps1` → `Write-ComparisonSection` | `Write-ComparisonSection` | Private |
-| `Compare-Assessments.ps1` → `Get-ChangeIndicator` | `Get-ChangeIndicator` | Public |
+| `Compare-Assessments.ps1` → `Get-ChangeIndicator` | `Get-ChangeIndicator` | Private |
 | `Compare-Assessments.ps1` → main execution block | `Invoke-RC4AssessmentComparison` | Public |
 | `RC4_DES_Assessment.ps1` → `Write-Header` | `Write-Header` | Private |
 | `RC4_DES_Assessment.ps1` → `Write-Section` | `Write-Section` | Private |
@@ -807,12 +817,12 @@ Functions that were embedded inside the standalone scripts are now individual fi
 v2.x (Standalone)                    v3.0 (Sampler Module)
 ─────────────────                    ────────────────────
 RC4_DES_Assessment.ps1 (4006 lines)  source/
-Assess-ADForest.ps1 (749 lines)        Public/  (16 files)
-Compare-Assessments.ps1 (353 lines)    Private/ (8 files)
+Assess-ADForest.ps1 (749 lines)        Public/  (3 files)
+Compare-Assessments.ps1 (353 lines)    Private/ (20 files)
 Tests/ (4 files, 204 tests)             RC4-ADAssessment.psd1
                                          RC4-ADAssessment.psm1
-                                       tests/
-                                         Unit/ (29 files)
+                                       Tests/
+                                         Unit/ (27 files)
                                          QA/   (module quality)
                                        build.ps1
                                        build.yaml
@@ -824,7 +834,7 @@ Tests/ (4 files, 204 tests)             RC4-ADAssessment.psd1
 - **Installation**: `Install-Module RC4-ADAssessment` instead of downloading scripts
 - **Invocation**: `Import-Module RC4-ADAssessment; Invoke-RC4Assessment` instead of `.\RC4_DES_Assessment.ps1`
 - **Versioning**: Managed by GitVersion (SemVer) instead of manual version strings
-- **Testing**: 407 tests across 29 files (up from 204 across 4 files)
+- **Testing**: 344 tests across 28 files (up from 204 across 4 files)
 - **Build**: Sampler pipeline (`build.ps1`) for automated build, test, and package
 - **All parameters preserved**: Every parameter from v2.x works identically in v3.0
 
