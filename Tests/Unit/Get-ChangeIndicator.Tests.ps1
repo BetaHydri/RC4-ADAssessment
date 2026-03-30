@@ -1,4 +1,4 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-ChangeIndicator' {
     It 'Returns Improved when new value is lower' {
         $result = Get-ChangeIndicator -Old 5 -New 3

@@ -7,21 +7,21 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-AuditPolicyCheck' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
             @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' })
         }
     }
 
     Context 'When both audit policies are enabled' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command {
                 @{
                     AuthService = 'Kerberos Authentication Service  Success and Failure'
                     TicketOps   = 'Kerberos Service Ticket Operations  Success and Failure'
@@ -43,7 +43,7 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When no audit policies are enabled' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command {
                 @{
                     AuthService = 'Kerberos Authentication Service  No Auditing'
                     TicketOps   = 'Kerberos Service Ticket Operations  No Auditing'
@@ -59,7 +59,7 @@ Describe 'Get-AuditPolicyCheck' {
 
     Context 'When Invoke-Command fails' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw 'Access denied' }
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command { throw 'Access denied' }
         }
 
         It 'Returns UNKNOWN status' {

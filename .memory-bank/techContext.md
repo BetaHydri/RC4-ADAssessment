@@ -6,7 +6,7 @@
 - **Build Framework**: Sampler (ModuleBuilder, InvokeBuild, GitVersion)
 - **Dependencies**: ActiveDirectory module, GroupPolicy module
 - **Testing**: Pester 5.x (407 tests across 29 files)
-- **Version Control**: Git, hosted on GitHub (BetaHydri/RC4_AD_Check)
+- **Version Control**: Git, hosted on GitHub (BetaHydri/RC4-ADAssessment)
 - **License**: MIT
 
 ## Development Setup
@@ -55,12 +55,12 @@ Sampler build framework fully operational:
 ## Repository Structure (Post-Migration)
 
 ```
-RC4_AD_Check/
+RC4-ADAssessment/
 ├── source/
 │   ├── Public/          # 16 exported functions
 │   ├── Private/         # 8 internal helpers
-│   ├── RC4ADCheck.psd1  # Module manifest
-│   └── RC4ADCheck.psm1  # Module loader
+│   ├── RC4-ADAssessment.psd1  # Module manifest
+│   └── RC4-ADAssessment.psm1  # Module loader
 ├── tests/
 │   ├── Unit/            # 29 test files (259 passed)
 │   └── QA/              # Module quality tests (124 passed, 24 skipped)

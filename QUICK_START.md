@@ -1,6 +1,6 @@
-# RC4ADCheck Module — Quick Start Guide
+# RC4-ADAssessment Module — Quick Start Guide
 
-> **v3.0:** This toolkit is now a PowerShell module. Install with `Install-Module RC4ADCheck` or import from a local build.
+> **v3.0:** This toolkit is now a PowerShell module. Install with `Install-Module RC4-ADAssessment` or import from a local build.
 
 ## 🔐 Using with Active Directory
 
@@ -14,10 +14,10 @@
 ### Install & Import
 ```powershell
 # Install from PSGallery (once published)
-Install-Module -Name RC4ADCheck
+Install-Module -Name RC4-ADAssessment
 
 # Or import from local build
-Import-Module ./output/builtModule/RC4ADCheck
+Import-Module ./output/builtModule/RC4-ADAssessment
 ```
 
 ### Quick Scan (Fastest - No Event Logs)
@@ -189,7 +189,7 @@ Event Log Analysis - Actual DES/RC4 Usage
   Option 3: Run Locally on DC
   ────────────────────────────────────────
   Import module on DC and run:
-  PS> Import-Module RC4ADCheck
+  PS> Import-Module RC4-ADAssessment
   PS> Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 24
 
   Option 4: Verify Permissions

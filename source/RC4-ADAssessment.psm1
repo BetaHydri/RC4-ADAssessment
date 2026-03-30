@@ -1,8 +1,8 @@
-# RC4ADCheck Module
+# RC4-ADAssessment Module
 # This file is populated by ModuleBuilder during the build process.
 # For development, it dot-sources all public and private functions.
 
-$script:Version = (Import-PowerShellDataFile -Path "$PSScriptRoot\RC4ADCheck.psd1").ModuleVersion
+$script:Version = (Import-PowerShellDataFile -Path "$PSScriptRoot\RC4-ADAssessment.psd1").ModuleVersion
 $script:AssessmentTimestamp = Get-Date
 
 $privatePath = Join-Path -Path $PSScriptRoot -ChildPath 'Private'

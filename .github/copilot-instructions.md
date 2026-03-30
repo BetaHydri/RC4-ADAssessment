@@ -1,4 +1,4 @@
-# Copilot Instructions for RC4_AD_Check
+# Copilot Instructions for RC4-ADAssessment
 
 ## CRITICAL: Build & Test Execution Safety
 
@@ -38,7 +38,7 @@ Never put the log file inside `output/`. Sampler's Clean task deletes everything
 
 ## Project Overview
 
-This is a Sampler-based PowerShell module (RC4ADCheck) that assesses Active Directory
+This is a Sampler-based PowerShell module (RC4-ADAssessment) that assesses Active Directory
 environments for RC4 encryption usage. It uses ModuleBuilder to compile source files
 from `source/Public/` and `source/Private/` into a single `.psm1`.
 

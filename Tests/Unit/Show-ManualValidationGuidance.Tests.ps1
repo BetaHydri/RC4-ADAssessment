@@ -1,7 +1,7 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Show-ManualValidationGuidance' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
     }
 
     It 'Does not throw' {
@@ -10,7 +10,7 @@ Describe 'Show-ManualValidationGuidance' {
 
     It 'Calls Write-Host multiple times' {
         Show-ManualValidationGuidance | Out-Null
-        Should -Invoke -ModuleName 'RC4ADCheck' -CommandName Write-Host -Times 5 -Exactly:$false
+        Should -Invoke -ModuleName 'RC4-ADAssessment' -CommandName Write-Host -Times 5 -Exactly:$false
     }
 }
 }

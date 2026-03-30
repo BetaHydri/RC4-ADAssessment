@@ -7,18 +7,18 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-TrustEncryptionAssessment' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
     }
 
     Context 'When no trusts exist' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADTrust { $null }
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADTrust { $null }
         }
 
         It 'Returns zero total trusts' {
@@ -29,7 +29,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'When a trust has AES encryption' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADTrust {
                 @([PSCustomObject]@{
                     Name = 'partner.com'
                     Direction = 'BiDirectional'
@@ -52,7 +52,7 @@ Describe 'Get-TrustEncryptionAssessment' {
 
     Context 'When a trust has RC4 only' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADTrust {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADTrust {
                 @([PSCustomObject]@{
                     Name = 'legacy.com'
                     Direction = 'Outbound'

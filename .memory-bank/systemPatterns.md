@@ -10,8 +10,8 @@ Sampler-based PowerShell module with dot-sourced function files:
 |-----------|------|-------|
 | `source/Public/` | Exported functions | 16 |
 | `source/Private/` | Internal helpers | 8 |
-| `source/RC4ADCheck.psd1` | Module manifest | - |
-| `source/RC4ADCheck.psm1` | Dot-source loader | - |
+| `source/RC4-ADAssessment.psd1` | Module manifest | - |
+| `source/RC4-ADAssessment.psm1` | Dot-source loader | - |
 
 ### Orchestration Commands (replace standalone scripts)
 

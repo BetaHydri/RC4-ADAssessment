@@ -1,4 +1,4 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-GuidancePlainText' {
     It 'Returns a non-empty string' {
         $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-27' -Version '4.0.0'

@@ -10,18 +10,18 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-KdcSvcEventAssessment' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
     }
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController { @() }
         }
 
         It 'Returns empty QueriedDCs' {
@@ -32,10 +32,10 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When DC returns no KDCSVC events' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' })
             }
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command { @() }
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command { @() }
         }
 
         It 'Returns OK status' {
@@ -51,10 +51,10 @@ Describe 'Get-KdcSvcEventAssessment' {
 
     Context 'When WinRM to DC fails' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' })
             }
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw 'WinRM error' }
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command { throw 'WinRM error' }
         }
 
         It 'Adds DC to FailedDCs' {

@@ -7,18 +7,18 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-KdcRegistryAssessment' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
     }
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController { @() }
         }
 
         It 'Returns empty QueriedDCs list' {
@@ -29,10 +29,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When DC registry has AES-only DefaultDomainSupportedEncTypes' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' })
             }
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command {
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command {
                 @{ DefaultDomainSupportedEncTypes = 24; RC4DefaultDisablementPhase = 1 }
             }
         }
@@ -60,10 +60,10 @@ Describe 'Get-KdcRegistryAssessment' {
 
     Context 'When Invoke-Command fails' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' })
             }
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw 'WinRM error' }
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command { throw 'WinRM error' }
         }
 
         It 'Adds DC to FailedDCs list' {
