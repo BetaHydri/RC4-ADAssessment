@@ -86,4 +86,10 @@ Describe 'Invoke-RC4Assessment' {
         $result = Invoke-RC4Assessment
         $result.EventLogs | Should -BeNullOrEmpty
     }
+
+    It 'Accepts -DeepScan switch' {
+        $result = Invoke-RC4Assessment -DeepScan
+        $result | Should -BeOfType [hashtable]
+        $result.Accounts | Should -Not -BeNullOrEmpty
+    }
 }
