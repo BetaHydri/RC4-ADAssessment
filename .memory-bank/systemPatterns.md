@@ -44,8 +44,7 @@ Sampler-based PowerShell module with dot-sourced function files:
 - `Get-GuidancePlainText` — Plain text guidance generation
 - `Get-ChangeIndicator` — Comparison change markers
 - `Invoke-RC4Assessment` — Main single-domain orchestrator
-- `Invoke-ForestAssessment` — Forest-wide orchestrator
-- `Invoke-DomainAssessment` — Per-domain assessment wrapper
+- `Invoke-ForestAssessment` — Forest-wide orchestrator (contains private nested domain assessment helper)
 - `Invoke-AssessmentComparison` — Compare two assessment exports
 
 ## Design Patterns
