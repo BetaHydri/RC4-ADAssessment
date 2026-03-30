@@ -25,6 +25,10 @@ function Invoke-RC4Assessment {
 
 .EXAMPLE
     Invoke-RC4Assessment -Domain "contoso.com" -AnalyzeEventLogs -EventLogHours 48 -ExportResults
+.EXAMPLE
+    Invoke-RC4Assessment -Domain "contoso.com" -AnalyzeEventLogs -ExportResults -IncludeGuidance
+
+    Full entry-point: assess a specific domain with event logs, export JSON/CSV/guidance, and display the reference manual.
 #>
 [CmdletBinding(DefaultParameterSetName = 'QuickScan')]
 param(
