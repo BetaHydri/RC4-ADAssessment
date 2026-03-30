@@ -1,4 +1,4 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
     Describe 'Write-Section' {
     BeforeEach {
         Mock Write-Host {}

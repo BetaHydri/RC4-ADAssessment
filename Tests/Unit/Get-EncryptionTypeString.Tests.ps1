@@ -1,4 +1,4 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
     Describe 'Get-EncryptionTypeString' {
     It 'Returns "Not Set (Default)" for zero' {
         Get-EncryptionTypeString -Value 0 | Should -Be 'Not Set (Default)'

@@ -1,4 +1,4 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
     Describe 'ConvertFrom-LastLogonTimestamp' {
         Context 'When RawValue is null' {
         It 'Returns LastLogon as null' {

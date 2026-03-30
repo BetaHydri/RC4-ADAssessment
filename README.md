@@ -1,4 +1,4 @@
-# RC4ADCheck — DES/RC4 Kerberos Encryption Assessment
+# RC4-ADAssessment — DES/RC4 Kerberos Encryption Assessment
 
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -6,7 +6,7 @@
 ![Build](https://img.shields.io/badge/build-Sampler-blueviolet)
 
 > **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.  
-> **📌 v3.0 Migration:** This version migrates from standalone scripts to the **RC4ADCheck** PowerShell module built with [Sampler](https://github.com/gaelcolas/Sampler). See [Migrating from v2.x](#migrating-from-v2x-standalone-scripts) for the old→new mapping.
+> **📌 v3.0 Migration:** This version migrates from standalone scripts to the **RC4-ADAssessment** PowerShell module built with [Sampler](https://github.com/gaelcolas/Sampler). See [Migrating from v2.x](#migrating-from-v2x-standalone-scripts) for the old→new mapping.
 
 A PowerShell module for assessing DES and RC4 Kerberos encryption usage in Active Directory. Scans DC encryption, trusts, KRBTGT, service accounts (SPN/gMSA/sMSA/dMSA), KDC registry keys, KDCSVC events 201–209 (CVE-2026-20833), and Security event logs (4768/4769) for actual RC4/DES ticket usage — with AES/RC4 correlation to detect accounts needing password reset, inline remediation commands, forest-wide scanning, assessment comparison, and a full reference manual. Built for the **July 2026 RC4 removal deadline**.
 
@@ -50,10 +50,10 @@ Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0
 Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
 
 # Install the module (once published to PSGallery)
-Install-Module -Name RC4ADCheck
+Install-Module -Name RC4-ADAssessment
 
 # Import the module
-Import-Module RC4ADCheck
+Import-Module RC4-ADAssessment
 
 # Quick scan (config only, ~30 seconds)
 Invoke-RC4Assessment -QuickScan
@@ -718,7 +718,7 @@ auditpol /get /subcategory:"Kerberos Service Ticket Operations"
 
 ## Migrating from v2.x (Standalone Scripts)
 
-v3.0 replaces the standalone `.ps1` scripts with the **RC4ADCheck** PowerShell module. All parameters are preserved — only the invocation changes.
+v3.0 replaces the standalone `.ps1` scripts with the **RC4-ADAssessment** PowerShell module. All parameters are preserved — only the invocation changes.
 
 ### Script → Command Mapping
 
@@ -736,7 +736,7 @@ v3.0 replaces the standalone `.ps1` scripts with the **RC4ADCheck** PowerShell m
 .\RC4_DES_Assessment.ps1 -QuickScan
 
 # v3.0: Quick scan
-Import-Module RC4ADCheck
+Import-Module RC4-ADAssessment
 Invoke-RC4Assessment -QuickScan
 ```
 
@@ -802,8 +802,8 @@ v2.x (Standalone)                    v3.0 (Sampler Module)
 RC4_DES_Assessment.ps1 (4006 lines)  source/
 Assess-ADForest.ps1 (749 lines)        Public/  (16 files)
 Compare-Assessments.ps1 (353 lines)    Private/ (8 files)
-Tests/ (4 files, 204 tests)             RC4ADCheck.psd1
-                                         RC4ADCheck.psm1
+Tests/ (4 files, 204 tests)             RC4-ADAssessment.psd1
+                                         RC4-ADAssessment.psm1
                                        tests/
                                          Unit/ (29 files)
                                          QA/   (module quality)
@@ -814,8 +814,8 @@ Tests/ (4 files, 204 tests)             RC4ADCheck.psd1
 
 ### What Changed
 
-- **Installation**: `Install-Module RC4ADCheck` instead of downloading scripts
-- **Invocation**: `Import-Module RC4ADCheck; Invoke-RC4Assessment` instead of `.\RC4_DES_Assessment.ps1`
+- **Installation**: `Install-Module RC4-ADAssessment` instead of downloading scripts
+- **Invocation**: `Import-Module RC4-ADAssessment; Invoke-RC4Assessment` instead of `.\RC4_DES_Assessment.ps1`
 - **Versioning**: Managed by GitVersion (SemVer) instead of manual version strings
 - **Testing**: 407 tests across 29 files (up from 204 across 4 files)
 - **Build**: Sampler pipeline (`build.ps1`) for automated build, test, and package

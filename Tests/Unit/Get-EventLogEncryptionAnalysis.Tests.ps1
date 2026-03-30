@@ -10,18 +10,18 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-EventLogEncryptionAnalysis' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
     }
 
     Context 'When no DCs are found' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController { @() }
         }
 
         It 'Returns zero events analyzed' {
@@ -32,10 +32,10 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When DC event log query returns no events' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' })
             }
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command { @() }
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command { @() }
         }
 
         It 'Returns zero ticket counts' {
@@ -48,11 +48,11 @@ Describe 'Get-EventLogEncryptionAnalysis' {
 
     Context 'When DC event log query fails' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' })
             }
-            Mock -ModuleName 'RC4ADCheck' Invoke-Command { throw 'Access denied' }
-            Mock -ModuleName 'RC4ADCheck' Get-WinEvent { throw 'RPC failed' }
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command { throw 'Access denied' }
+            Mock -ModuleName 'RC4-ADAssessment' Get-WinEvent { throw 'RPC failed' }
         }
 
         It 'Adds DC to FailedDCs' {

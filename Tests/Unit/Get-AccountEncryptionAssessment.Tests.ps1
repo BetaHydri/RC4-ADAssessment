@@ -10,19 +10,19 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-AccountEncryptionAssessment' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
-        Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADServiceAccount { $null }
     }
 
     Context 'When KRBTGT has healthy AES config' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'
@@ -49,7 +49,7 @@ Describe 'Get-AccountEncryptionAssessment' {
 
     Context 'When no service accounts exist' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADUser {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
                         SamAccountName                  = 'krbtgt'

@@ -35,7 +35,7 @@ Describe 'Invoke-RC4AssessmentComparison' {
     }
 
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
     }
 
     It 'Does not throw with valid JSON files' {

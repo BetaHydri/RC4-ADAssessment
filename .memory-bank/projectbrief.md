@@ -1,8 +1,8 @@
-# Project Brief: RC4_AD_Check
+# Project Brief: RC4-ADAssessment
 
 ## Overview
 
-**RC4_AD_Check** is a PowerShell toolkit for assessing DES and RC4 Kerberos encryption
+**RC4-ADAssessment** is a PowerShell toolkit for assessing DES and RC4 Kerberos encryption
 usage in Active Directory environments. It helps organizations prepare for Microsoft's
 **July 2026 RC4 removal deadline** by discovering all RC4/DES usage across an AD forest.
 

@@ -33,15 +33,15 @@ BeforeAll {
 
 Describe 'Invoke-RC4Assessment' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Write-Warning {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Warning {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomainController { @() }
-        Mock -ModuleName 'RC4ADCheck' Get-ADComputer { $null }
-        Mock -ModuleName 'RC4ADCheck' Get-ADTrust { $null }
-        Mock -ModuleName 'RC4ADCheck' Get-ADUser {
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController { @() }
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADComputer { $null }
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADTrust { $null }
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
             if ("$Identity" -eq 'krbtgt') {
                 return [PSCustomObject]@{
                     SamAccountName                  = 'krbtgt'
@@ -53,8 +53,8 @@ Describe 'Invoke-RC4Assessment' {
             }
             return $null
         }
-        Mock -ModuleName 'RC4ADCheck' Get-ADServiceAccount { $null }
-        Mock -ModuleName 'RC4ADCheck' Test-Connection { $true }
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADServiceAccount { $null }
+        Mock -ModuleName 'RC4-ADAssessment' Test-Connection { $true }
     }
 
     It 'Returns a results hashtable' {

@@ -49,10 +49,10 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Show-ForestSummary' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
     }
 
     Context 'With healthy forest results' {

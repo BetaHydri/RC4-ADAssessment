@@ -10,10 +10,10 @@
     Requires: Pester 5.x
 #>
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-ChangeIndicator' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
     }
 
     Context 'When value improved (decreased)' {
@@ -80,10 +80,10 @@ Describe 'Get-ChangeIndicator' {
 # Write-ComparisonHeader
 # ============================================================
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Write-ComparisonHeader' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
     }
 
     It 'Does not throw' {
@@ -96,10 +96,10 @@ Describe 'Write-ComparisonHeader' {
 # Write-ComparisonSection
 # ============================================================
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Write-ComparisonSection' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
     }
 
     It 'Does not throw' {
@@ -112,7 +112,7 @@ Describe 'Write-ComparisonSection' {
 # Comparison Logic (integration-style with mock JSON files)
 # ============================================================
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Assessment Comparison Logic' {
     BeforeAll {
         # Create temporary JSON files that simulate assessment exports

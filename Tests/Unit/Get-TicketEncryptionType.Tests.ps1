@@ -1,4 +1,4 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
     Describe 'Get-TicketEncryptionType' {
     It 'Returns "DES-CBC-CRC" for 0x1' {
         Get-TicketEncryptionType -EncryptionType 0x1 | Should -Be 'DES-CBC-CRC'

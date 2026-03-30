@@ -16,26 +16,26 @@ BeforeAll {
     }
 }
 
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Get-DomainControllerEncryption' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
-        Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
-        Mock -ModuleName 'RC4ADCheck' Get-ADComputer -ParameterFilter { $Identity -eq 'AzureADKerberos' } { throw 'not found' }
-        Mock -ModuleName 'RC4ADCheck' Get-GPInheritance { $null }
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADComputer -ParameterFilter { $Identity -eq 'AzureADKerberos' } { throw 'not found' }
+        Mock -ModuleName 'RC4-ADAssessment' Get-GPInheritance { $null }
     }
 
     Context 'When all DCs have AES configured' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @(
                     [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' },
                     [PSCustomObject]@{ Name = 'DC02'; HostName = 'dc02.contoso.com'; ComputerObjectDN = 'CN=DC02,OU=Domain Controllers,DC=contoso,DC=com' }
                 )
             }
-            Mock -ModuleName 'RC4ADCheck' Get-ADComputer -ParameterFilter { $Identity -ne 'AzureADKerberos' } {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADComputer -ParameterFilter { $Identity -ne 'AzureADKerberos' } {
                 [PSCustomObject]@{ Name = 'DC'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' }
             }
         }
@@ -59,10 +59,10 @@ Describe 'Get-DomainControllerEncryption' {
 
     Context 'When a DC has RC4' {
         BeforeEach {
-            Mock -ModuleName 'RC4ADCheck' Get-ADDomainController {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
                 @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' })
             }
-            Mock -ModuleName 'RC4ADCheck' Get-ADComputer -ParameterFilter { $Identity -ne 'AzureADKerberos' } {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADComputer -ParameterFilter { $Identity -ne 'AzureADKerberos' } {
                 [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 28; OperatingSystem = 'Windows Server 2022' }
             }
         }

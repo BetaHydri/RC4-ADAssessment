@@ -1,7 +1,7 @@
-InModuleScope 'RC4ADCheck' {
+InModuleScope 'RC4-ADAssessment' {
 Describe 'Show-AssessmentSummary' {
     BeforeEach {
-        Mock -ModuleName 'RC4ADCheck' Write-Host {}
+        Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
     }
 
     It 'Does not throw with a complete results hashtable' {
