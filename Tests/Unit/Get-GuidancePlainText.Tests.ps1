@@ -1,3 +1,4 @@
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-GuidancePlainText' {
     It 'Returns a non-empty string' {
         $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-27' -Version '4.0.0'
@@ -23,4 +24,5 @@ Describe 'Get-GuidancePlainText' {
         $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-27' -Version '4.0.0'
         $result | Should -Match 'Event Log'
     }
+}
 }

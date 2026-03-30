@@ -10,7 +10,7 @@
     Requires: Pester 5.x
 #>
 
-
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-ChangeIndicator' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -74,6 +74,7 @@ Describe 'Get-ChangeIndicator' {
         }
     }
 }
+}
 
 # ============================================================
 # Write-ComparisonHeader
@@ -111,6 +112,7 @@ Describe 'Write-ComparisonSection' {
 # Comparison Logic (integration-style with mock JSON files)
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Assessment Comparison Logic' {
     BeforeAll {
         # Create temporary JSON files that simulate assessment exports
@@ -424,4 +426,4 @@ Describe 'Assessment Comparison Logic' {
         }
     }
 }
-
+}

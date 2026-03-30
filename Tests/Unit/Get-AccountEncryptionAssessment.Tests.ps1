@@ -10,6 +10,7 @@ BeforeAll {
     }
 }
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-AccountEncryptionAssessment' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -72,4 +73,5 @@ Describe 'Get-AccountEncryptionAssessment' {
             $result.TotalDESFlag | Should -Be 0
         }
     }
+}
 }

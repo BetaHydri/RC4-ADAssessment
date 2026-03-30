@@ -160,6 +160,7 @@ Describe 'Get-TicketEncryptionType' {
 # Get-DomainControllerEncryption
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-DomainControllerEncryption' {
     BeforeEach {
         # Standard domain info mock
@@ -1701,6 +1702,7 @@ Describe 'Get-GuidancePlainText' {
         $result | Should -Match 'github\.com/microsoft/Kerberos-Crypto'
     }
 }
+}
 
 # ============================================================
 # Write-Finding (display helper)
@@ -1905,6 +1907,7 @@ Describe 'Overall Assessment Scoring Logic' {
 # Get-KdcRegistryAssessment
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-KdcRegistryAssessment' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Get-ADDomain {
@@ -2480,5 +2483,6 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
             $result.MissingAESKeyAccounts | Should -HaveCount 0
         }
     }
+}
 }
 

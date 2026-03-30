@@ -16,6 +16,7 @@ BeforeAll {
     }
 }
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-DomainControllerEncryption' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -72,4 +73,5 @@ Describe 'Get-DomainControllerEncryption' {
             $result.RC4Configured | Should -Be 1
         }
     }
+}
 }
