@@ -22,10 +22,10 @@ Import-Module ./output/builtModule/RC4-ADAssessment
 
 ### Quick Scan (Fastest - No Event Logs)
 ```powershell
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 ```
 **Runtime**: ~30 seconds
-**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), KDC Registry, KDCSVC Events (CVE-2026-20833), DES flags, Missing AES keys, RC4 exceptions, AzureADKerberos detection
+**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), DES flags, Missing AES keys, RC4 exceptions, AzureADKerberos detection
 
 ### Full Assessment (Recommended)
 ```powershell
@@ -318,9 +318,9 @@ Every finding includes copy-paste PowerShell commands to fix the issue, includin
 
 ### Phase 1: Initial AD Scan
 ```powershell
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 ```
-Get baseline configuration (DCs, GPOs, Trusts, KRBTGT, Service Accounts, KDC Registry).
+Get baseline configuration (DCs, GPOs, Trusts, KRBTGT, Service Accounts).
 
 ### Phase 2: Usage Analysis
 ```powershell
@@ -392,9 +392,9 @@ Invoke-RC4Assessment -Domain child.contoso.com -Server DC01.child.contoso.com -A
 **Solution**: Already fixed in v2.0.1! Script uses UTF-8 encoding and compatible Unicode characters for PowerShell 5.1
 
 ### Script runs very slowly
-**Solution**: Use `-QuickScan` to skip event log analysis
+**Solution**: Run without `-AnalyzeEventLogs` to skip remote DC queries
 ```powershell
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 ```
 
 ---
@@ -496,7 +496,7 @@ Invoke-RC4Assessment -QuickScan
 ### Workflow 1: Quick Domain Health Check (1 minute)
 ```powershell
 # Single command for domain readiness
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 
 # Expected output includes:
 # ✅ All Domain Controllers have AES encryption configured
@@ -561,7 +561,7 @@ Invoke-RC4AssessmentComparison -BaselineFile old.json -CurrentFile new.json -Sho
 
 ## 💡 Pro Tips
 
-1. **Start with QuickScan** - Get quick results, then add event log analysis
+1. **Start with a quick scan** - Run `Invoke-RC4Assessment` for quick results, then add `-AnalyzeEventLogs` for full analysis
 2. **Use Forest Assessment for multi-domain environments** - `Assess-ADForest.ps1` automates domain enumeration
 3. **Enable parallel processing** - Use `-Parallel` with PowerShell 7+ for faster forest assessments
 4. **Monitor for 7+ days** - Use `-EventLogHours 168` to capture weekly activity patterns

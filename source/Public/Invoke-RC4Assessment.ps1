@@ -3,9 +3,12 @@ function Invoke-RC4Assessment {
 .SYNOPSIS
     Run a DES/RC4 Kerberos encryption assessment for a single Active Directory domain.
 .DESCRIPTION
-    Orchestrates all assessment functions: DC encryption, trusts, KRBTGT, service accounts,
-    KDC registry, KDCSVC events, audit policy, event log analysis, and AES/RC4 correlation.
-    Produces a structured results hashtable and optional JSON/CSV/guidance exports.
+    Orchestrates all assessment functions for a single AD domain. By default, performs
+    a fast config-only scan (DC encryption, trusts, KRBTGT, service accounts) using only
+    AD attribute queries. When -AnalyzeEventLogs is specified, additionally connects to
+    each DC for KDC registry settings, KDCSVC events (CVE-2026-20833), audit policy,
+    and Security event log analysis (4768/4769). Produces a structured results hashtable
+    and optional JSON/CSV/guidance exports.
 .PARAMETER Domain
     Target domain to assess. Defaults to the current domain.
 .PARAMETER Server
@@ -23,10 +26,11 @@ function Invoke-RC4Assessment {
     and all enabled computer accounts (excluding DCs) for RC4/DES encryption configurations.
     Computers with the OS-default value 0x1C are reported as an INFO summary count;
     non-default RC4/DES computers are listed individually as WARNING.
-.PARAMETER QuickScan
-    Fast scan mode - DC/GPO/Trust assessment only, no event log analysis.
 .EXAMPLE
     Invoke-RC4Assessment
+
+    Quick config-only scan: DCs, GPOs, trusts, KRBTGT, service accounts. No remote
+    event log or registry queries. Fastest mode, safe for large environments.
 
 .EXAMPLE
     Invoke-RC4Assessment -Domain "contoso.com" -AnalyzeEventLogs -EventLogHours 48 -ExportResults
@@ -35,37 +39,29 @@ function Invoke-RC4Assessment {
 
     Full entry-point: assess a specific domain with event logs, export JSON/CSV/guidance, and display the reference manual.
 #>
-[CmdletBinding(DefaultParameterSetName = 'QuickScan')]
+[CmdletBinding()]
 param(
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [string]$Domain,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [string]$Server,
 
-    [Parameter(ParameterSetName = 'FullScan', Mandatory = $true)]
+    [Parameter()]
     [switch]$AnalyzeEventLogs,
 
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [ValidateRange(1, 168)]
     [int]$EventLogHours = 24,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [switch]$ExportResults,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
+    [Parameter()]
     [switch]$IncludeGuidance,
 
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [Parameter(ParameterSetName = 'FullScan')]
-    [switch]$DeepScan,
-
-    [Parameter(ParameterSetName = 'QuickScan')]
-    [switch]$QuickScan
+    [Parameter()]
+    [switch]$DeepScan
 )
 
 # Display header
@@ -151,20 +147,21 @@ try {
     # 3. KRBTGT & Account Assessment
     $results.Accounts = Get-AccountEncryptionAssessment -ServerParams $serverParams -DeepScan:$DeepScan
 
-    # 4. KDC Registry Assessment
-    $results.KdcRegistry = Get-KdcRegistryAssessment -ServerParams $serverParams
-
-    # 4b. KDCSVC System Event Assessment (CVE-2026-20833)
-    $results.KdcSvcEvents = Get-KdcSvcEventAssessment -ServerParams $serverParams
-
-    # 5. Event Log Analysis (if requested)
+    # 4-5. Remote DC analysis (KDC registry, KDCSVC events, Security event logs)
+    #       Gated behind -AnalyzeEventLogs because these require remote
+    #       WinRM/RPC connections to every DC and can be slow in large environments.
     if ($AnalyzeEventLogs) {
+        # 4. KDC Registry Assessment
+        $results.KdcRegistry = Get-KdcRegistryAssessment -ServerParams $serverParams
+
+        # 4b. KDCSVC System Event Assessment (CVE-2026-20833)
+        $results.KdcSvcEvents = Get-KdcSvcEventAssessment -ServerParams $serverParams
+
         # 5a. Check audit policy first
         $results.AuditPolicy = Get-AuditPolicyCheck -ServerParams $serverParams
 
         # 5b. Analyze event logs
         $results.EventLogs = Get-EventLogEncryptionAnalysis -ServerParams $serverParams -Hours $EventLogHours
-
         # 5c. Correlate: accounts with AES configured in AD but using RC4 tickets (need password reset)
         if ($results.EventLogs.RC4Accounts.Count -gt 0 -and $results.Accounts) {
             # Correlate: accounts with AES configured in AD but using RC4 tickets (need password reset)
@@ -237,11 +234,12 @@ try {
             }
         }
     }
-    elseif (-not $QuickScan) {
-        Write-Section "Event Log Analysis" -Color "Yellow"
-        Write-Finding -Status "INFO" -Message "Event log analysis skipped. Use -AnalyzeEventLogs to enable."
-        Write-Host "  This provides real-world usage data showing actual DES/RC4 tickets." -ForegroundColor Gray
-        Write-Host "  Example: .\RC4_DES_Assessment.ps1 -AnalyzeEventLogs -EventLogHours 48" -ForegroundColor Gray
+    else {
+        Write-Section "Remote DC Analysis (KDC Registry, KDCSVC Events, Event Logs)"
+        Write-Finding -Status "INFO" -Message "Remote DC analysis skipped. Use -AnalyzeEventLogs to enable."
+        Write-Host "  This queries each DC for KDC registry settings, KDCSVC events (CVE-2026-20833)," -ForegroundColor Gray
+        Write-Host "  audit policy, and Security event logs (4768/4769) for actual DES/RC4 ticket usage." -ForegroundColor Gray
+        Write-Host "  Example: Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 48" -ForegroundColor Gray
     }
 
     # 5. Overall Assessment

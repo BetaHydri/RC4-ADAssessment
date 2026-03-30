@@ -56,7 +56,7 @@ Install-Module -Name RC4-ADAssessment
 Import-Module RC4-ADAssessment
 
 # Quick scan (config only, ~30 seconds)
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 
 # Full scan with event logs (~3-5 minutes)
 Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168
@@ -109,11 +109,10 @@ Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json
 |-----------|-------------|---------|
 | `-Domain` | Target domain | Current domain |
 | `-Server` | Specific DC to query | Auto-discovered |
-| `-AnalyzeEventLogs` | Analyze events 4768/4769 for actual RC4/DES usage | Off |
+| `-AnalyzeEventLogs` | Enable remote DC analysis: KDC registry, KDCSVC events, audit policy, and Security event logs (4768/4769) | Off |
 | `-EventLogHours` | Hours of events to analyze (1-168) | 24 |
 | `-ExportResults` | Export to JSON + CSV (+ guidance .txt with `-IncludeGuidance`) in `.\Exports\` | Off |
 | `-IncludeGuidance` | Show full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline) | Off |
-| `-QuickScan` | Config-only scan (no event logs) | Default mode |
 
 ### Invoke-RC4ForestAssessment
 
@@ -232,7 +231,7 @@ Event Log Analysis - Actual DES/RC4 Usage
 ```
 Phase 1: Discovery                    Phase 2: Deep Analysis
 Invoke-RC4Assessment `                Invoke-RC4Assessment `
-    -QuickScan                            -AnalyzeEventLogs `
+    -ExportResults                        -AnalyzeEventLogs `
                                           -EventLogHours 168 `
          │                                -ExportResults
          ├── ✅ All OK → Monitor          
@@ -733,11 +732,11 @@ v3.0 replaces the standalone `.ps1` scripts with the **RC4-ADAssessment** PowerS
 
 ```powershell
 # v2.x: Quick scan
-.\RC4_DES_Assessment.ps1 -QuickScan
+.\RC4_DES_Assessment.ps1
 
 # v3.0: Quick scan
 Import-Module RC4-ADAssessment
-Invoke-RC4Assessment -QuickScan
+Invoke-RC4Assessment
 ```
 
 ```powershell

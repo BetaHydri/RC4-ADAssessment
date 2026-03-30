@@ -118,9 +118,9 @@ Describe 'Invoke-RC4Assessment' {
         $result.Accounts | Should -Not -BeNullOrEmpty
     }
 
-    It 'Populates KdcRegistry assessment' {
+    It 'Skips KdcRegistry without -AnalyzeEventLogs' {
         $result = Invoke-RC4Assessment
-        $result.KdcRegistry | Should -Not -BeNullOrEmpty
+        $result.KdcRegistry | Should -BeNullOrEmpty
     }
 
     It 'Accepts -Domain parameter' {
