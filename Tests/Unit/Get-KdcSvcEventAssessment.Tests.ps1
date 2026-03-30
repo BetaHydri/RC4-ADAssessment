@@ -10,6 +10,7 @@ BeforeAll {
     }
 }
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-KdcSvcEventAssessment' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -61,4 +62,5 @@ Describe 'Get-KdcSvcEventAssessment' {
             $result.FailedDCs.Count | Should -Be 1
         }
     }
+}
 }

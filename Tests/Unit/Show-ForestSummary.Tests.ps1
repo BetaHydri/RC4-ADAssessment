@@ -1,3 +1,4 @@
+InModuleScope 'RC4ADCheck' {
 Describe 'Show-ForestSummary' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -43,4 +44,5 @@ Describe 'Show-ForestSummary' {
         }
         { Show-ForestSummary -ForestResults $forestResults } | Should -Not -Throw
     }
+}
 }

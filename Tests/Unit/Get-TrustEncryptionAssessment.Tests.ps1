@@ -7,6 +7,7 @@ BeforeAll {
     }
 }
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-TrustEncryptionAssessment' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -66,4 +67,5 @@ Describe 'Get-TrustEncryptionAssessment' {
             $result.RC4Risk | Should -Be 1
         }
     }
+}
 }

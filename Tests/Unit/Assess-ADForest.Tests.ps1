@@ -49,6 +49,7 @@ BeforeAll {
     }
 }
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Show-ForestSummary' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -195,6 +196,7 @@ Describe 'Show-ForestSummary' {
         }
     }
 } # close InModuleScope for Show-ForestSummary
+}
 
 # ============================================================
 # Forest Status Aggregation Logic

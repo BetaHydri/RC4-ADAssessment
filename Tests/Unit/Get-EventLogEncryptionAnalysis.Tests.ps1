@@ -10,6 +10,7 @@ BeforeAll {
     }
 }
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-EventLogEncryptionAnalysis' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -59,4 +60,5 @@ Describe 'Get-EventLogEncryptionAnalysis' {
             $result.FailedDCs.Count | Should -Be 1
         }
     }
+}
 }

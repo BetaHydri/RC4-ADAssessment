@@ -1,3 +1,4 @@
+InModuleScope 'RC4ADCheck' {
 Describe 'Show-AssessmentSummary' {
     BeforeEach {
         Mock -ModuleName 'RC4ADCheck' Write-Host {}
@@ -30,4 +31,5 @@ Describe 'Show-AssessmentSummary' {
         }
         { Show-AssessmentSummary -Results $results } | Should -Not -Throw
     }
+}
 }

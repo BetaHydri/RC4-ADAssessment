@@ -1,3 +1,4 @@
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-ChangeIndicator' {
     It 'Returns Improved when new value is lower' {
         $result = Get-ChangeIndicator -Old 5 -New 3
@@ -33,4 +34,5 @@ Describe 'Get-ChangeIndicator' {
         $result = Get-ChangeIndicator -Old 1 -New 0
         $result.Symbol | Should -Not -BeNullOrEmpty
     }
+}
 }
