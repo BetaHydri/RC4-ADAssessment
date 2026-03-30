@@ -1,0 +1,15 @@
+# Sampler build output
+output/
+
+# PowerShell module artifacts
+*.nupkg
+
+# IDE
+*.code-workspace
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Exports from assessment runs
+Exports/

@@ -2,50 +2,18 @@
 
 <#
 .SYNOPSIS
-    Pester tests for Compare-Assessments.ps1
+    Pester tests for Compare-Assessments functions.
 .DESCRIPTION
-    Mocked unit tests for the comparison logic in Compare-Assessments.ps1.
-    Tests cover the Get-ChangeIndicator helper function and the overall comparison workflow.
+    Mocked unit tests for Get-ChangeIndicator and comparison logic.
 .NOTES
     Author: Jan Tiedemann
     Requires: Pester 5.x
 #>
 
-BeforeAll {
-    $scriptPath = Join-Path $PSScriptRoot '..' 'Compare-Assessments.ps1'
-    $scriptContent = Get-Content -Path $scriptPath -Raw
-
-    # Extract function definitions from the script (helper functions section)
-    # The script has functions defined before the param-guarded main logic
-    # We need Get-ChangeIndicator, Write-ComparisonHeader, Write-ComparisonSection
-    $functionsBlock = [regex]::Match(
-        $scriptContent,
-        '(?s)#region Helper Functions.*?#endregion'
-    ).Value
-
-    if (-not $functionsBlock) {
-        # Fallback: extract individual functions
-        $functions = @()
-        $functionPattern = '(?s)(function\s+(?:Get-ChangeIndicator|Write-ComparisonHeader|Write-ComparisonSection)\s*\{.*?\n\})'
-        $matches2 = [regex]::Matches($scriptContent, $functionPattern)
-        foreach ($m in $matches2) {
-            $functions += $m.Value
-        }
-        $functionsBlock = $functions -join "`n`n"
-    }
-
-    if ($functionsBlock) {
-        . ([ScriptBlock]::Create($functionsBlock))
-    }
-}
-
-# ============================================================
-# Get-ChangeIndicator
-# ============================================================
-
+InModuleScope 'RC4ADCheck' {
 Describe 'Get-ChangeIndicator' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     Context 'When value improved (decreased)' {
@@ -106,39 +74,45 @@ Describe 'Get-ChangeIndicator' {
         }
     }
 }
+}
 
 # ============================================================
 # Write-ComparisonHeader
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Write-ComparisonHeader' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Does not throw' {
         { Write-ComparisonHeader -Title 'Test Comparison' } | Should -Not -Throw
     }
 }
+}
 
 # ============================================================
 # Write-ComparisonSection
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Write-ComparisonSection' {
     BeforeEach {
-        Mock Write-Host {}
+        Mock -ModuleName 'RC4ADCheck' Write-Host {}
     }
 
     It 'Does not throw' {
         { Write-ComparisonSection -Title 'Section Test' } | Should -Not -Throw
     }
 }
+}
 
 # ============================================================
 # Comparison Logic (integration-style with mock JSON files)
 # ============================================================
 
+InModuleScope 'RC4ADCheck' {
 Describe 'Assessment Comparison Logic' {
     BeforeAll {
         # Create temporary JSON files that simulate assessment exports
@@ -451,4 +425,5 @@ Describe 'Assessment Comparison Logic' {
             $change.Status | Should -Be 'Worsened'
         }
     }
+}
 }
