@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Renamed module from `RC4ADCheck` to `RC4-ADAssessment` to match the repository name
 - Migrated build pipeline to Sampler framework with ModuleBuilder, InvokeBuild, and Pester 5
 - Restructured project layout to Sampler conventions (source/Public, source/Private)
 - Added QA tests for module quality, help content, and changelog validation
