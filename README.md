@@ -100,7 +100,6 @@ Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -S
 | `Show-ManualValidationGuidance` | Display reference manual |
 | `Get-GuidancePlainText` | Export guidance as plain text |
 | `Get-ChangeIndicator` | Change markers for comparison display |
-| `Invoke-DomainAssessment` | Per-domain wrapper used by forest assessment |
 
 ## Parameters
 
@@ -783,7 +782,6 @@ Functions that were embedded inside the standalone scripts are now individual fi
 | `RC4_DES_Assessment.ps1` → `Get-GuidancePlainText` | `Get-GuidancePlainText` | Public |
 | `RC4_DES_Assessment.ps1` → main execution block (~800 lines) | `Invoke-RC4Assessment` | Public |
 | `Assess-ADForest.ps1` → `Show-ForestSummary` | `Show-ForestSummary` | Public |
-| `Assess-ADForest.ps1` → `Invoke-DomainAssessment` | `Invoke-DomainAssessment` | Public |
 | `Assess-ADForest.ps1` → main execution block | `Invoke-ForestAssessment` | Public |
 | `Compare-Assessments.ps1` → `Write-ComparisonHeader` | `Write-ComparisonHeader` | Private |
 | `Compare-Assessments.ps1` → `Write-ComparisonSection` | `Write-ComparisonSection` | Private |
