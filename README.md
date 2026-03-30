@@ -64,6 +64,9 @@ Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168
 # Full scan + export + reference manual
 Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults -IncludeGuidance
 
+# Full scan for a specific domain + export + reference manual
+Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs -ExportResults -IncludeGuidance
+
 # Entire forest (parallel, PS 7+)
 Invoke-ForestAssessment -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 5
 

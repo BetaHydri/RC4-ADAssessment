@@ -51,6 +51,13 @@ Invoke-RC4Assessment -IncludeGuidance
 Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs
 ```
 
+### Specific Domain — Full Assessment with Export & Guidance
+```powershell
+Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs -ExportResults -IncludeGuidance
+```
+**Runtime**: 2-5 minutes
+**Output**: JSON, CSV, and guidance text files in `.\Exports\` + reference manual displayed
+
 ### Forest-Wide Assessment
 ```powershell
 # Quick scan all domains in forest
