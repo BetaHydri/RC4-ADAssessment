@@ -3,7 +3,10 @@ BeforeAll {
         function global:Get-ADDomain { param([string]$Identity, [string]$Server, $ErrorAction) }
     }
     if (-not (Get-Command 'Get-ADUser' -ErrorAction SilentlyContinue)) {
-        function global:Get-ADUser { param([string]$Identity, [string]$Filter, [string[]]$Properties, [string]$SearchBase, [string]$Server, $ErrorAction) }
+        function global:Get-ADUser { param([string]$Identity, [string]$Filter, [string]$LDAPFilter, [string[]]$Properties, [string]$SearchBase, [string]$Server, $ErrorAction) }
+    }
+    if (-not (Get-Command 'Get-ADComputer' -ErrorAction SilentlyContinue)) {
+        function global:Get-ADComputer { param([string]$Identity, [string]$Filter, [string]$LDAPFilter, [string[]]$Properties, [string]$SearchBase, [string]$Server, $ErrorAction) }
     }
     if (-not (Get-Command 'Get-ADServiceAccount' -ErrorAction SilentlyContinue)) {
         function global:Get-ADServiceAccount { param([string]$Identity, [string]$Filter, [string[]]$Properties, [string]$Server, $ErrorAction) }
@@ -113,8 +116,8 @@ Describe 'Get-AccountEncryptionAssessment' {
                         WhenChanged                     = (Get-Date).AddDays(-30)
                     }
                 }
-                # LDAPFilter call for DeepScan users
-                if ($LDAPFilter -match 'servicePrincipalName') {
+                # LDAPFilter call: neither -Identity nor -Filter is used
+                if (-not $Identity -and -not $Filter) {
                     return @(
                         [PSCustomObject]@{
                             SamAccountName                  = 'rc4user'
@@ -150,7 +153,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                         WhenChanged                     = (Get-Date).AddDays(-30)
                     }
                 }
-                if ($LDAPFilter -match 'servicePrincipalName') {
+                if (-not $Identity -and -not $Filter) {
                     return @(
                         [PSCustomObject]@{
                             SamAccountName                  = 'desuser'
@@ -186,7 +189,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                         WhenChanged                     = (Get-Date).AddDays(-30)
                     }
                 }
-                if ($LDAPFilter -match 'servicePrincipalName') {
+                if (-not $Identity -and -not $Filter) {
                     return @(
                         [PSCustomObject]@{
                             SamAccountName                  = 'excuser'
