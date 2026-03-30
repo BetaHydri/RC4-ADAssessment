@@ -18,8 +18,8 @@ Sampler-based PowerShell module with dot-sourced function files:
 | v2.x Script | v3.0 Command |
 |---|---|
 | `RC4_DES_Assessment.ps1` | `Invoke-RC4Assessment` |
-| `Assess-ADForest.ps1` | `Invoke-ForestAssessment` |
-| `Compare-Assessments.ps1` | `Invoke-AssessmentComparison` |
+| `Assess-ADForest.ps1` | `Invoke-RC4ForestAssessment` |
+| `Compare-Assessments.ps1` | `Invoke-RC4AssessmentComparison` |
 
 ### Function Categories
 
@@ -44,8 +44,8 @@ Sampler-based PowerShell module with dot-sourced function files:
 - `Get-GuidancePlainText` — Plain text guidance generation
 - `Get-ChangeIndicator` — Comparison change markers
 - `Invoke-RC4Assessment` — Main single-domain orchestrator
-- `Invoke-ForestAssessment` — Forest-wide orchestrator (contains private nested domain assessment helper)
-- `Invoke-AssessmentComparison` — Compare two assessment exports
+- `Invoke-RC4ForestAssessment` — Forest-wide orchestrator (contains private nested domain assessment helper)
+- `Invoke-RC4AssessmentComparison` — Compare two assessment exports
 
 ## Design Patterns
 

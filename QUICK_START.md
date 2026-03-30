@@ -61,20 +61,20 @@ Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs -ExportResults -Inclu
 ### Forest-Wide Assessment
 ```powershell
 # Quick scan all domains in forest
-Invoke-ForestAssessment
+Invoke-RC4ForestAssessment
 
 # Full assessment with event logs
-Invoke-ForestAssessment -AnalyzeEventLogs -ExportResults
+Invoke-RC4ForestAssessment -AnalyzeEventLogs -ExportResults
 
 # Parallel processing (PowerShell 7+)
-Invoke-ForestAssessment -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs
+Invoke-RC4ForestAssessment -Parallel -MaxParallelDomains 5 -AnalyzeEventLogs
 ```
 **Runtime**: Varies (parallel mode processes multiple domains concurrently)
 **Output**: Per-domain JSON exports + forest-wide summary
 
 ### Compare Two Runs (Track Progress)
 ```powershell
-Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
+Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
 ```
 **Compares**: DC encryption, trusts, accounts (KRBTGT, service accounts, DES flags, missing AES keys), KDC registry, KDCSVC events (CVE-2026-20833), event log tickets
 
@@ -242,7 +242,7 @@ Assessment Summary Tables
 - 🟡 **Yellow** - WARNING status
 - 🔴 **Red** - CRITICAL/Failed status
 
-**Forest-Wide** (when using `Invoke-ForestAssessment`):
+**Forest-Wide** (when using `Invoke-RC4ForestAssessment`):
 Tables are grouped by domain, showing all DCs, event logs, and trusts across the entire forest.
 
 ---
@@ -337,7 +337,7 @@ Follow the inline fix commands shown with every finding:
 ### Phase 4: Validate & Track Progress
 ```powershell
 Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
-Invoke-AssessmentComparison -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
+Invoke-RC4AssessmentComparison -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
 ```
 Compare assessments to verify remediation progress.
 
@@ -527,7 +527,7 @@ Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 ### Workflow 3: Multi-Domain Forest Assessment (10-15 minutes)
 ```powershell
 # Assess all domains in forest with parallel processing
-Invoke-ForestAssessment -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 3
+Invoke-RC4ForestAssessment -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 3
 
 # Forest output shows per-domain DC discovery and assessment results
 ```
@@ -554,7 +554,7 @@ Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
 
 # Compare
-Invoke-AssessmentComparison -BaselineFile old.json -CurrentFile new.json -ShowDetails
+Invoke-RC4AssessmentComparison -BaselineFile old.json -CurrentFile new.json -ShowDetails
 ```
 
 ---

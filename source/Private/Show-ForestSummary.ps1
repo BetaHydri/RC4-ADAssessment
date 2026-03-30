@@ -10,10 +10,10 @@ function Show-ForestSummary {
         forest.
 
     .PARAMETER ForestResults
-        The forest assessment results hashtable returned by Invoke-ForestAssessment.
+        The forest assessment results hashtable returned by Invoke-RC4ForestAssessment.
 
     .EXAMPLE
-        $forestResults = Invoke-ForestAssessment
+        $forestResults = Invoke-RC4ForestAssessment
         Show-ForestSummary -ForestResults $forestResults
     #>
     param(
