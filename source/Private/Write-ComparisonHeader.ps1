@@ -6,7 +6,7 @@ function Write-ComparisonHeader {
     .DESCRIPTION
         Displays a prominent header block using a line of equals signs above and below the
         title text, formatted in cyan. Used to visually separate major comparison sections
-        in the Invoke-AssessmentComparison output.
+        in the Invoke-RC4AssessmentComparison output.
 
     .PARAMETER Title
         The title text to display in the header block.

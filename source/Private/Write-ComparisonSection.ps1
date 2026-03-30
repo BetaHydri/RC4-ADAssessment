@@ -6,7 +6,7 @@ function Write-ComparisonSection {
     .DESCRIPTION
         Displays a sub-section heading using a line of dashes below the title, formatted in
         yellow. Used to visually separate sub-categories within a comparison block produced
-        by Invoke-AssessmentComparison.
+        by Invoke-RC4AssessmentComparison.
 
     .PARAMETER Title
         The title text to display as the sub-section heading.

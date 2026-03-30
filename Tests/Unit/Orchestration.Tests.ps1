@@ -4,7 +4,7 @@
 .SYNOPSIS
     Pester tests for the orchestration wrapper functions.
 .DESCRIPTION
-    Tests for Invoke-RC4Assessment, Invoke-ForestAssessment, and Invoke-AssessmentComparison.
+    Tests for Invoke-RC4Assessment, Invoke-RC4ForestAssessment, and Invoke-RC4AssessmentComparison.
     All AD cmdlets and sub-functions are mocked.
 .NOTES
     Requires: Pester 5.x
@@ -140,10 +140,10 @@ Describe 'Invoke-RC4Assessment' {
 }
 
 # ============================================================
-# Invoke-AssessmentComparison
+# Invoke-RC4AssessmentComparison
 # ============================================================
 
-Describe 'Invoke-AssessmentComparison' {
+Describe 'Invoke-RC4AssessmentComparison' {
     BeforeAll {
         # Create temp JSON files for comparison testing
         $script:baselineFile = Join-Path ([System.IO.Path]::GetTempPath()) "baseline_$(Get-Random).json"
@@ -249,45 +249,45 @@ Describe 'Invoke-AssessmentComparison' {
     }
 
     It 'Does not throw with valid JSON files' {
-        { Invoke-AssessmentComparison -BaselineFile $script:baselineFile -CurrentFile $script:currentFile } | Should -Not -Throw
+        { Invoke-RC4AssessmentComparison -BaselineFile $script:baselineFile -CurrentFile $script:currentFile } | Should -Not -Throw
     }
 
     It 'Validates baseline file exists' {
-        { Invoke-AssessmentComparison -BaselineFile 'nonexistent.json' -CurrentFile $script:currentFile } | Should -Throw
+        { Invoke-RC4AssessmentComparison -BaselineFile 'nonexistent.json' -CurrentFile $script:currentFile } | Should -Throw
     }
 
     It 'Validates current file exists' {
-        { Invoke-AssessmentComparison -BaselineFile $script:baselineFile -CurrentFile 'nonexistent.json' } | Should -Throw
+        { Invoke-RC4AssessmentComparison -BaselineFile $script:baselineFile -CurrentFile 'nonexistent.json' } | Should -Throw
     }
 }
 
 # ============================================================
-# Invoke-ForestAssessment (smoke test)
+# Invoke-RC4ForestAssessment (smoke test)
 # ============================================================
 
-Describe 'Invoke-ForestAssessment' {
+Describe 'Invoke-RC4ForestAssessment' {
     It 'Has valid function definition' {
-        $cmd = Get-Command Invoke-ForestAssessment -ErrorAction SilentlyContinue
+        $cmd = Get-Command Invoke-RC4ForestAssessment -ErrorAction SilentlyContinue
         $cmd | Should -Not -BeNullOrEmpty
     }
 
     It 'Accepts ForestName parameter' {
-        $cmd = Get-Command Invoke-ForestAssessment
+        $cmd = Get-Command Invoke-RC4ForestAssessment
         $cmd.Parameters.Keys | Should -Contain 'ForestName'
     }
 
     It 'Accepts Parallel parameter' {
-        $cmd = Get-Command Invoke-ForestAssessment
+        $cmd = Get-Command Invoke-RC4ForestAssessment
         $cmd.Parameters.Keys | Should -Contain 'Parallel'
     }
 
     It 'Accepts MaxParallelDomains parameter' {
-        $cmd = Get-Command Invoke-ForestAssessment
+        $cmd = Get-Command Invoke-RC4ForestAssessment
         $cmd.Parameters.Keys | Should -Contain 'MaxParallelDomains'
     }
 
     It 'Accepts AnalyzeEventLogs parameter' {
-        $cmd = Get-Command Invoke-ForestAssessment
+        $cmd = Get-Command Invoke-RC4ForestAssessment
         $cmd.Parameters.Keys | Should -Contain 'AnalyzeEventLogs'
     }
 }

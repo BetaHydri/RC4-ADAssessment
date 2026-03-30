@@ -68,10 +68,10 @@ Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults -IncludeGuidance
 Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs -ExportResults -IncludeGuidance
 
 # Entire forest (parallel, PS 7+)
-Invoke-ForestAssessment -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 5
+Invoke-RC4ForestAssessment -AnalyzeEventLogs -ExportResults -Parallel -MaxParallelDomains 5
 
 # Compare two runs
-Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
+Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
 ```
 
 ## Prerequisites
@@ -86,8 +86,8 @@ Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -S
 | Command | Purpose |
 |---------|---------|
 | `Invoke-RC4Assessment` | Main assessment for a single domain (replaces `RC4_DES_Assessment.ps1`) |
-| `Invoke-ForestAssessment` | Forest-wide assessment across all domains (replaces `Assess-ADForest.ps1`) |
-| `Invoke-AssessmentComparison` | Compare two JSON exports to track progress (replaces `Compare-Assessments.ps1`) |
+| `Invoke-RC4ForestAssessment` | Forest-wide assessment across all domains (replaces `Assess-ADForest.ps1`) |
+| `Invoke-RC4AssessmentComparison` | Compare two JSON exports to track progress (replaces `Compare-Assessments.ps1`) |
 | `Get-DomainControllerEncryption` | DC encryption + GPO assessment |
 | `Get-TrustEncryptionAssessment` | Trust encryption evaluation |
 | `Get-KdcRegistryAssessment` | KDC registry key checks |
@@ -115,7 +115,7 @@ Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -S
 | `-IncludeGuidance` | Show full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline) | Off |
 | `-QuickScan` | Config-only scan (no event logs) | Default mode |
 
-### Invoke-ForestAssessment
+### Invoke-RC4ForestAssessment
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
@@ -241,7 +241,7 @@ Invoke-RC4Assessment `                Invoke-RC4Assessment `
 Phase 3: Remediate                    Phase 4: Validate
 Follow inline fix commands            Invoke-RC4Assessment `
   • Set-ADComputer for DCs                -AnalyzeEventLogs -ExportResults
-  • Set RC4DefaultDisablementPhase    Invoke-AssessmentComparison `
+  • Set RC4DefaultDisablementPhase    Invoke-RC4AssessmentComparison `
   • Reset service account passwords       -BaselineFile before.json `
   • klist purge after changes             -CurrentFile after.json -ShowDetails
          │                                    │
@@ -652,7 +652,7 @@ The assessment identifies accounts with passwords >5 years old or >365 days stal
 Track remediation progress by comparing two exported JSON files:
 
 ```powershell
-Invoke-AssessmentComparison -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
+Invoke-RC4AssessmentComparison -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
 ```
 
 **Example: Before and after setting `RC4DefaultDisablementPhase = 1`:**
@@ -725,8 +725,8 @@ v3.0 replaces the standalone `.ps1` scripts with the **RC4ADCheck** PowerShell m
 | v2.x (Standalone Script) | v3.0 (Module Command) | Notes |
 |---|---|---|
 | `.\RC4_DES_Assessment.ps1` | `Invoke-RC4Assessment` | All parameters identical |
-| `.\Assess-ADForest.ps1` | `Invoke-ForestAssessment` | Added `-IncludeGuidance` parameter |
-| `.\Compare-Assessments.ps1` | `Invoke-AssessmentComparison` | All parameters identical |
+| `.\Assess-ADForest.ps1` | `Invoke-RC4ForestAssessment` | Added `-IncludeGuidance` parameter |
+| `.\Compare-Assessments.ps1` | `Invoke-RC4AssessmentComparison` | All parameters identical |
 | `.\Test-EventLogFailureHandling.ps1` | *(removed)* | Replaced by Pester unit tests |
 
 ### Usage Examples — Before and After
@@ -753,7 +753,7 @@ Invoke-RC4Assessment -Domain contoso.com -AnalyzeEventLogs -EventLogHours 48 -Ex
 .\Assess-ADForest.ps1 -AnalyzeEventLogs -Parallel -MaxParallelDomains 5
 
 # v3.0: Same parameters
-Invoke-ForestAssessment -AnalyzeEventLogs -Parallel -MaxParallelDomains 5
+Invoke-RC4ForestAssessment -AnalyzeEventLogs -Parallel -MaxParallelDomains 5
 ```
 
 ```powershell
@@ -761,7 +761,7 @@ Invoke-ForestAssessment -AnalyzeEventLogs -Parallel -MaxParallelDomains 5
 .\Compare-Assessments.ps1 -BaselineFile before.json -CurrentFile after.json -ShowDetails
 
 # v3.0: Same parameters
-Invoke-AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
+Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
 ```
 
 ### Internal Function Mapping
@@ -782,11 +782,11 @@ Functions that were embedded inside the standalone scripts are now individual fi
 | `RC4_DES_Assessment.ps1` → `Get-GuidancePlainText` | `Get-GuidancePlainText` | Public |
 | `RC4_DES_Assessment.ps1` → main execution block (~800 lines) | `Invoke-RC4Assessment` | Public |
 | `Assess-ADForest.ps1` → `Show-ForestSummary` | `Show-ForestSummary` | Public |
-| `Assess-ADForest.ps1` → main execution block | `Invoke-ForestAssessment` | Public |
+| `Assess-ADForest.ps1` → main execution block | `Invoke-RC4ForestAssessment` | Public |
 | `Compare-Assessments.ps1` → `Write-ComparisonHeader` | `Write-ComparisonHeader` | Private |
 | `Compare-Assessments.ps1` → `Write-ComparisonSection` | `Write-ComparisonSection` | Private |
 | `Compare-Assessments.ps1` → `Get-ChangeIndicator` | `Get-ChangeIndicator` | Public |
-| `Compare-Assessments.ps1` → main execution block | `Invoke-AssessmentComparison` | Public |
+| `Compare-Assessments.ps1` → main execution block | `Invoke-RC4AssessmentComparison` | Public |
 | `RC4_DES_Assessment.ps1` → `Write-Header` | `Write-Header` | Private |
 | `RC4_DES_Assessment.ps1` → `Write-Section` | `Write-Section` | Private |
 | `RC4_DES_Assessment.ps1` → `Write-Finding` | `Write-Finding` | Private |
