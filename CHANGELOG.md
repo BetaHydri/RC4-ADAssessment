@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-03-30
+
 ### Changed
 
 - Renamed module from `RC4ADCheck` to `RC4-ADAssessment` to match the repository name
