@@ -1,4 +1,4 @@
-function Invoke-RC4Assessment {
+﻿function Invoke-RC4Assessment {
 <#
 .SYNOPSIS
     Run a DES/RC4 Kerberos encryption assessment for a single Active Directory domain.
@@ -31,7 +31,16 @@ function Invoke-RC4Assessment {
 
     Quick config-only scan: DCs, GPOs, trusts, KRBTGT, service accounts. No remote
     event log or registry queries. Fastest mode, safe for large environments.
+.EXAMPLE
+    Invoke-RC4Assessment -DeepScan
 
+    Extended scan: also checks all enabled user accounts (not just SPN-bearing) and
+    all computer accounts (excluding DCs). Still no remote DC queries — safe and fast.
+.EXAMPLE
+    Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults
+
+    Maximum coverage: deep account scan + KDC registry + KDCSVC events + 7 days of
+    event logs. Connects remotely to every DC.
 .EXAMPLE
     Invoke-RC4Assessment -Domain "contoso.com" -AnalyzeEventLogs -EventLogHours 48 -ExportResults
 .EXAMPLE
