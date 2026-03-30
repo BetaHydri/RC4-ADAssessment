@@ -227,27 +227,22 @@ Event Log Analysis - Actual DES/RC4 Usage
 
 ```mermaid
 flowchart TD
-    Start([🔍 Start Assessment]) --> P1
+    Start(["Start Assessment"])
+    Start --> P1
 
-    P1["Phase 1: Discovery
-    Invoke-RC4Assessment -ExportResults"]
-    P1 --> Decision{Results?}
+    P1["Phase 1: Discovery"]
+    P1 --> Decision{"Results?"}
 
-    Decision -- ✅ All OK --> Monitor([📊 Monitor periodically])
-    Decision -- ⚠ Issues --> P2
+    Decision -- "All OK" --> Monitor(["Monitor periodically"])
+    Decision -- "Issues found" --> P2
 
-    P2["Phase 2: Deep Scan
-    Invoke-RC4Assessment -DeepScan -ExportResults"]
+    P2["Phase 2: Deep Scan"]
     P2 --> P3
 
-    P3["Phase 3: Full Analysis
-    Invoke-RC4Assessment -DeepScan
-    -AnalyzeEventLogs -EventLogHours 168
-    -ExportResults"]
+    P3["Phase 3: Full Analysis"]
     P3 --> P4
 
-    P4["Phase 4: Remediate
-    Follow inline fix commands"]
+    P4["Phase 4: Remediate"]
     P4 --> P4a["Set-ADComputer for DCs"]
     P4 --> P4b["Set RC4DefaultDisablementPhase"]
     P4 --> P4c["Reset service account passwords"]
@@ -255,17 +250,22 @@ flowchart TD
 
     P4a & P4b & P4c & P4d --> P5
 
-    P5["Phase 5: Validate
-    Invoke-RC4Assessment -DeepScan
-    -AnalyzeEventLogs -ExportResults"]
-    P5 --> Compare["Invoke-RC4AssessmentComparison
-    -BaselineFile before.json
-    -CurrentFile after.json -ShowDetails"]
-    Compare --> Check{All clean?}
+    P5["Phase 5: Validate"]
+    P5 --> Compare["Compare assessments"]
+    Compare --> Check{"All clean?"}
 
-    Check -- No --> P4
-    Check -- Yes --> Done([✅ Ready for July 2026 RC4 removal])
+    Check -- "No" --> P4
+    Check -- "Yes" --> Done(["Ready for July 2026"])
 ```
+
+| Phase | Command |
+|-------|---------|
+| **1 — Discovery** | `Invoke-RC4Assessment -ExportResults` |
+| **2 — Deep Scan** | `Invoke-RC4Assessment -DeepScan -ExportResults` |
+| **3 — Full Analysis** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults` |
+| **4 — Remediate** | Follow inline fix commands (Set-ADComputer, registry, password resets, klist purge) |
+| **5 — Validate** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults` |
+| **Compare** | `Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails` |
 
 ## July 2026 RC4 Removal Timeline
 
