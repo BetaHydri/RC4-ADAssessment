@@ -15,6 +15,9 @@
   Export individual domain results and forest summary to JSON/CSV files.
 .PARAMETER IncludeGuidance
   Include full reference manual and export guidance text file per domain.
+.PARAMETER DeepScan
+  Extends the assessment to scan all enabled user accounts (not just those with SPNs)
+  and all enabled computer accounts (excluding DCs) for RC4/DES encryption configurations.
 .PARAMETER Parallel
   Process domains in parallel (requires PowerShell 7+).
 .PARAMETER MaxParallelDomains
@@ -42,6 +45,9 @@
 
         [Parameter()]
         [switch]$IncludeGuidance,
+
+        [Parameter()]
+        [switch]$DeepScan,
 
         [Parameter()]
         [switch]$Parallel,
@@ -137,7 +143,8 @@
             [bool]$AnalyzeLogs,
             [int]$Hours,
             [bool]$Export,
-            [bool]$Guidance
+            [bool]$Guidance,
+            [bool]$Deep
         )
 
         Write-Host "`n$("=" * 80)" -ForegroundColor Yellow
@@ -191,6 +198,10 @@
 
         if ($Guidance) {
             $params['IncludeGuidance'] = $true
+        }
+
+        if ($Deep) {
+            $params['DeepScan'] = $true
         }
 
         try {
@@ -277,6 +288,10 @@
                 $params['IncludeGuidance'] = $true
             }
 
+            if ($using:DeepScan) {
+                $params['DeepScan'] = $true
+            }
+
             # Run assessment with splatted parameters and capture returned results object
             $assessmentResults = Invoke-RC4Assessment @params
 
@@ -299,7 +314,7 @@
         foreach ($domain in $domainList) {
             $result = Invoke-DomainAssessment -DomainName $domain `
                 -ScriptDir $scriptDir -AnalyzeLogs $AnalyzeEventLogs -Hours $EventLogHours `
-                -Export $ExportResults -Guidance $IncludeGuidance
+                -Export $ExportResults -Guidance $IncludeGuidance -Deep $DeepScan
             $forestResults.DomainResults += $result
         }
     }
