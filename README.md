@@ -297,6 +297,7 @@ flowchart TD
 | 24 | 0x18 | AES128 + AES256 | **Recommended (AES-only)** |
 | 28 | 0x1C | RC4 + AES128 + AES256 | **RC4 exception with AES** |
 | 31 | 0x1F | DES-CBC-CRC, DES-CBC-MD5, RC4, AES128, AES256 | All types (insecure — includes DES) |
+| 2147483672 | 0x80000018 | AES128 + AES256 + Future encryption types | **CIS Benchmark recommended GPO value** |
 
 > **Tip:** The value is a bitmask — add the decimal values for the types you need.
 > For per-account RC4 exceptions, use **28 (`0x1C`)** = RC4 (4) + AES128 (8) + AES256 (16).

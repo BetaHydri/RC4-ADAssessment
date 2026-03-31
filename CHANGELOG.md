@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- GPO recommendation text now includes **Future encryption types** alongside AES128_HMAC_SHA1 and AES256_HMAC_SHA1, per CIS Benchmark 2.3.11.4
+- `Get-EncryptionTypeString` recognises the `0x80000000` (Future encryption types) bit
+- Updated guidance in `Get-GuidancePlainText` and `Show-ManualValidationGuidance` GPO Validation sections
+- Updated DeepScan inline info message to reference Future encryption types
+
 ## [4.1.2] - 2026-03-31
 
 ### Fixed
