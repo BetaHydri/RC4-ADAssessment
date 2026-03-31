@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.1.2] - 2026-03-31
+
+### Fixed
+
+- `Invoke-RC4ForestAssessment` crashed with `Split-Path: Cannot bind argument to
+  parameter 'Path' because it is null` and `RC4_DES_Assessment.ps1 not found` when
+  running as a module function because legacy standalone-script path validation
+  used `$MyInvocation.MyCommand.Path` (null for module functions) and referenced
+  an undefined `$assessmentScript` variable
+- Sequential domain processing in `Invoke-RC4ForestAssessment` invoked
+  `& $ScriptDir @params` instead of calling `Invoke-RC4Assessment` directly
+  (the parallel code path was already correct)
+
 ## [4.0.0] - 2026-03-30
 
 ### Changed
