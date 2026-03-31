@@ -698,7 +698,7 @@
                     # Report OS-default computers (INFO — fix with a single GPO)
                     if ($assessment.DeepScanComputersOSDefault -gt 0) {
                         Write-Finding -Status "INFO" -Message "[DeepScan] $($assessment.DeepScanComputersOSDefault) computer(s) have OS-default encryption (0x1C = RC4+AES)" `
-                            -Detail "Windows stamps RC4+AES on domain join. Deploy a domain-level GPO to set 'Network security: Configure encryption types allowed for Kerberos' = AES128 + AES256 only"
+                            -Detail "Windows stamps RC4+AES on domain join. Deploy a domain-level GPO to set 'Network security: Configure encryption types allowed for Kerberos' = AES128 + AES256 + Future encryption types"
                     }
 
                     # Report problematic computers (WARNING — need per-computer investigation)

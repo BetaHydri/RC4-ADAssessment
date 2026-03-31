@@ -307,7 +307,7 @@ try {
             Message = "[$($results.Domain)] Remove RC4 encryption from $($results.DomainControllers.RC4Configured) Domain Controller(s): $rc4DCs"
             Fix     = @(
                 "Set-ADComputer $rc4DCs -Replace @{'msDS-SupportedEncryptionTypes'=24}"
-                "# Or configure via GPO: 'Network security: Configure encryption types allowed for Kerberos' = AES128 + AES256"
+                "# Or configure via GPO: 'Network security: Configure encryption types allowed for Kerberos' = AES128 + AES256 + Future encryption types"
             )
         }
     }
@@ -565,7 +565,7 @@ try {
                 Fix     = @(
                     "# Deploy domain-level GPO:"
                     "# Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > Security Options"
-                    "# 'Network security: Configure encryption types allowed for Kerberos' = AES128_HMAC_SHA1 + AES256_HMAC_SHA1"
+                    "# 'Network security: Configure encryption types allowed for Kerberos' = AES128_HMAC_SHA1 + AES256_HMAC_SHA1 + Future encryption types"
                 )
             }
         }
