@@ -60,16 +60,6 @@
 
     #endregion
 
-    # Script paths
-    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-    # Assessment is now via Invoke-RC4Assessment module function
-
-    # Verify assessment script exists
-    if (-not (Test-Path $assessmentScript)) {
-        Write-Error "RC4_DES_Assessment.ps1 not found in $scriptDir"
-        exit 1
-    }
-
     # Configure console encoding
     $null = [Console]::OutputEncoding
     try {
@@ -139,7 +129,6 @@
     function Invoke-DomainAssessment {
         param(
             [string]$DomainName,
-            [string]$ScriptDir,
             [bool]$AnalyzeLogs,
             [int]$Hours,
             [bool]$Export,
@@ -206,7 +195,7 @@
 
         try {
             # Run assessment and capture returned results object
-            $assessmentResults = & $ScriptDir @params
+            $assessmentResults = Invoke-RC4Assessment @params
 
             # Parse results (if exported)
             if ($Export) {
@@ -214,15 +203,15 @@
                 $timestamp = Get-Date -Format "yyyyMMdd"
                 $jsonPattern = "DES_RC4_Assessment_${domainSafe}_${timestamp}*.json"
 
-                # Look in Exports folder first, then fallback to script root
-                $exportFolder = Join-Path -Path $ScriptDir -ChildPath "Exports"
+                # Look in Exports folder first, then fallback to current directory
+                $exportFolder = Join-Path -Path $PWD -ChildPath "Exports"
                 $resultFile = Get-ChildItem -Path $exportFolder -Filter $jsonPattern -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending |
                 Select-Object -First 1
 
                 if (-not $resultFile) {
-                    # Fallback to script root for backwards compatibility
-                    $resultFile = Get-ChildItem -Path $ScriptDir -Filter $jsonPattern -ErrorAction SilentlyContinue |
+                    # Fallback to current directory for backwards compatibility
+                    $resultFile = Get-ChildItem -Path $PWD -Filter $jsonPattern -ErrorAction SilentlyContinue |
                     Sort-Object LastWriteTime -Descending |
                     Select-Object -First 1
                 }
@@ -313,7 +302,7 @@
 
         foreach ($domain in $domainList) {
             $result = Invoke-DomainAssessment -DomainName $domain `
-                -ScriptDir $scriptDir -AnalyzeLogs $AnalyzeEventLogs -Hours $EventLogHours `
+                -AnalyzeLogs $AnalyzeEventLogs -Hours $EventLogHours `
                 -Export $ExportResults -Guidance $IncludeGuidance -Deep $DeepScan
             $forestResults.DomainResults += $result
         }
