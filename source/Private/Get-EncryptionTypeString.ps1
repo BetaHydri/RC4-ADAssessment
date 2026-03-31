@@ -28,6 +28,7 @@ function Get-EncryptionTypeString {
     if ($Value -band 0x4) { $types += "RC4-HMAC" }
     if ($Value -band 0x8) { $types += "AES128-HMAC" }
     if ($Value -band 0x10) { $types += "AES256-HMAC" }
+    if ($Value -band ([int]::MinValue)) { $types += "Future" }
 
     return ($types -join ", ")
 }

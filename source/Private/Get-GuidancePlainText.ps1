@@ -88,7 +88,7 @@ ktpass command reference:
    PS> Start-Process C:\gpresult.html
 
    Look for: "Network security: Configure encryption types allowed for Kerberos"
-   Should show: AES128_HMAC_SHA1, AES256_HMAC_SHA1
+   Should show: AES128_HMAC_SHA1, AES256_HMAC_SHA1, Future encryption types
    Should NOT show: DES_CBC_CRC, DES_CBC_MD5, RC4_HMAC_MD5
 
 4. Computer Object Assessment (If Needed)
