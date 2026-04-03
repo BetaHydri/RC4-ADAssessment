@@ -332,32 +332,42 @@ Every finding includes copy-paste PowerShell commands to fix the issue, includin
 
 ## 🚀 Migration Path (Preparing for July 2026)
 
-### Phase 1: Initial AD Scan
+### Phase 1: Discovery (DCs, trusts, service accounts, logs)
 ```powershell
-Invoke-RC4Assessment -DeepScan -ExportResults
+Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults
 ```
-Get baseline configuration including all user and computer accounts.
+Focus on the highest-risk items first: DCs, trusts, KRBTGT, service accounts, KDC registry, KDCSVC events, and event logs. No `-DeepScan` yet — avoid drowning in bulk account findings before critical items are fixed.
 
-### Phase 2: Usage Analysis
-```powershell
-Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults
-```
-Full scan: deep account analysis + 7 days of event logs. Export for comparison.
-
-### Phase 3: Remediate
+### Phase 2: Remediate (high-risk items)
 Follow the inline fix commands shown with every finding:
-- `Set-ADComputer` / `Set-ADUser` for encryption types
+- `Set-ADComputer` / `Set-ADUser` for DC and service account encryption types
 - `Set-ItemProperty` for KDC registry keys (`RC4DefaultDisablementPhase`)
-- `Set-ADAccountPassword` + `klist purge` for accounts needing AES key generation
+- `Set-ADAccountPassword` + `klist purge` for service accounts needing AES key generation
 
-### Phase 4: Validate & Track Progress
+### Phase 3: Validate
 ```powershell
-Invoke-RC4Assessment -AnalyzeEventLogs -EventLogHours 168 -ExportResults
-Invoke-RC4AssessmentComparison -BaselineFile week1.json -CurrentFile week2.json -ShowDetails
+Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults
+Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails
 ```
-Compare assessments to verify remediation progress.
+Compare assessments to confirm all critical items are resolved before moving on.
 
-### Phase 5: Monitoring Setup
+### Phase 4: Deep Sweep (all users + computers)
+```powershell
+Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults
+```
+Now scan all enabled user accounts and computer accounts for remaining RC4/DES configurations.
+
+### Phase 5: Final Remediate (bulk cleanup)
+- Password resets for remaining accounts with missing AES keys
+- Address any non-default computer account encryption configs
+
+### Phase 6: Final Validate
+```powershell
+Invoke-RC4AssessmentComparison -BaselineFile deep-before.json -CurrentFile deep-after.json -ShowDetails
+```
+Confirm everything is clean. Repeat Phase 5–6 as needed.
+
+### Ongoing: Monitoring Setup
 ```powershell
 Invoke-RC4Assessment -IncludeGuidance
 ```

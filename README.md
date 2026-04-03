@@ -230,42 +230,49 @@ flowchart TD
     Start(["Start Assessment"])
     Start --> P1
 
-    P1["Phase 1: Discovery"]
+    P1["Phase 1: Discovery\n(DCs, trusts, service accounts, logs)"]
     P1 --> Decision{"Results?"}
 
     Decision -- "All OK" --> Monitor(["Monitor periodically"])
     Decision -- "Issues found" --> P2
 
-    P2["Phase 2: Deep Scan"]
-    P2 --> P3
+    P2["Phase 2: Remediate\n(high-risk items first)"]
+    P2 --> P2a["Set-ADComputer for DCs"]
+    P2 --> P2b["Set RC4DefaultDisablementPhase"]
+    P2 --> P2c["Reset service account passwords"]
+    P2 --> P2d["klist purge after changes"]
 
-    P3["Phase 3: Full Analysis"]
-    P3 --> P4
+    P2a & P2b & P2c & P2d --> P3
 
-    P4["Phase 4: Remediate"]
-    P4 --> P4a["Set-ADComputer for DCs"]
-    P4 --> P4b["Set RC4DefaultDisablementPhase"]
-    P4 --> P4c["Reset service account passwords"]
-    P4 --> P4d["klist purge after changes"]
+    P3["Phase 3: Validate"]
+    P3 --> Compare1["Compare assessments"]
+    Compare1 --> Check1{"Critical items clean?"}
 
-    P4a & P4b & P4c & P4d --> P5
+    Check1 -- "No" --> P2
+    Check1 -- "Yes" --> P4
 
-    P5["Phase 5: Validate"]
-    P5 --> Compare["Compare assessments"]
-    Compare --> Check{"All clean?"}
+    P4["Phase 4: Deep Sweep\n(all users + computers)"]
+    P4 --> P5
 
-    Check -- "No" --> P4
-    Check -- "Yes" --> Done(["Ready for July 2026"])
+    P5["Phase 5: Final Remediate\n(password resets for remaining accounts)"]
+    P5 --> P6
+
+    P6["Phase 6: Final Validate"]
+    P6 --> Compare2["Compare assessments"]
+    Compare2 --> Check2{"All clean?"}
+
+    Check2 -- "No" --> P5
+    Check2 -- "Yes" --> Done(["Ready for July 2026"])
 ```
 
-| Phase | Command |
-|-------|---------|
-| **1 — Discovery** | `Invoke-RC4Assessment -ExportResults` |
-| **2 — Deep Scan** | `Invoke-RC4Assessment -DeepScan -ExportResults` |
-| **3 — Full Analysis** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -EventLogHours 168 -ExportResults` |
-| **4 — Remediate** | Follow inline fix commands (Set-ADComputer, registry, password resets, klist purge) |
-| **5 — Validate** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults` |
-| **Compare** | `Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails` |
+| Phase | Command | Focus |
+|-------|---------|-------|
+| **1 — Discovery** | `Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults` | DCs, trusts, KRBTGT, service accounts, KDC registry, KDCSVC events, event logs |
+| **2 — Remediate** | Follow inline fix commands | Fix DCs, service accounts, trusts, registry — highest-risk items first |
+| **3 — Validate** | `Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails` | Confirm critical items are resolved |
+| **4 — Deep Sweep** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults` | All enabled users + computer accounts for remaining RC4/DES configs |
+| **5 — Final Remediate** | Password resets for remaining missing-AES accounts | Bulk cleanup of normal accounts |
+| **6 — Final Validate** | `Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails` | Confirm everything is clean |
 
 ## July 2026 RC4 Removal Timeline
 
