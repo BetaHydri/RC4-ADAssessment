@@ -158,6 +158,38 @@ Referenzen:
 - [KB5073381 — CVE-2026-20833-Bereitstellungsleitfaden](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
 - [RC4-Nutzung in Kerberos erkennen und beheben](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
 
+**F: Was ist der Unterschied zwischen Kerberos-Tickets und Sitzungsschlüsseln (Session Keys)?**
+
+Kerberos verwendet zwei getrennte kryptografische Ebenen, die jeweils unabhängig
+voneinander RC4 oder AES nutzen können:
+
+- **Tickets (TGT und TGS):** Das TGT (Ticket Granting Ticket) wird bei der
+  Erstanmeldung (AS-REQ) ausgestellt und mit dem Schlüssel des KRBTGT-Kontos
+  verschlüsselt. Das TGS (Dienstticket) wird beim Zugriff auf einen Dienst
+  (TGS-REQ) ausgestellt und mit dem Schlüssel des Ziel-Dienstkontos
+  verschlüsselt. Der Verschlüsselungstyp des Tickets wird durch das Attribut
+  `msDS-SupportedEncryptionTypes` des Zielkontos und die KDC-Konfiguration
+  bestimmt. Diesen Wert zeigt das Feld `TicketEncryptionType` in den
+  Security-Ereignissen 4768/4769.
+- **Sitzungsschlüssel (Session Keys):** Ein temporärer symmetrischer Schlüssel,
+  der vom KDC erzeugt und im Ticket hinterlegt wird. Der Sitzungsschlüssel
+  verschlüsselt die laufende Kommunikation zwischen Client und Dienst (bzw.
+  Client und KDC). Sein Verschlüsselungstyp wird separat ausgehandelt und kann
+  sich vom Ticket-Verschlüsselungstyp unterscheiden.
+
+**Warum das für die RC4-Bewertung wichtig ist:** Ein Dienstticket kann
+AES-verschlüsselt sein, während der darin enthaltene Sitzungsschlüssel RC4
+verwendet — oder umgekehrt. RC4-Sitzungsschlüssel sind eine eigenständige
+RC4-Abhängigkeit, die **keine KDCSVC-Events 201–209 auslöst**, da die
+Deaktivierungslogik des KDC auf die Ticket-Verschlüsselung abzielt, nicht auf
+die Sitzungsschlüssel-Aushandlung. Diese RC4-Sitzungsschlüssel sind nur über
+die Security-Ereignisprotokollanalyse (4768/4769) sichtbar — genau deshalb
+enthält RC4-ADAssessment die Ereignisprotokoll-Korrelation als kritische
+Erkennungsebene.
+
+Referenz:
+[MS-KILE — Kerberos Protocol Extensions](https://learn.microsoft.com/openspecs/windows_protocols/ms-kile/2a32282e-6ab7-4f56-b532-870c74e1c653)
+
 **F: Was ist mit dem AzureADKerberos-Objekt in der DC-OU?**
 
 Es wird automatisch erkannt und von den DC-Zählern ausgeschlossen. Das
