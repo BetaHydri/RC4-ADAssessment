@@ -48,3 +48,9 @@ Key conventions:
 - Module prefix file: `source/prefix.ps1` (injected at top of built module)
 - Build config: `build.yaml`
 - Dependencies already resolved in `output/RequiredModules/` — skip `-ResolveDependency`
+
+## Available CLI Tools
+
+- **GitHub CLI (`gh`)**: Always available on this machine. Use `gh` for creating PRs,
+  managing issues, checking workflow status, etc. No need to search for MCP tools or
+  alternative approaches — just call `gh` directly via the terminal.
