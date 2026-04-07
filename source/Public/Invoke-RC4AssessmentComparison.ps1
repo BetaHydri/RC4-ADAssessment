@@ -200,14 +200,19 @@ function Invoke-RC4AssessmentComparison {
             Write-ComparisonSection "Event Log Analysis Changes"
 
             $eventChanges = @{
-                RC4Tickets = Get-ChangeIndicator -Old $baseline.EventLogs.RC4Tickets -New $current.EventLogs.RC4Tickets
-                DESTickets = Get-ChangeIndicator -Old $baseline.EventLogs.DESTickets -New $current.EventLogs.DESTickets
-                AESTickets = Get-ChangeIndicator -Old $baseline.EventLogs.AESTickets -New $current.EventLogs.AESTickets
+                RC4Tickets    = Get-ChangeIndicator -Old $baseline.EventLogs.RC4Tickets -New $current.EventLogs.RC4Tickets
+                DESTickets    = Get-ChangeIndicator -Old $baseline.EventLogs.DESTickets -New $current.EventLogs.DESTickets
+                AESTickets    = Get-ChangeIndicator -Old $baseline.EventLogs.AESTickets -New $current.EventLogs.AESTickets
+                SessionKeyRC4 = Get-ChangeIndicator -Old $(if ($baseline.EventLogs.SessionKeyRC4) { $baseline.EventLogs.SessionKeyRC4 } else { 0 }) -New $(if ($current.EventLogs.SessionKeyRC4) { $current.EventLogs.SessionKeyRC4 } else { 0 })
             }
 
             Write-Host "  RC4 Tickets:     $($baseline.EventLogs.RC4Tickets) $($eventChanges.RC4Tickets.Symbol) $($current.EventLogs.RC4Tickets)" -ForegroundColor $(if ($eventChanges.RC4Tickets.Status -eq "Improved") { "Green" } else { $eventChanges.RC4Tickets.Color })
             Write-Host "  DES Tickets:     $($baseline.EventLogs.DESTickets) $($eventChanges.DESTickets.Symbol) $($current.EventLogs.DESTickets)" -ForegroundColor $(if ($eventChanges.DESTickets.Status -eq "Improved") { "Green" } else { $eventChanges.DESTickets.Color })
             Write-Host "  AES Tickets:     $($baseline.EventLogs.AESTickets) $($eventChanges.AESTickets.Symbol) $($current.EventLogs.AESTickets)" -ForegroundColor $(if ($eventChanges.AESTickets.Status -eq "Worsened") { "Red" } else { $eventChanges.AESTickets.Color })
+
+            $baseSessionRC4 = if ($baseline.EventLogs.SessionKeyRC4) { $baseline.EventLogs.SessionKeyRC4 } else { 0 }
+            $currSessionRC4 = if ($current.EventLogs.SessionKeyRC4) { $current.EventLogs.SessionKeyRC4 } else { 0 }
+            Write-Host "  RC4 Session Keys: $baseSessionRC4 $($eventChanges.SessionKeyRC4.Symbol) $currSessionRC4" -ForegroundColor $(if ($eventChanges.SessionKeyRC4.Status -eq "Improved") { "Green" } else { $eventChanges.SessionKeyRC4.Color })
         }
 
         # KDCSVC Event Comparison (v2.4.0+ data, CVE-2026-20833)

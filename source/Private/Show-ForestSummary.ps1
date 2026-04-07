@@ -69,6 +69,7 @@ function Show-ForestSummary {
                             'Events'            = if ($eventData.EventsAnalyzed) { $eventData.EventsAnalyzed } else { 0 }
                             'RC4'               = if ($eventData.RC4Tickets) { $eventData.RC4Tickets } else { 0 }
                             'DES'               = if ($eventData.DESTickets) { $eventData.DESTickets } else { 0 }
+                            'RC4 SessKey'       = if ($eventData.SessionKeyRC4) { $eventData.SessionKeyRC4 } else { 0 }
                         }
                     }
                 }
@@ -83,6 +84,7 @@ function Show-ForestSummary {
                             'Events'            = 0
                             'RC4'               = 0
                             'DES'               = 0
+                            'RC4 SessKey'       = 0
                         }
                     }
                 }
