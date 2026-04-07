@@ -167,15 +167,25 @@ RC4 or AES:
   separately and can differ from the ticket encryption type.
 
 **Why this matters for RC4 assessment:** A service ticket can be AES-encrypted
-while the session key inside it uses RC4 — or vice versa. RC4 session keys are
-a separate RC4 dependency that **does not trigger KDCSVC events 201–209**
-because the KDC's disablement logic focuses on ticket encryption, not session
-key negotiation. These RC4 session keys are only visible through Security event
-log analysis (4768/4769), which is why RC4-ADAssessment includes event log
-correlation as a critical detection layer.
+while the session key inside it uses RC4 — or vice versa. KDCSVC events 201–209
+fire only when the KDC **cannot issue AES** for either tickets or session keys
+based on the account's configuration (KB5073381: *"only generated when Active
+Directory is unable to issue AES-SHA1 service tickets or session keys"*).
+However, when AES **is** configured but RC4 is still **actually negotiated** —
+for example because the client requests RC4, or because the account password was
+never reset to generate AES keys — **no KDCSVC event is produced**. These
+silent RC4 usages are only visible in the `TicketEncryptionType` and
+`SessionEncryptionType` fields of Security events 4768/4769, which is why
+RC4-ADAssessment includes event log correlation as a critical detection layer.
+Microsoft's own `Get-KerbEncryptionUsage.ps1` script
+([Kerberos-Crypto](https://github.com/microsoft/Kerberos-Crypto)) tracks
+`Ticket` and `SessionKey` encryption types separately for the same reason.
 
-Reference:
-[MS-KILE — Kerberos Protocol Extensions](https://learn.microsoft.com/openspecs/windows_protocols/ms-kile/2a32282e-6ab7-4f56-b532-870c74e1c653)
+References:
+
+- [MS-KILE — Kerberos Protocol Extensions](https://learn.microsoft.com/openspecs/windows_protocols/ms-kile/2a32282e-6ab7-4f56-b532-870c74e1c653)
+- [KB5073381 — CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
+- [Detect and remediate RC4 usage in Kerberos](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
 
 **Q: What about the AzureADKerberos object in the DC OU?**
 

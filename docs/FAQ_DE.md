@@ -179,16 +179,26 @@ voneinander RC4 oder AES nutzen können:
 
 **Warum das für die RC4-Bewertung wichtig ist:** Ein Dienstticket kann
 AES-verschlüsselt sein, während der darin enthaltene Sitzungsschlüssel RC4
-verwendet — oder umgekehrt. RC4-Sitzungsschlüssel sind eine eigenständige
-RC4-Abhängigkeit, die **keine KDCSVC-Events 201–209 auslöst**, da die
-Deaktivierungslogik des KDC auf die Ticket-Verschlüsselung abzielt, nicht auf
-die Sitzungsschlüssel-Aushandlung. Diese RC4-Sitzungsschlüssel sind nur über
-die Security-Ereignisprotokollanalyse (4768/4769) sichtbar — genau deshalb
-enthält RC4-ADAssessment die Ereignisprotokoll-Korrelation als kritische
-Erkennungsebene.
+verwendet — oder umgekehrt. KDCSVC-Events 201–209 werden nur ausgelöst, wenn
+der KDC für ein Konto **kein AES ausstellen kann** — weder für Tickets noch für
+Sitzungsschlüssel (KB5073381: *„werden nur erzeugt, wenn Active Directory keine
+AES-SHA1-Diensttickets oder Sitzungsschlüssel ausstellen kann"*). Wenn AES
+jedoch **konfiguriert ist**, RC4 aber trotzdem **tatsächlich ausgehandelt wird**
+— z. B. weil der Client RC4 anfordert oder weil das Kontokennwort nie
+zurückgesetzt wurde, um AES-Schlüssel zu generieren — wird **kein KDCSVC-Event
+erzeugt**. Diese stillen RC4-Nutzungen sind nur in den Feldern
+`TicketEncryptionType` und `SessionEncryptionType` der Security-Ereignisse
+4768/4769 sichtbar — genau deshalb enthält RC4-ADAssessment die
+Ereignisprotokoll-Korrelation als kritische Erkennungsebene. Microsofts eigenes
+Skript `Get-KerbEncryptionUsage.ps1`
+([Kerberos-Crypto](https://github.com/microsoft/Kerberos-Crypto)) trackt
+`Ticket`- und `SessionKey`-Verschlüsselungstypen aus demselben Grund getrennt.
 
-Referenz:
-[MS-KILE — Kerberos Protocol Extensions](https://learn.microsoft.com/openspecs/windows_protocols/ms-kile/2a32282e-6ab7-4f56-b532-870c74e1c653)
+Referenzen:
+
+- [MS-KILE — Kerberos Protocol Extensions](https://learn.microsoft.com/openspecs/windows_protocols/ms-kile/2a32282e-6ab7-4f56-b532-870c74e1c653)
+- [KB5073381 — CVE-2026-20833-Bereitstellungsleitfaden](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
+- [RC4-Nutzung in Kerberos erkennen und beheben](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
 
 **F: Was ist mit dem AzureADKerberos-Objekt in der DC-OU?**
 
