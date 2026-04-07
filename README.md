@@ -775,6 +775,33 @@ The standard scan (without `-DeepScan`) already covers most account types. Here 
 2. **DES-enabled users without SPNs** — accounts with DES bits alongside AES
 3. **Computer account scanning** — not covered by any standard check
 
+### Real-World Example: Standard Scan Detects RC4-Only Account
+
+A normal user account `tim` had its `msDS-SupportedEncryptionTypes` set to `0x4` (RC4-only). Running the standard scan **without** `-DeepScan` produces:
+
+```
+Overall Security Assessment
+────────────────────────────────────────────────────────────────
+⚠ Security warnings detected — remediation recommended
+
+  Recommendations & Remediation:
+    • WARNING: [contoso.com] 1 account(s) have explicit RC4 exception (0x1C) —
+      review and remove RC4 when possible: gmsa-ces$
+      # These accounts explicitly allow RC4 (msDS-SupportedEncryptionTypes includes 0x4 + AES)
+      # To harden: remove RC4 and set AES-only:
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+
+    • WARNING: [contoso.com] 1 account(s) may be missing AES keys: tim (last logon: 2026-03-30)
+      # Option 1: Reset password to generate AES keys:
+      PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+      # If AES is still not used after password reset, explicitly set AES:
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+```
+
+The account `tim` was detected by **Path A** (explicit non-AES encryption) — no `-DeepScan` needed. The `gmsa-ces$` account with `0x1C` (RC4 + AES) is a separate RC4-exception finding.
+
 ### Example: Old Password but Explicit Encryption Types
 
 | Attribute | Value |
