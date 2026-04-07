@@ -765,6 +765,26 @@ Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 
 After the password reset, AES keys will be generated automatically (assuming DFL ≥ 2008).
 
+## Event Log Encryption Type Reference
+
+Security events 4768 (TGT request) and 4769 (service ticket request) contain `TicketEncryptionType` and `SessionKeyEncryptionType` fields that indicate the actual encryption used. These values differ from the `msDS-SupportedEncryptionTypes` bitmask — they represent the single encryption algorithm selected for a specific ticket or session key.
+
+| Hex | Decimal | Algorithm | Status |
+|-----|---------|-----------|--------|
+| `0x1` | 1 | DES-CBC-CRC | **Insecure** — disabled since Win 7 / Server 2008 R2 |
+| `0x3` | 3 | DES-CBC-MD5 | **Insecure** — disabled since Win 7 / Server 2008 R2 |
+| `0x11` | 17 | AES128-CTS-HMAC-SHA1-96 | Secure (since Server 2008 / Vista) |
+| `0x12` | 18 | AES256-CTS-HMAC-SHA1-96 | **Recommended** — strongest standard type |
+| `0x17` | 23 | RC4-HMAC | **Weak** — blocked after July 2026 (without explicit exception) |
+| `0x18` | 24 | RC4-HMAC-EXP | **Insecure** — export-grade RC4 |
+| `0xFFFFFFFF` | — | (none) | Failure event — no ticket issued |
+
+> **How to read event logs:** If `TicketEncryptionType = 0x12` and `SessionKeyEncryptionType = 0x12`, both ticket and session key use AES256 — optimal. If `TicketEncryptionType = 0x12` but `SessionKeyEncryptionType = 0x17`, the ticket is AES but the session key uses RC4 — investigate the client's advertised encryption types.
+>
+> **Note:** `SessionKeyEncryptionType` is only available on DCs with the January 2025+ cumulative update installed (extended event format with 21+ properties). Older DCs only provide `TicketEncryptionType`.
+>
+> **Source:** [Event 4768 — A Kerberos authentication ticket (TGT) was requested](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4768), [Event 4769 — A Kerberos service ticket was requested](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4769)
+
 ## AES-Configured but RC4-Used Correlation
 
 When event log analysis is enabled (`-AnalyzeEventLogs`), the tool cross-references accounts found using RC4 tickets (Event IDs 4768/4769) with their `msDS-SupportedEncryptionTypes` in AD. This detects a common gap: accounts that have AES **configured** but are still obtaining RC4 tickets because their password was never reset to generate AES keys.
