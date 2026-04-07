@@ -223,6 +223,26 @@ erforderlich.
   (durch `0x18` ersetzen)
 - **2147483672 (0x80000018)** = AES128 + AES256 + Future — CIS-Benchmark-GPO-Wert
 
+**F: Was bedeuten die Verschlüsselungstyp-Codes in den Ereignisprotokollen (4768/4769)?**
+
+Das sind die Werte aus `TicketEncryptionType` und `SessionKeyEncryptionType` der
+Security-Events — sie zeigen den einzelnen Algorithmus, der für ein bestimmtes
+Ticket oder einen Sitzungsschlüssel verwendet wurde (anders als die
+Bitmask-Werte oben, die Kontokonfigurationen sind):
+
+| Hex | Algorithmus | Status |
+|-----|-------------|--------|
+| `0x1` | DES-CBC-CRC | Unsicher — deaktiviert seit Win 7 / Server 2008 R2 |
+| `0x3` | DES-CBC-MD5 | Unsicher — deaktiviert seit Win 7 / Server 2008 R2 |
+| `0x11` | AES128-CTS-HMAC-SHA1-96 | Sicher |
+| `0x12` | AES256-CTS-HMAC-SHA1-96 | **Empfohlen** — stärkster Standardtyp |
+| `0x17` | RC4-HMAC | Schwach — nach Juli 2026 ohne Ausnahme blockiert |
+| `0x18` | RC4-HMAC-EXP | Unsicher — Export-RC4 |
+
+`SessionKeyEncryptionType` ist nur auf DCs mit dem kumulativen Update ab
+Januar 2025 verfügbar (erweitertes Event-Format). Ältere DCs liefern nur
+`TicketEncryptionType`.
+
 **F: Welche Werte hat `RC4DefaultDisablementPhase`?**
 
 Der Registrierungsschlüssel befindet sich unter:

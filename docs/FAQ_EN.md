@@ -208,6 +208,26 @@ remain AES-only. No domain-wide registry change is needed.
   (replace with `0x18`)
 - **2147483672 (0x80000018)** = AES128 + AES256 + Future — CIS Benchmark GPO value
 
+**Q: What do the encryption type codes in event logs mean (4768/4769)?**
+
+These are the `TicketEncryptionType` and `SessionKeyEncryptionType` values from
+Security events — they show the single algorithm used for a specific ticket or
+session key (unlike the bitmask values above which are account attribute
+combinations):
+
+| Hex | Algorithm | Status |
+|-----|-----------|--------|
+| `0x1` | DES-CBC-CRC | Insecure — disabled since Win 7 / Server 2008 R2 |
+| `0x3` | DES-CBC-MD5 | Insecure — disabled since Win 7 / Server 2008 R2 |
+| `0x11` | AES128-CTS-HMAC-SHA1-96 | Secure |
+| `0x12` | AES256-CTS-HMAC-SHA1-96 | **Recommended** — strongest standard type |
+| `0x17` | RC4-HMAC | Weak — blocked after July 2026 without exception |
+| `0x18` | RC4-HMAC-EXP | Insecure — export-grade RC4 |
+
+`SessionKeyEncryptionType` is only available on DCs with the January 2025+
+cumulative update (extended event format). Older DCs only provide
+`TicketEncryptionType`.
+
 **Q: What are the `RC4DefaultDisablementPhase` registry values?**
 
 The registry key is located at:
