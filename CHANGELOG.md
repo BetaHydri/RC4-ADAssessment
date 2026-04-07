@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Track `SessionKeyEncryptionType` alongside `TicketEncryptionType` in event log analysis,
+  following Microsoft's `Get-KerbEncryptionUsage.ps1` pattern ([Kerberos-Crypto](https://github.com/microsoft/Kerberos-Crypto))
+- New counters: `SessionKeyRC4`, `SessionKeyDES`, `SessionKeyAES`, `RC4SessionKeyAccounts`
+- `RC4 SessKey` column in per-DC summary table and forest summary table
+- `RC4 Session Keys` comparison line in `Invoke-RC4AssessmentComparison` (backward-compatible
+  with older JSON exports)
+- Detect old event format (pre-January 2025 cumulative update) and show informational message
+  instead of misleading zeros
+- 6 new unit tests for session key tracking (total: 486 tests)
+
 ### Changed
 
 - GPO recommendation text now includes **Future encryption types** alongside AES128_HMAC_SHA1 and AES256_HMAC_SHA1, per CIS Benchmark 2.3.11.4
