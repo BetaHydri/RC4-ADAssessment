@@ -1,4 +1,4 @@
-function Get-EventLogEncryptionAnalysis {
+﻿function Get-EventLogEncryptionAnalysis {
     <#
     .SYNOPSIS
         Analyses Kerberos event logs on Domain Controllers to detect DES and RC4 ticket usage.
@@ -140,18 +140,30 @@ function Get-EventLogEncryptionAnalysis {
                     $usedWinRM = $true
                 }
                 catch {
-                    # WinRM failed, try RPC as fallback
-                    Write-Host "    $([char]0x26A0) WinRM unavailable on $dcName, trying RPC..." -ForegroundColor DarkYellow
-
-                    try {
-                        $events = Get-WinEvent -ComputerName $dcName -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
+                    if ($_.Exception.Message -match 'No events were found') {
+                        # Query succeeded but no matching events — not a failure
+                        $events = @()
+                        $usedWinRM = $true
                     }
-                    catch {
-                        throw $_
+                    else {
+                        # WinRM failed, try RPC as fallback
+                        Write-Host "    $([char]0x26A0) WinRM unavailable on $dcName, trying RPC..." -ForegroundColor DarkYellow
+
+                        try {
+                            $events = Get-WinEvent -ComputerName $dcName -FilterXml $filterXml -MaxEvents 1000 -ErrorAction Stop
+                        }
+                        catch {
+                            if ($_.Exception.Message -match 'No events were found') {
+                                $events = @()
+                            }
+                            else {
+                                throw $_
+                            }
+                        }
                     }
                 }
 
-                if (-not $events) {
+                if (-not $events -or @($events).Count -eq 0) {
                     Write-Host "    $([char]0x24D8) No events found on $dcName" -ForegroundColor Gray
                     $assessment.QueriedDCs += $dcName  # Still track as successfully queried
                     $assessment.PerDcStats[$dcName] = @{ EventsAnalyzed = 0; RC4Tickets = 0; DESTickets = 0; AESTickets = 0; SessionKeyRC4 = 0; SessionKeyDES = 0; SessionKeyAES = 0 }

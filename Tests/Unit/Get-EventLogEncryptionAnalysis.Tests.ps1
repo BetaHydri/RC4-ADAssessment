@@ -69,6 +69,31 @@ Describe 'Get-EventLogEncryptionAnalysis' {
         }
     }
 
+    Context 'When Invoke-Command throws "No events were found"' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
+                @([PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com' })
+            }
+            Mock -ModuleName 'RC4-ADAssessment' Test-Connection { $true }
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command {
+                throw 'No events were found that match the specified selection criteria.'
+            }
+        }
+
+        It 'Treats DC as successfully queried, not failed' {
+            $result = Get-EventLogEncryptionAnalysis -ServerParams @{}
+            $result.QueriedDCs | Should -Contain 'dc01.contoso.com'
+            $result.FailedDCs.Count | Should -Be 0
+        }
+
+        It 'Returns zero ticket counts' {
+            $result = Get-EventLogEncryptionAnalysis -ServerParams @{}
+            $result.RC4Tickets | Should -Be 0
+            $result.AESTickets | Should -Be 0
+            $result.EventsAnalyzed | Should -Be 0
+        }
+    }
+
     Context 'When events contain mixed ticket and session key encryption types' {
         BeforeEach {
             Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
