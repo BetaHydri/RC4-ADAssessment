@@ -808,13 +808,14 @@ When event log analysis is enabled (`-AnalyzeEventLogs`), the tool cross-referen
 
 ### Why Not Parse "Available Keys" from Event 4768?
 
-The "Available Keys" field in Event 4768 provides similar information, but it is **not** a named XML `EventData` field — it only appears in the rendered `Message` text. Parsing it would be fragile:
+> **Update (January 2025+):** DCs with the January 2025 or later cumulative update now include "Available Keys" as named XML `EventData` fields (`AccountAvailableKeys`, `ServiceAvailableKeys`, `DCAvailableKeys`). However, **unpatched DCs** (including Windows Server 2025 RTM without CU) still use the old 15-field event format where these fields do not exist.
 
-- **Locale-dependent**: "Verfügbare Schlüssel" (German), "Clés disponibles" (French), etc.
-- **Remote unreliable**: `Message` property may be `$null` on deserialized remote events
-- **Version-variant**: Message template can change between Windows Server versions
+The correlation approach used by RC4-ADAssessment remains the better choice:
 
-The correlation approach is locale-independent, works reliably with remoted events, and provides the same actionable insight.
+- **Works on all DCs** — patched and unpatched (old event format has only 15 fields, new format has 21+)
+- **Shows actual usage, not just capability** — `AccountAvailableKeys` shows what keys _exist_ on the account, not what encryption is _actually being used_ in ticket requests. The `TicketEncryptionType` and `SessionKeyEncryptionType` fields show the real negotiation result.
+- **Locale-independent** — on unpatched DCs, "Available Keys" only appears in the rendered `Message` text (locale-dependent: "Verfügbare Schlüssel" in German, etc.)
+- **Remote-reliable** — `Message` property may be `$null` on deserialized remote events; named XML fields work reliably via both WinRM and RPC
 
 ## Last Logon Timestamp
 
