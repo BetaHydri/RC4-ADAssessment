@@ -2445,7 +2445,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
             $result = Get-AccountEncryptionAssessment -ServerParams @{}
             $result.MissingAESKeyAccounts | Should -HaveCount 2
             $result.MissingAESKeyAccounts[0].Name | Should -Be 'old_user1'
-            $result.MissingAESKeyAccounts[0].Type | Should -Be 'Missing AES Keys'
+            $result.MissingAESKeyAccounts[0].Type | Should -Be 'Missing AES Keys (attribute not set, old password)'
         }
 
         It 'Tracks SPN status for missing AES accounts' {

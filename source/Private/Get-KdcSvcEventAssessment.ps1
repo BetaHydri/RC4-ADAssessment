@@ -185,8 +185,8 @@ function Get-KdcSvcEventAssessment {
             if ($assessment.QueriedDCs.Count -gt 0) {
                 $assessment.Status = "OK"
                 Write-Finding -Status "OK" -Message "No KDCSVC events found - no RC4 risks detected (CVE-2026-20833)"
-                Write-Host "  Note: KDCSVC events require RC4DefaultDisablementPhase >= 1 to be logged" -ForegroundColor Gray
-                Write-Host "  If RC4DefaultDisablementPhase is not set or 0, set it to 1 to enable auditing" -ForegroundColor Gray
+                Write-Host "  Note: KDCSVC events are logged by the January 2026+ security update regardless of RC4DefaultDisablementPhase" -ForegroundColor Gray
+                Write-Host "  No events means no RC4-related KDC activity was detected on the queried DCs" -ForegroundColor Gray
             }
         }
 
