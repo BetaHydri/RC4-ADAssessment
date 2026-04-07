@@ -32,19 +32,24 @@ function Get-EventLogEncryptionAnalysis {
     Write-Section "Event Log Analysis - Actual DES/RC4 Usage"
 
     $assessment = @{
-        EventsAnalyzed      = 0
-        DESTickets          = 0
-        RC4Tickets          = 0
-        AESTickets          = 0
-        UnknownTickets      = 0
-        TimeRange           = $Hours
-        DESAccounts         = @()
-        RC4Accounts         = @()
-        PasswordResetNeeded = @()  # Accounts with AES configured but using RC4 (need password reset)
-        Details             = @()
-        FailedDCs           = @()  # Track DCs that couldn't be queried
-        QueriedDCs          = @()  # Track DCs that were successfully queried
-        PerDcStats          = @{}  # Per-DC event counts keyed by hostname
+        EventsAnalyzed         = 0
+        DESTickets             = 0
+        RC4Tickets             = 0
+        AESTickets             = 0
+        UnknownTickets         = 0
+        SessionKeyDES          = 0
+        SessionKeyRC4          = 0
+        SessionKeyAES          = 0
+        SessionKeyUnknown      = 0
+        RC4SessionKeyAccounts  = @()   # Accounts with RC4 session keys (may differ from ticket encryption)
+        TimeRange              = $Hours
+        DESAccounts            = @()
+        RC4Accounts            = @()
+        PasswordResetNeeded    = @()   # Accounts with AES configured but using RC4 (need password reset)
+        Details                = @()
+        FailedDCs              = @()   # Track DCs that couldn't be queried
+        QueriedDCs             = @()   # Track DCs that were successfully queried
+        PerDcStats             = @{}   # Per-DC event counts keyed by hostname
     }
 
     try {
@@ -124,10 +129,11 @@ function Get-EventLogEncryptionAnalysis {
                                 $data[$d.Name] = $d.'#text'
                             }
                             [PSCustomObject]@{
-                                EventId              = $evt.Id
-                                TargetUserName       = $data['TargetUserName']
-                                TicketEncryptionType = $data['TicketEncryptionType']
-                                ServiceName          = $data['ServiceName']
+                                EventId               = $evt.Id
+                                TargetUserName        = $data['TargetUserName']
+                                TicketEncryptionType  = $data['TicketEncryptionType']
+                                SessionEncryptionType = $data['SessionKeyEncryptionType']
+                                ServiceName           = $data['ServiceName']
                             }
                         }
                     } -ArgumentList $filterXml, 1000 -ErrorAction Stop
@@ -148,7 +154,7 @@ function Get-EventLogEncryptionAnalysis {
                 if (-not $events) {
                     Write-Host "    $([char]0x24D8) No events found on $dcName" -ForegroundColor Gray
                     $assessment.QueriedDCs += $dcName  # Still track as successfully queried
-                    $assessment.PerDcStats[$dcName] = @{ EventsAnalyzed = 0; RC4Tickets = 0; DESTickets = 0; AESTickets = 0 }
+                    $assessment.PerDcStats[$dcName] = @{ EventsAnalyzed = 0; RC4Tickets = 0; DESTickets = 0; AESTickets = 0; SessionKeyRC4 = 0; SessionKeyDES = 0; SessionKeyAES = 0 }
                     continue
                 }
 
@@ -157,10 +163,11 @@ function Get-EventLogEncryptionAnalysis {
                     Write-Host "    $([char]0x2713) Retrieved $($events.Count) events from $dcName" -ForegroundColor Green
                     $assessment.EventsAnalyzed += $events.Count
                     $assessment.QueriedDCs += $dcName  # Track successfully queried DC
-                    $dcStats = @{ EventsAnalyzed = $events.Count; RC4Tickets = 0; DESTickets = 0; AESTickets = 0 }
+                    $dcStats = @{ EventsAnalyzed = $events.Count; RC4Tickets = 0; DESTickets = 0; AESTickets = 0; SessionKeyRC4 = 0; SessionKeyDES = 0; SessionKeyAES = 0 }
 
                     foreach ($evt in $events) {
                         $encType = $null
+                        $sessionEncType = $null
                         $account = $null
 
                         if ($usedWinRM) {
@@ -168,6 +175,9 @@ function Get-EventLogEncryptionAnalysis {
                             if ($evt.TicketEncryptionType) {
                                 $encType = [int]$evt.TicketEncryptionType
                                 $account = $evt.TargetUserName
+                            }
+                            if ($evt.SessionEncryptionType) {
+                                $sessionEncType = [int]$evt.SessionEncryptionType
                             }
                         }
                         else {
@@ -182,13 +192,16 @@ function Get-EventLogEncryptionAnalysis {
                                 $encType = [int]$eventData['TicketEncryptionType']
                                 $account = $eventData['TargetUserName']
                             }
+                            if ($eventData['SessionKeyEncryptionType']) {
+                                $sessionEncType = [int]$eventData['SessionKeyEncryptionType']
+                            }
                         }
 
                         if ($null -eq $encType) {
                             continue
                         }
 
-                        # Categorize by encryption type
+                        # Categorize ticket encryption type
                         switch ($encType) {
                             { $_ -in @(0x1, 0x3) } {
                                 # DES
@@ -213,6 +226,30 @@ function Get-EventLogEncryptionAnalysis {
                             }
                             default {
                                 $assessment.UnknownTickets++
+                            }
+                        }
+
+                        # Categorize session key encryption type
+                        if ($null -ne $sessionEncType) {
+                            switch ($sessionEncType) {
+                                { $_ -in @(0x1, 0x3) } {
+                                    $assessment.SessionKeyDES++
+                                    $dcStats.SessionKeyDES++
+                                }
+                                0x17 {
+                                    $assessment.SessionKeyRC4++
+                                    $dcStats.SessionKeyRC4++
+                                    if ($account -and $account -notin $assessment.RC4SessionKeyAccounts) {
+                                        $assessment.RC4SessionKeyAccounts += $account
+                                    }
+                                }
+                                { $_ -in @(0x11, 0x12) } {
+                                    $assessment.SessionKeyAES++
+                                    $dcStats.SessionKeyAES++
+                                }
+                                default {
+                                    $assessment.SessionKeyUnknown++
+                                }
                             }
                         }
                     }
@@ -248,16 +285,28 @@ function Get-EventLogEncryptionAnalysis {
         Write-Host ""
         Write-Finding -Status "INFO" -Message "Event Log Analysis Results:"
         Write-Host "  $([char]0x2022) Events Analyzed: $($assessment.EventsAnalyzed)" -ForegroundColor White
-        Write-Host "  $([char]0x2022) AES Tickets: $($assessment.AESTickets)" -ForegroundColor Green
-        Write-Host "  $([char]0x2022) RC4 Tickets: $($assessment.RC4Tickets)" -ForegroundColor $(if ($assessment.RC4Tickets -gt 0) { "Red" } else { "Green" })
-        Write-Host "  $([char]0x2022) DES Tickets: $($assessment.DESTickets)" -ForegroundColor $(if ($assessment.DESTickets -gt 0) { "Red" } else { "Green" })
+        Write-Host "  Ticket Encryption:" -ForegroundColor White
+        Write-Host "    $([char]0x2022) AES Tickets: $($assessment.AESTickets)" -ForegroundColor Green
+        Write-Host "    $([char]0x2022) RC4 Tickets: $($assessment.RC4Tickets)" -ForegroundColor $(if ($assessment.RC4Tickets -gt 0) { "Red" } else { "Green" })
+        Write-Host "    $([char]0x2022) DES Tickets: $($assessment.DESTickets)" -ForegroundColor $(if ($assessment.DESTickets -gt 0) { "Red" } else { "Green" })
+        Write-Host "  Session Key Encryption:" -ForegroundColor White
+        $totalSessionKeys = $assessment.SessionKeyAES + $assessment.SessionKeyRC4 + $assessment.SessionKeyDES + $assessment.SessionKeyUnknown
+        if ($assessment.EventsAnalyzed -gt 0 -and $totalSessionKeys -eq 0) {
+            Write-Host "    $([char]0x2022) N/A - DCs use old event format without SessionKeyEncryptionType field" -ForegroundColor Gray
+            Write-Host "    Install January 2025+ cumulative update on DCs to enable session key tracking" -ForegroundColor Gray
+        }
+        else {
+            Write-Host "    $([char]0x2022) AES Session Keys: $($assessment.SessionKeyAES)" -ForegroundColor Green
+            Write-Host "    $([char]0x2022) RC4 Session Keys: $($assessment.SessionKeyRC4)" -ForegroundColor $(if ($assessment.SessionKeyRC4 -gt 0) { "Yellow" } else { "Green" })
+            Write-Host "    $([char]0x2022) DES Session Keys: $($assessment.SessionKeyDES)" -ForegroundColor $(if ($assessment.SessionKeyDES -gt 0) { "Red" } else { "Green" })
+        }
 
         if ($assessment.RC4Tickets -gt 0) {
             Write-Finding -Status "CRITICAL" -Message "RC4 tickets detected in active use!"
-            Write-Host "  Unique accounts using RC4: $($assessment.RC4Accounts.Count)" -ForegroundColor Red
+            Write-Host "  Unique accounts using RC4 tickets: $($assessment.RC4Accounts.Count)" -ForegroundColor Red
 
             if ($assessment.RC4Accounts.Count -le 10) {
-                Write-Host "  RC4 accounts:" -ForegroundColor Yellow
+                Write-Host "  RC4 ticket accounts:" -ForegroundColor Yellow
                 foreach ($acct in $assessment.RC4Accounts) {
                     Write-Host "    - $acct" -ForegroundColor Yellow
                 }
@@ -265,6 +314,17 @@ function Get-EventLogEncryptionAnalysis {
         }
         else {
             Write-Finding -Status "OK" -Message "No RC4 tickets detected in last $Hours hours"
+        }
+
+        if ($assessment.SessionKeyRC4 -gt 0) {
+            Write-Finding -Status "WARNING" -Message "RC4 session keys detected ($($assessment.SessionKeyRC4) occurrences, $($assessment.RC4SessionKeyAccounts.Count) unique account(s))"
+            Write-Host "  Note: Session key encryption can differ from ticket encryption" -ForegroundColor Gray
+            Write-Host "  RC4 session keys indicate legacy negotiation even when tickets use AES" -ForegroundColor Gray
+            if ($assessment.RC4SessionKeyAccounts.Count -le 10) {
+                foreach ($acct in $assessment.RC4SessionKeyAccounts) {
+                    Write-Host "    - $acct" -ForegroundColor Yellow
+                }
+            }
         }
 
         if ($assessment.DESTickets -gt 0) {

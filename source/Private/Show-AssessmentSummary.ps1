@@ -140,6 +140,7 @@ function Show-AssessmentSummary {
                     'Events Analyzed'   = if ($dcStats) { $dcStats.EventsAnalyzed } else { 0 }
                     'RC4 Tickets'       = if ($dcStats) { $dcStats.RC4Tickets } else { 0 }
                     'DES Tickets'       = if ($dcStats) { $dcStats.DESTickets } else { 0 }
+                    'RC4 SessKey'       = if ($dcStats) { $dcStats.SessionKeyRC4 } else { 0 }
                     'Error Message'     = '-'
                 }
             }
@@ -154,6 +155,7 @@ function Show-AssessmentSummary {
                     'Events Analyzed'   = 0
                     'RC4 Tickets'       = 0
                     'DES Tickets'       = 0
+                    'RC4 SessKey'       = 0
                     'Error Message'     = $failed.Error
                 }
             }
@@ -184,6 +186,12 @@ function Show-AssessmentSummary {
             }
             if ($Results.EventLogs.DESTickets -gt 0) {
                 Write-Host "    DES Tickets Detected: $($Results.EventLogs.DESTickets)" -ForegroundColor Red
+            }
+            if ($Results.EventLogs.SessionKeyRC4 -and $Results.EventLogs.SessionKeyRC4 -gt 0) {
+                Write-Host "    RC4 Session Keys Detected: $($Results.EventLogs.SessionKeyRC4)" -ForegroundColor Yellow
+            }
+            if ($Results.EventLogs.SessionKeyDES -and $Results.EventLogs.SessionKeyDES -gt 0) {
+                Write-Host "    DES Session Keys Detected: $($Results.EventLogs.SessionKeyDES)" -ForegroundColor Red
             }
             if ($Results.EventLogs.FailedDCs.Count -gt 0) {
                 Write-Host "    Failed DC Queries: $($Results.EventLogs.FailedDCs.Count)" -ForegroundColor Yellow
