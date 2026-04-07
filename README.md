@@ -396,6 +396,33 @@ These events are logged on Windows Server 2012+ domain controllers after install
 >
 > **Source:** [KB5073381 — How to manage Kerberos KDC usage of RC4 for service account ticket issuance (CVE-2026-20833)](https://support.microsoft.com/help/5073381)
 
+### Important: KDCSVC Events Are Not an RC4 Scanner
+
+A common misconception is that the absence of KDCSVC events 201–209 proves that RC4 is no longer in use. **This is incorrect.**
+
+KDCSVC events are a **CVE-specific warning mechanism**, not a general-purpose RC4 detection tool. Microsoft states in [KB5073381 (Step 2: MONITOR)](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc):
+
+> _"Audit events related to this change are **only generated when Active Directory is unable to issue AES-SHA1 service tickets or session keys**. The **absence of audit events does not guarantee** that all non-Windows devices will successfully accept Kerberos authentication after the April update."_
+
+For broader RC4 detection beyond the CVE scope, Microsoft explicitly recommends a separate approach:
+
+> _"For administrators who are interested in **remediating RC4 usage more broadly** than is discussed in this article, we recommend reviewing [Detect and remediate RC4 usage in Kerberos](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)."_
+
+**RC4 scenarios that produce NO KDCSVC events include:**
+
+- Accounts without `msDS-SupportedEncryptionTypes` set that implicitly fall back to RC4 (pre-Nov 2022 behaviour)
+- RC4 session keys visible in Security event logs (4768/4769) that do not trigger KDC fallback logic
+- Legacy service accounts whose configuration is formally valid but cryptographically weak
+
+**This is why RC4-ADAssessment correlates multiple data sources** — AD attributes, KDC registry configuration, KDCSVC events, _and_ Security event logs (4768/4769) — rather than relying on any single signal.
+
+> **Bottom line:** No KDCSVC events ≠ no RC4. Reliable RC4 assessment requires multi-layer correlation.
+>
+> **References:**
+> - [KB5073381 — CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
+> - [Detect and remediate RC4 usage in Kerberos](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
+> - [Decrypting the Selection of Supported Kerberos Encryption Types](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797)
+
 ## AzureADKerberos (Entra Kerberos Proxy)
 
 If your environment uses **Microsoft Entra ID** (formerly Azure AD) features such as **Windows Hello for Business Cloud Kerberos Trust** or **FIDO2 security key sign-in**, you will have a computer object named `AzureADKerberos` in your Domain Controllers OU.

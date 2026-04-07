@@ -129,6 +129,35 @@ die `RC4DefaultDisablementPhase`-Registrierungswerte auf allen DCs und bildet al
 Anforderungen des KB-Artikels ab, einschließlich Überwachungsmodus (Wert 1) und
 Durchsetzungsmodus (Wert 2).
 
+**F: Ich sehe keine KDCSVC-Events 201–209 auf meinen DCs. Bedeutet das, dass RC4 nicht mehr verwendet wird?**
+
+**Nein.** Das ist ein häufiger Irrtum. Die KDCSVC-Events 201–209 sind ein
+**CVE-spezifischer Warnmechanismus**, kein allgemeiner RC4-Scanner. Microsoft
+stellt in KB5073381 klar: *„Audit-Ereignisse im Zusammenhang mit dieser Änderung
+werden nur erzeugt, wenn Active Directory keine AES-SHA1-Diensttickets oder
+Sitzungsschlüssel ausstellen kann. Das Fehlen von Audit-Ereignissen garantiert
+nicht, dass alle Nicht-Windows-Geräte die Kerberos-Authentifizierung nach dem
+April-Update erfolgreich akzeptieren."*
+
+Viele legitime RC4-Szenarien erzeugen **keine KDCSVC-Events**, darunter:
+
+- Konten ohne gesetztes `msDS-SupportedEncryptionTypes`, die implizit auf RC4
+  zurückfallen
+- RC4-Sitzungsschlüssel, die in Security-Events 4768/4769 sichtbar sind, aber
+  keine KDC-Fallback-Logik auslösen
+- Legacy-Dienstkonten mit formal gültiger, aber kryptografisch schwacher
+  Konfiguration
+
+Genau deshalb korreliert RC4-ADAssessment mehrere Datenquellen (AD-Attribute,
+KDC-Registrierung, KDCSVC-Events *und* Security-Ereignisprotokolle 4768/4769),
+anstatt sich auf ein einzelnes Signal zu verlassen. Keine KDCSVC-Events bedeutet
+nicht, dass kein RC4 vorhanden ist.
+
+Referenzen:
+
+- [KB5073381 — CVE-2026-20833-Bereitstellungsleitfaden](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
+- [RC4-Nutzung in Kerberos erkennen und beheben](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
+
 **F: Was ist mit dem AzureADKerberos-Objekt in der DC-OU?**
 
 Es wird automatisch erkannt und von den DC-Zählern ausgeschlossen. Das

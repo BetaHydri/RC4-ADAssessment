@@ -124,6 +124,31 @@ Yes, fully. The tool scans KDCSVC System log events 201–209, checks
 `RC4DefaultDisablementPhase` registry values on all DCs, and maps all KB article
 requirements including Audit mode (value 1) and Enforcement mode (value 2).
 
+**Q: I see no KDCSVC events 201–209 on my DCs. Does that mean RC4 is gone?**
+
+**No.** This is a common misconception. KDCSVC events 201–209 are a
+**CVE-specific warning mechanism**, not a general-purpose RC4 scanner. Microsoft
+states in KB5073381: *"Audit events related to this change are only generated
+when Active Directory is unable to issue AES-SHA1 service tickets or session
+keys. The absence of audit events does not guarantee that all non-Windows
+devices will successfully accept Kerberos authentication."*
+
+Many legitimate RC4 scenarios produce **no KDCSVC events at all**, including:
+
+- Accounts without `msDS-SupportedEncryptionTypes` that implicitly use RC4
+- RC4 session keys visible in Security events 4768/4769 but not triggering KDC
+  fallback logic
+- Legacy service accounts with formally valid but cryptographically weak configs
+
+This is why RC4-ADAssessment correlates multiple data sources (AD attributes,
+KDC registry, KDCSVC events, *and* Security event logs 4768/4769) rather than
+relying on any single signal. No KDCSVC events does not equal no RC4.
+
+References:
+
+- [KB5073381 — CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
+- [Detect and remediate RC4 usage in Kerberos](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
+
 **Q: What about the AzureADKerberos object in the DC OU?**
 
 It is automatically detected and excluded from DC counts. The AzureADKerberos
