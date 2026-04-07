@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-04-07
+
+### Fixed
+
+- `RC4DefaultDisablementPhase = 1` recommendation text incorrectly stated it "enables KDCSVC
+  audit events". KDCSVC events are logged by the January 2026+ security update regardless of
+  the phase value. Phase 1 is an administrative checkpoint for change management, not a
+  technical gate for event logging. Only phase 2 changes KDC behaviour (enforcement).
+- Updated recommendation text in `Invoke-RC4Assessment`, `Get-KdcRegistryAssessment`, and
+  sample outputs in `QUICK_START.md` and `README.md`
+
 ## [4.4.0] - 2026-04-07
 
 ### Fixed
