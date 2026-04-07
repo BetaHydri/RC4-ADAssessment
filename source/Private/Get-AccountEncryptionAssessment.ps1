@@ -480,61 +480,103 @@
             $dflSupportsAES = $dfl -match '2008|2012|2016|Windows2008|Windows2012|Windows2016|2025'
 
             if ($dflSupportsAES) {
-                # Find enabled user accounts with very old passwords that likely predate AES key generation
-                # We look for accounts with msDS-SupportedEncryptionTypes = 0 or not set, AND password > 5 years old
-                # These accounts may have been created before DFL was raised and never had password reset
-                $fiveYearsAgo = (Get-Date).AddYears(-5)
-                $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
+                # Two detection paths for accounts missing AES keys:
+                #
+                # Path A: msDS-SupportedEncryptionTypes is explicitly set to a non-zero value WITHOUT AES bits
+                #         (e.g., 0x4 = RC4-only, 0x3 = DES-only). These accounts genuinely lack AES support
+                #         regardless of password age. Already flagged by RC4-only/DES-only checks but also
+                #         belong in the Missing AES Keys category for completeness.
+                #
+                # Path B: msDS-SupportedEncryptionTypes is not set (null/0) AND password is very old.
+                #         When not set, the account uses domain defaults — AES keys are generated at
+                #         password change time if DFL >= 2008. Only flag if password age suggests it may
+                #         predate the DFL 2008 upgrade.
+
+                $missingAESAccounts = @()
+
+                # Path A: Explicit non-AES values — query for accounts with msDS-SupportedEncryptionTypes
+                # set but without AES bits (bit 0x18). These definitively lack AES support.
+                $explicitNonAES = Get-ADUser -LDAPFilter '(&(!(userAccountControl:1.2.840.113556.1.4.803:=2))(msDS-SupportedEncryptionTypes=*))' `
                     -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated, lastLogonTimestamp @ServerParams -ErrorAction Stop
 
-                if ($oldAccounts) {
-                    $oldList = @($oldAccounts)
-
-                    foreach ($acct in $oldList) {
+                if ($explicitNonAES) {
+                    foreach ($acct in @($explicitNonAES)) {
                         $encValue = $acct.'msDS-SupportedEncryptionTypes'
-                        $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
-
-                        # Flag accounts where password hasn't been reset since before AES was available
-                        # AND msDS-SupportedEncryptionTypes is not set (meaning no explicit AES bits)
-                        if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
+                        # Skip accounts that have AES bits set — they DO have AES support
+                        if ($encValue -and $encValue -ne 0 -and -not ($encValue -band 0x18)) {
+                            $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
                             $logon = ConvertFrom-LastLogonTimestamp -RawValue $acct.lastLogonTimestamp
-                            $acctInfo = @{
+                            $missingAESAccounts += @{
                                 Name             = $acct.SamAccountName
                                 DN               = $acct.DistinguishedName
                                 PasswordLastSet  = $acct.PasswordLastSet
                                 PasswordAgeDays  = $pwdAge
                                 WhenCreated      = $acct.WhenCreated
                                 HasSPN           = [bool]$acct.ServicePrincipalName
+                                EncryptionValue  = $encValue
+                                EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
                                 LastLogon        = $logon.LastLogon
                                 LastLogonDaysAgo = $logon.LastLogonDaysAgo
-                                Type             = "Missing AES Keys"
+                                Type             = "Missing AES Keys (explicit non-AES)"
                             }
-                            $assessment.MissingAESKeyAccounts += $acctInfo
                         }
                     }
+                }
 
-                    $assessment.TotalMissingAES = $assessment.MissingAESKeyAccounts.Count
+                # Path B: Attribute not set + very old password (may predate DFL 2008 upgrade)
+                $fiveYearsAgo = (Get-Date).AddYears(-5)
+                $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
+                    -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated, lastLogonTimestamp @ServerParams -ErrorAction Stop
 
-                    if ($assessment.MissingAESKeyAccounts.Count -gt 0) {
-                        Write-Finding -Status "WARNING" -Message "$($assessment.MissingAESKeyAccounts.Count) account(s) may be missing AES keys (password not reset since DFL raised to 2008+)" `
-                            -Detail "Reset password twice for these accounts to generate AES keys"
+                if ($oldAccounts) {
+                    foreach ($acct in @($oldAccounts)) {
+                        $encValue = $acct.'msDS-SupportedEncryptionTypes'
+                        $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
 
-                        $displayCount = [Math]::Min($assessment.MissingAESKeyAccounts.Count, 10)
-                        foreach ($acct in $assessment.MissingAESKeyAccounts | Select-Object -First $displayCount) {
-                            $spnStr = if ($acct.HasSPN) { " [HAS SPN]" } else { "" }
-                            $logonStr = if ($acct.LastLogon) { ", Last logon: $($acct.LastLogon.ToString('yyyy-MM-dd')) ($($acct.LastLogonDaysAgo)d ago)" } else { ", Last logon: Never" }
-                            Write-Host "    $([char]0x2022) $($acct.Name) - Password age: $($acct.PasswordAgeDays) days$logonStr$spnStr" -ForegroundColor Yellow
-                        }
-                        if ($assessment.MissingAESKeyAccounts.Count -gt 10) {
-                            Write-Host "    ... and $($assessment.MissingAESKeyAccounts.Count - 10) more" -ForegroundColor Yellow
+                        # Only flag if msDS-SupportedEncryptionTypes is not set (null/0)
+                        # AND password is very old — may predate DFL 2008 upgrade
+                        if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
+                            # Skip if already added by Path A
+                            if ($acct.SamAccountName -notin $missingAESAccounts.Name) {
+                                $logon = ConvertFrom-LastLogonTimestamp -RawValue $acct.lastLogonTimestamp
+                                $missingAESAccounts += @{
+                                    Name             = $acct.SamAccountName
+                                    DN               = $acct.DistinguishedName
+                                    PasswordLastSet  = $acct.PasswordLastSet
+                                    PasswordAgeDays  = $pwdAge
+                                    WhenCreated      = $acct.WhenCreated
+                                    HasSPN           = [bool]$acct.ServicePrincipalName
+                                    EncryptionValue  = $encValue
+                                    EncryptionTypes  = 'Not Set (domain defaults)'
+                                    LastLogon        = $logon.LastLogon
+                                    LastLogonDaysAgo = $logon.LastLogonDaysAgo
+                                    Type             = "Missing AES Keys (attribute not set, old password)"
+                                }
+                            }
                         }
                     }
-                    else {
-                        Write-Finding -Status "OK" -Message "No accounts found with potentially missing AES keys"
+                }
+
+                $assessment.MissingAESKeyAccounts = $missingAESAccounts
+                $assessment.TotalMissingAES = $missingAESAccounts.Count
+
+                if ($missingAESAccounts.Count -gt 0) {
+                    Write-Finding -Status "WARNING" -Message "$($missingAESAccounts.Count) account(s) may be missing AES keys" `
+                        -Detail "Reset password for these accounts to generate AES keys"
+
+                    $displayCount = [Math]::Min($missingAESAccounts.Count, 10)
+                    foreach ($acct in $missingAESAccounts | Select-Object -First $displayCount) {
+                        $spnStr = if ($acct.HasSPN) { " [HAS SPN]" } else { "" }
+                        $encStr = if ($acct.EncryptionTypes) { " ($($acct.EncryptionTypes))" } else { "" }
+                        $logonStr = if ($acct.LastLogon) { ", Last logon: $($acct.LastLogon.ToString('yyyy-MM-dd')) ($($acct.LastLogonDaysAgo)d ago)" } else { ", Last logon: Never" }
+                        Write-Host "    $([char]0x2022) $($acct.Name) - Password age: $($acct.PasswordAgeDays) days$encStr$logonStr$spnStr" -ForegroundColor Yellow
+                    }
+                    if ($missingAESAccounts.Count -gt 10) {
+                        Write-Host "    ... and $($missingAESAccounts.Count - 10) more" -ForegroundColor Yellow
                     }
                 }
                 else {
-                    Write-Finding -Status "OK" -Message "No accounts found with passwords older than 5 years"
+                    Write-Finding -Status "OK" -Message "No accounts found with potentially missing AES keys"
                 }
             }
             else {
@@ -743,7 +785,7 @@
         Write-Host "  $([char]0x2022) DES-Enabled Accounts (insecure): $($assessment.TotalDESEnabled)" -ForegroundColor $(if ($assessment.TotalDESEnabled -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) RC4 Exception Accounts (RC4+AES): $($assessment.TotalRC4Exception)" -ForegroundColor $(if ($assessment.TotalRC4Exception -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) Stale Password Service Accounts (>365d, RC4): $($assessment.TotalStaleSvc)" -ForegroundColor $(if ($assessment.TotalStaleSvc -gt 0) { "Yellow" } else { "Green" })
-        Write-Host "  $([char]0x2022) Accounts Missing AES Keys (pwd >5yr): $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
+        Write-Host "  $([char]0x2022) Accounts Missing AES Keys: $($assessment.TotalMissingAES)" -ForegroundColor $(if ($assessment.TotalMissingAES -gt 0) { "Yellow" } else { "Green" })
         if ($DeepScan) {
             Write-Host "  $([char]0x2022) [DeepScan] RC4-Only Users (no SPN): $($assessment.TotalDeepScanRC4OnlyUsers)" -ForegroundColor $(if ($assessment.TotalDeepScanRC4OnlyUsers -gt 0) { "Red" } else { "Green" })
             Write-Host "  $([char]0x2022) [DeepScan] DES-Only Users (no SPN): $($assessment.TotalDeepScanDESOnlyUsers)" -ForegroundColor $(if ($assessment.TotalDeepScanDESOnlyUsers -gt 0) { "Red" } else { "Green" })

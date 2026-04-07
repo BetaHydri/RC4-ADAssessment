@@ -125,7 +125,7 @@ KDC Registry Configuration Assessment
 KDCSVC System Event Assessment (CVE-2026-20833)
 ────────────────────────────────────────────────────────────────
 ✅ No KDCSVC events found - no RC4 risks detected (CVE-2026-20833)
-  Note: KDCSVC events require RC4DefaultDisablementPhase >= 1 to be logged
+  Note: KDCSVC events are logged by the January 2026+ security update regardless of RC4DefaultDisablementPhase
 
 Trust Encryption Assessment (Post-November 2022 Logic)
 ────────────────────────────────────────────────────────────────
@@ -290,7 +290,7 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 
 ### KDCSVC System Events (v2.4.0+)
 - **Events 201-209** - KDCSVC events in System log indicating RC4 risks (CVE-2026-20833)
-- Requires `RC4DefaultDisablementPhase >= 1` to be logged
+- Logged by the January 2026+ security update regardless of `RC4DefaultDisablementPhase`
 - Events 201-203: Audit warnings (RC4 requested for default accounts)
 - Events 206-208: Enforcement blocks (RC4 blocked in Enforcement mode)
 
