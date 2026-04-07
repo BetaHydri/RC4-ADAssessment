@@ -34,7 +34,7 @@ This toolkit helps you:
 | **KRBTGT Assessment** | Password age, encryption types, rotation guidance |
 | **Service Account Scan** | SPN accounts, gMSA/sMSA, and delegated Managed Service Accounts (dMSA) with RC4/DES-only encryption |
 | **USE_DES_KEY_ONLY Detection** | Accounts with the UserAccountControl flag forcing DES |
-| **Missing AES Keys** | Accounts with passwords predating DFL 2008 raise (no AES keys generated) |
+| **Missing AES Keys** | Two-path detection: (A) accounts with explicit non-AES encryption, (B) accounts with unset attribute and very old passwords |
 | **AzureADKerberos Detection** | Entra Kerberos proxy object excluded from DC counts (Cloud Kerberos Trust) |
 | **Stale Password Detection** | Service accounts with passwords >365 days old and RC4 enabled |
 | **Inline Fix Commands** | Every finding includes copy-paste PowerShell remediation commands |
@@ -115,7 +115,7 @@ The module exports three commands:
 | `-EventLogHours` | Hours of events to analyze (1-168) | 24 |
 | `-ExportResults` | Export to JSON + CSV (+ guidance .txt with `-IncludeGuidance`) in `.\Exports\` | Off |
 | `-IncludeGuidance` | Show full reference manual (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline) | Off |
-| `-DeepScan` | Scan all enabled user accounts (not just SPN-bearing) and all computer accounts (excl. DCs) for RC4/DES. Does NOT enable event log analysis — combine with `-AnalyzeEventLogs` for full coverage | Off |
+| `-DeepScan` | Extend scan to all enabled user accounts (RC4-exception and DES-enabled without SPNs) and all computer accounts (excl. DCs). Standard scan already detects RC4-only and DES-only accounts via Path A — DeepScan adds hybrid configs and computers | Off |
 
 ### Invoke-RC4ForestAssessment
 
@@ -277,7 +277,7 @@ flowchart TD
 | **1 — Discovery** | `Invoke-RC4Assessment -AnalyzeEventLogs -ExportResults` | DCs, trusts, KRBTGT, service accounts, KDC registry, KDCSVC events, event logs |
 | **2 — Remediate** | Follow inline fix commands | Fix DCs, service accounts, trusts, registry — highest-risk items first |
 | **3 — Validate** | `Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails` | Confirm critical items are resolved |
-| **4 — Deep Sweep** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults` | All enabled users + computer accounts for remaining RC4/DES configs |
+| **4 — Deep Sweep** | `Invoke-RC4Assessment -DeepScan -AnalyzeEventLogs -ExportResults` | RC4-exception/DES-enabled users without SPNs + computer accounts (RC4-only/DES-only already found in Phase 1) |
 | **5 — Final Remediate** | Password resets for remaining missing-AES accounts | Bulk cleanup of normal accounts |
 | **6 — Final Validate** | `Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json -ShowDetails` | Confirm everything is clean |
 
@@ -728,18 +728,52 @@ When `msDS-SupportedEncryptionTypes` is 0 or empty on trusts, they **default to 
 
 ## Missing AES Keys Detection
 
-The "Missing AES Keys" check identifies accounts that may never have had AES Kerberos keys generated. AES keys are only created when a password is set **while the Domain Functional Level (DFL) is 2008 or higher**. Accounts whose passwords were last set before the DFL was raised will only have RC4/DES keys — even if the DFL is now 2016 or higher.
+The "Missing AES Keys" check identifies accounts that lack AES Kerberos keys. It uses two detection paths in the standard scan (no `-DeepScan` required):
 
-### Detection Criteria
+### Path A — Explicit Non-AES Encryption
 
-An account is flagged only when **both** conditions are true:
+Accounts where `msDS-SupportedEncryptionTypes` is **explicitly set to a non-zero value without AES bits** (bit `0x18`). These accounts are definitively configured for RC4-only or DES-only encryption — regardless of password age.
 
-1. `msDS-SupportedEncryptionTypes` is **not set (null) or equals 0**
-2. `PasswordLastSet` is **older than 5 years** (1825 days)
+**Examples:** `0x4` (RC4-only), `0x3` (DES-only), `0x7` (DES + RC4, no AES).
+
+### Path B — Attribute Not Set + Old Password
+
+Accounts where `msDS-SupportedEncryptionTypes` is **not set (null) or equals 0** AND `PasswordLastSet` is **older than 5 years** (1825 days). When the attribute is not set, the account uses domain defaults — but AES keys are only generated at password change time if DFL ≥ 2008. These accounts may predate the DFL upgrade.
 
 ### When an Account is NOT Flagged
 
-If `msDS-SupportedEncryptionTypes` has a non-zero value (e.g. `0x27`, `0x18`, `0x1C`), the account is **not** flagged — regardless of password age. The reasoning: a non-zero value means the attribute was explicitly configured, which typically happens alongside a password reset that would generate AES keys.
+- **Path A skips** accounts that have AES bits set (e.g., `0x18`, `0x1C`, `0x27`) — they already support AES
+- **Path B skips** accounts with passwords less than 5 years old — they likely had AES keys generated
+
+If `msDS-SupportedEncryptionTypes` has a non-zero value that includes AES (e.g., `0x27`, `0x18`, `0x1C`), the account is handled by other checks (RC4-exception, DES-enabled) rather than Missing AES Keys.
+
+## Standard Scan vs DeepScan
+
+The standard scan (without `-DeepScan`) already covers most account types. Here is what each mode detects:
+
+| Check | Standard Scan | DeepScan Only |
+|-------|:---:|:---:|
+| DC encryption types | ✓ | — |
+| Trusts | ✓ | — |
+| KRBTGT password age | ✓ | — |
+| Service accounts (SPN) — RC4/DES-only | ✓ | — |
+| Managed Service Accounts (gMSA/sMSA/dMSA) | ✓ | — |
+| USE_DES_KEY_ONLY flag | ✓ | — |
+| RC4-exception accounts (RC4 + AES) with SPNs | ✓ | — |
+| DES-enabled accounts with SPNs | ✓ | — |
+| Stale password service accounts | ✓ | — |
+| **Explicit non-AES accounts (all, Path A)** | **✓** | — |
+| **Missing AES Keys — old password (Path B)** | **✓** | — |
+| RC4-exception users **without** SPNs | — | ✓ |
+| DES-enabled users **without** SPNs | — | ✓ |
+| Computer accounts (OS-default 0x1C detection) | — | ✓ |
+| Computer accounts (non-default RC4/DES) | — | ✓ |
+
+**Key insight:** Since v4.4.0, RC4-only and DES-only accounts are detected by the standard scan (Path A) regardless of whether they have SPNs. DeepScan adds value primarily for:
+
+1. **RC4-exception users without SPNs** — accounts with `0x1C` (RC4 + AES) that are not service accounts
+2. **DES-enabled users without SPNs** — accounts with DES bits alongside AES
+3. **Computer account scanning** — not covered by any standard check
 
 ### Example: Old Password but Explicit Encryption Types
 

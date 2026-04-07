@@ -25,16 +25,16 @@ Import-Module ./output/builtModule/RC4-ADAssessment
 Invoke-RC4Assessment
 ```
 **Runtime**: ~30 seconds
-**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), DES flags, Missing AES keys, RC4 exceptions, AzureADKerberos detection
+**Checks**: DCs, GPOs, Trusts, KRBTGT, Service Accounts (incl. dMSA), DES flags, Missing AES keys (explicit non-AES + old passwords), RC4 exceptions, AzureADKerberos detection
 
 ### Deep Scan (Extended Account Coverage)
 ```powershell
 Invoke-RC4Assessment -DeepScan
 ```
 **Runtime**: ~1-2 minutes
-**Checks**: All of the above + all enabled user accounts (not just SPN-bearing) + all computer accounts (excluding DCs) for RC4/DES configurations
+**Checks**: All of the above + RC4-exception and DES-enabled user accounts without SPNs + all computer accounts (excluding DCs) for RC4/DES configurations
 
-> **Note**: `-DeepScan` does NOT analyze event logs or query remote DC registries. Combine with `-AnalyzeEventLogs` for maximum coverage.
+> **Note**: The standard scan already detects RC4-only and DES-only accounts (all account types, with or without SPNs). `-DeepScan` adds detection for accounts that have **both** RC4 and AES configured (RC4-exception/DES-enabled users without SPNs) and **all computer accounts** (OS-default 0x1C vs non-default). Combine with `-AnalyzeEventLogs` for maximum coverage.
 
 ### Full Assessment (Recommended)
 ```powershell
@@ -294,9 +294,14 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 - Events 201-203: Audit warnings (RC4 requested for default accounts)
 - Events 206-208: Enforcement blocks (RC4 blocked in Enforcement mode)
 
-### Missing AES Keys (v2.3.0+)
-- Accounts with passwords set before Domain Functional Level was raised to 2008
-- These accounts have no AES keys generated — password reset required
+### Missing AES Keys (v2.3.0+, improved in v4.4.0)
+
+Detected via two paths in the standard scan (no `-DeepScan` needed):
+
+- **Path A** — `msDS-SupportedEncryptionTypes` explicitly set to a non-zero value **without AES bits** (e.g., `0x4` = RC4-only). These accounts definitively lack AES support regardless of password age
+- **Path B** — `msDS-SupportedEncryptionTypes` not set (null/0) AND password older than 5 years. May predate the DFL 2008 upgrade and never had AES keys generated
+
+> Since v4.4.0, RC4-only and DES-only accounts are caught by the standard scan. `-DeepScan` is no longer needed for these — it now focuses on RC4-exception/DES-enabled users without SPNs and computer account scanning.
 
 ### AzureADKerberos (v2.5.0+)
 - **Entra Kerberos proxy** object in DC OU is auto-detected and excluded from DC counts

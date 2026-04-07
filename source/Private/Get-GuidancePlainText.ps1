@@ -335,11 +335,32 @@ ktpass command reference:
 9. Accounts Missing AES Keys
    ------------------------------------------------------------
 
-   Accounts whose password was last set BEFORE the Domain Functional Level
-   was raised to Windows Server 2008 will NOT have AES keys generated.
-   The lastLogonTimestamp field helps determine if the account is still in use.
+   Two detection paths identify accounts without AES Kerberos keys:
 
-   Find affected accounts (including last logon):
+   Path A - Explicit Non-AES Encryption:
+   Accounts where msDS-SupportedEncryptionTypes is explicitly set to a
+   non-zero value WITHOUT AES bits (0x18). These accounts are configured
+   for RC4-only or DES-only encryption regardless of password age.
+   Examples: 0x4 (RC4-only), 0x3 (DES-only), 0x7 (DES+RC4, no AES).
+
+   Path B - Attribute Not Set + Old Password:
+   Accounts where msDS-SupportedEncryptionTypes is not set (null/0) AND
+   the password is older than 5 years. These accounts may predate the
+   DFL 2008 upgrade and never had AES keys generated.
+
+   Find Path A accounts (explicit non-AES):
+   PS> Get-ADUser -LDAPFilter '(&(!(userAccountControl:1.2.840.113556.1.4.803:=2))(msDS-SupportedEncryptionTypes=*))' ``
+       -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, lastLogonTimestamp |
+       Where-Object { ``$enc = ``$_.'msDS-SupportedEncryptionTypes';
+                       ``$enc -and ``$enc -ne 0 -and -not (``$enc -band 0x18) } |
+       Select-Object Name, PasswordLastSet,
+           @{N='EncType';E={``$_.'msDS-SupportedEncryptionTypes'}},
+           @{N='LastLogon';E={
+               if (``$_.lastLogonTimestamp) { [DateTime]::FromFileTime(``$_.lastLogonTimestamp) }
+               else { 'Never' }
+           }}
+
+   Find Path B accounts (attribute not set + old password, including last logon):
    PS> Get-ADUser -Filter 'Enabled -eq ``$true' -Properties PasswordLastSet, ``
        'msDS-SupportedEncryptionTypes', lastLogonTimestamp |
        Where-Object { ``$_.PasswordLastSet -lt (Get-Date).AddYears(-5) -and
@@ -353,7 +374,12 @@ ktpass command reference:
    * Accounts with recent lastLogonTimestamp: actively in use, prioritize
    * Accounts that never logged on or >90 days: consider disabling first
 
-   Remediation Options:
+   Remediation for Path A (explicit non-AES):
+   First set the account to AES-only, then reset the password:
+   PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+   PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+
+   Remediation for Path B (attribute not set + old password):
 
    a) Option 1: Reset Password (Simple)
       * Reset password to generate AES keys
