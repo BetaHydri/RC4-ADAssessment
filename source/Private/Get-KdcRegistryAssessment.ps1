@@ -157,12 +157,12 @@ function Get-KdcRegistryAssessment {
                 0 {
                     $assessment.RC4DefaultDisablementPhase.Status = "WARNING"
                     Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase = 0 (RC4 disablement NOT active)" `
-                        -Detail "Set to 1 first to enable KDCSVC audit events 201-209, monitor, then set to 2 for Enforcement (CVE-2026-20833)"
+                        -Detail "Set to 1 (checkpoint), then 2 for Enforcement. KDCSVC audit events are logged after installing the security update regardless of this value (CVE-2026-20833)"
                 }
                 1 {
                     $assessment.RC4DefaultDisablementPhase.Status = "OK"
-                    Write-Finding -Status "OK" -Message "RC4DefaultDisablementPhase = 1 (Audit mode active - KDCSVC events 201-209 enabled)" `
-                        -Detail "Monitor KDCSVC events in System log. When no audit events remain, set to 2 for Enforcement (CVE-2026-20833)"
+                    Write-Finding -Status "OK" -Message "RC4DefaultDisablementPhase = 1 (Audit checkpoint active)" `
+                        -Detail "Monitor KDCSVC events 201-209 in System log. When no audit events remain, set to 2 for Enforcement (CVE-2026-20833)"
                 }
                 2 {
                     $assessment.RC4DefaultDisablementPhase.Status = "OK"
@@ -179,7 +179,7 @@ function Get-KdcRegistryAssessment {
         else {
             $assessment.RC4DefaultDisablementPhase.Status = "NOT SET"
             Write-Finding -Status "WARNING" -Message "RC4DefaultDisablementPhase registry key is not set" `
-                -Detail "Deploy January 2026+ security updates, then set to 1 to enable KDCSVC audit events (CVE-2026-20833)"
+                -Detail "Deploy January 2026+ security updates, then set to 1 (checkpoint) before enabling Enforcement (value 2). KDCSVC audit events are logged automatically after installing the update (CVE-2026-20833)"
         }
 
         if ($assessment.FailedDCs.Count -gt 0) {
