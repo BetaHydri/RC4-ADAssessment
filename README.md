@@ -83,9 +83,13 @@ Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json
 - **Modules:** `ActiveDirectory`, `GroupPolicy`
 - **Permissions:** Domain Admin or equivalent (Event Log Readers for event analysis)
 - **Network:** WinRM (5985) or RPC (135) to DCs for event log and registry queries
-- **Firewall (if WinRM is not configured):** Enable the following inbound rules on DCs via `wf.msc` (Windows Firewall) to allow RPC fallback for event log queries:
+- **Firewall (if WinRM is not configured):** Enable the following inbound rules on DCs to allow RPC fallback for event log queries:
   - `Remote Event Log Management (RPC)`
   - `Remote Event Log Management (RPC-EPMAP)`
+  - Via `wf.msc` (local), GPO (Computer Configuration → Windows Settings → Security Settings → Windows Firewall), or PowerShell:
+    ```powershell
+    Enable-NetFirewallRule -DisplayGroup 'Remote Event Log Management'
+    ```
 
 ## Module Commands
 
