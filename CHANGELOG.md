@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-04-07
+
 ### Added
 
 - Track `SessionKeyEncryptionType` alongside `TicketEncryptionType` in event log analysis,
