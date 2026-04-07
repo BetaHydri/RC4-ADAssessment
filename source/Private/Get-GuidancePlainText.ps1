@@ -1,5 +1,6 @@
-function Get-GuidancePlainText {
-    <#
+function Get-GuidancePlainText
+{
+  <#
     .SYNOPSIS
         Generates a plain-text remediation guidance document for the RC4/DES assessment.
 
@@ -24,24 +25,24 @@ function Get-GuidancePlainText {
         $text = Get-GuidancePlainText -Domain "contoso.com" -AssessmentDate (Get-Date -Format "yyyy-MM-dd") -Version "1.0.0"
         $text | Out-File -FilePath "C:\Reports\guidance.txt"
     #>
-    param(
-        [string]$Domain,
-        [string]$AssessmentDate,
-        [string]$Version
-    )
+  param(
+    [string]$Domain,
+    [string]$AssessmentDate,
+    [string]$Version
+  )
 
-    $sb = [System.Text.StringBuilder]::new()
-    [void]$sb.AppendLine("================================================================================")
-    [void]$sb.AppendLine("DES/RC4 Kerberos Encryption Assessment - Guidance Reference")
-    [void]$sb.AppendLine("================================================================================")
-    [void]$sb.AppendLine("Domain:          $Domain")
-    [void]$sb.AppendLine("Generated:       $AssessmentDate")
-    [void]$sb.AppendLine("Tool Version:    v$Version")
-    [void]$sb.AppendLine("================================================================================")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("RECOMMENDED MANUAL VALIDATION STEPS")
-    [void]$sb.AppendLine("")
-    [void]$sb.AppendLine(@"
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.AppendLine("================================================================================")
+  [void]$sb.AppendLine("DES/RC4 Kerberos Encryption Assessment - Guidance Reference")
+  [void]$sb.AppendLine("================================================================================")
+  [void]$sb.AppendLine("Domain:          $Domain")
+  [void]$sb.AppendLine("Generated:       $AssessmentDate")
+  [void]$sb.AppendLine("Tool Version:    v$Version")
+  [void]$sb.AppendLine("================================================================================")
+  [void]$sb.AppendLine("")
+  [void]$sb.AppendLine("RECOMMENDED MANUAL VALIDATION STEPS")
+  [void]$sb.AppendLine("")
+  [void]$sb.AppendLine(@"
 1. Event Log Monitoring Setup
    ------------------------------------------------------------
    Enable advanced Kerberos auditing on Domain Controllers:
@@ -471,5 +472,5 @@ Reference Documentation:
    * https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4
    * https://github.com/microsoft/Kerberos-Crypto
 "@)
-    return $sb.ToString()
+  return $sb.ToString()
 }
