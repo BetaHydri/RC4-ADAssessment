@@ -286,7 +286,7 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 
 ### KDC Registry (v2.3.0+)
 - **DefaultDomainSupportedEncTypes** - OS-level encryption defaults
-- **RC4DefaultDisablementPhase** - Set to 1 (Audit) then 2 (Enforce) per CVE-2026-20833
+- **RC4DefaultDisablementPhase** - Set to 1 (checkpoint), then 2 (Enforce) per CVE-2026-20833. KDCSVC audit events are logged after installing the security update regardless of this value.
 
 ### KDCSVC System Events (v2.4.0+)
 - **Events 201-209** - KDCSVC events in System log indicating RC4 risks (CVE-2026-20833)
@@ -537,7 +537,7 @@ Invoke-RC4AssessmentComparison -BaselineFile old.json -CurrentFile new.json -Sho
 3. **Enable parallel processing** - Use `-Parallel` with PowerShell 7+ for faster forest assessments
 4. **Monitor for 7+ days** - Use `-EventLogHours 168` to capture weekly activity patterns
 5. **Track progress with Compare-Assessments** - Export baseline, remediate, export again, then compare
-6. **Deploy January 2026 updates** - Set `RC4DefaultDisablementPhase = 1` on all DCs
+6. **Deploy January 2026 updates** - Set `RC4DefaultDisablementPhase = 1` on all DCs (administrative checkpoint before enforcement)
 7. **Export results** - Keep historical data for compliance/auditing (saved to `.\Exports` folder)
 8. **Include guidance** - `-IncludeGuidance` shows audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline
 9. **Use -Server for child domains** - Specify a known DC when auto-discovery fails
