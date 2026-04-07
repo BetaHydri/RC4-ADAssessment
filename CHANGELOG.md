@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-04-07
+
+### Fixed
+
+- Event log analysis incorrectly reported DCs as "Failed" (red) when no 4768/4769 events
+  existed in the time window. `Get-WinEvent` throws "No events were found that match the
+  specified selection criteria" which was caught as a query failure instead of an empty result.
+  DCs now correctly appear as "Success" with zero event counts.
+- Empty event array check now uses `@($events).Count -eq 0` for PowerShell 5.1/7 consistency
+- Fixed `PSUseBOMForUnicodeEncodedFile` PSScriptAnalyzer warning on `Get-EventLogEncryptionAnalysis.ps1`
+
+### Added
+
+- 2 new unit tests for "no events found" handling (total: 488 tests)
+
 ## [4.2.0] - 2026-04-07
 
 ### Added
