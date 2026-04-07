@@ -132,7 +132,7 @@ function Get-EventLogEncryptionAnalysis {
                                 EventId               = $evt.Id
                                 TargetUserName        = $data['TargetUserName']
                                 TicketEncryptionType  = $data['TicketEncryptionType']
-                                SessionEncryptionType = $data['SessionEncryptionType']
+                                SessionEncryptionType = $data['SessionKeyEncryptionType']
                                 ServiceName           = $data['ServiceName']
                             }
                         }
@@ -192,8 +192,8 @@ function Get-EventLogEncryptionAnalysis {
                                 $encType = [int]$eventData['TicketEncryptionType']
                                 $account = $eventData['TargetUserName']
                             }
-                            if ($eventData['SessionEncryptionType']) {
-                                $sessionEncType = [int]$eventData['SessionEncryptionType']
+                            if ($eventData['SessionKeyEncryptionType']) {
+                                $sessionEncType = [int]$eventData['SessionKeyEncryptionType']
                             }
                         }
 
@@ -290,9 +290,16 @@ function Get-EventLogEncryptionAnalysis {
         Write-Host "    $([char]0x2022) RC4 Tickets: $($assessment.RC4Tickets)" -ForegroundColor $(if ($assessment.RC4Tickets -gt 0) { "Red" } else { "Green" })
         Write-Host "    $([char]0x2022) DES Tickets: $($assessment.DESTickets)" -ForegroundColor $(if ($assessment.DESTickets -gt 0) { "Red" } else { "Green" })
         Write-Host "  Session Key Encryption:" -ForegroundColor White
-        Write-Host "    $([char]0x2022) AES Session Keys: $($assessment.SessionKeyAES)" -ForegroundColor Green
-        Write-Host "    $([char]0x2022) RC4 Session Keys: $($assessment.SessionKeyRC4)" -ForegroundColor $(if ($assessment.SessionKeyRC4 -gt 0) { "Yellow" } else { "Green" })
-        Write-Host "    $([char]0x2022) DES Session Keys: $($assessment.SessionKeyDES)" -ForegroundColor $(if ($assessment.SessionKeyDES -gt 0) { "Red" } else { "Green" })
+        $totalSessionKeys = $assessment.SessionKeyAES + $assessment.SessionKeyRC4 + $assessment.SessionKeyDES + $assessment.SessionKeyUnknown
+        if ($assessment.EventsAnalyzed -gt 0 -and $totalSessionKeys -eq 0) {
+            Write-Host "    $([char]0x2022) N/A - DCs use old event format without SessionKeyEncryptionType field" -ForegroundColor Gray
+            Write-Host "    Install January 2025+ cumulative update on DCs to enable session key tracking" -ForegroundColor Gray
+        }
+        else {
+            Write-Host "    $([char]0x2022) AES Session Keys: $($assessment.SessionKeyAES)" -ForegroundColor Green
+            Write-Host "    $([char]0x2022) RC4 Session Keys: $($assessment.SessionKeyRC4)" -ForegroundColor $(if ($assessment.SessionKeyRC4 -gt 0) { "Yellow" } else { "Green" })
+            Write-Host "    $([char]0x2022) DES Session Keys: $($assessment.SessionKeyDES)" -ForegroundColor $(if ($assessment.SessionKeyDES -gt 0) { "Red" } else { "Green" })
+        }
 
         if ($assessment.RC4Tickets -gt 0) {
             Write-Finding -Status "CRITICAL" -Message "RC4 tickets detected in active use!"
