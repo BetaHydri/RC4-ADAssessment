@@ -280,8 +280,104 @@ flowchart TD
 |------|-----------|--------|
 | **Nov 2022** | Post-OOB updates change trust/computer defaults to AES | Trusts with unset `msDS-SupportedEncryptionTypes` now default to AES |
 | **Jan 2026** | Security updates add `RC4DefaultDisablementPhase` registry key (CVE-2026-20833) | Set to `1` to enable KDCSVC audit events 201-209, monitor, then set to `2` for Enforcement |
-| **Apr 2026** | Enforcement phase — `DefaultDomainSupportedEncTypes` defaults to AES-only (0x18) | Manual rollback still possible; `RC4DefaultDisablementPhase` can be set to disable enforcement |
+| **Apr 2026** | Enforcement phase — `DefaultDomainSupportedEncTypes` defaults to AES-only (0x18) | Manual rollback still possible; `RC4DefaultDisablementPhase` can be set back to `1` for Audit |
 | **Jul 2026** | Full enforcement — `RC4DefaultDisablementPhase` registry key removed | Only accounts with _explicit_ RC4 in `msDS-SupportedEncryptionTypes` will work |
+
+### `RC4DefaultDisablementPhase` Registry Reference
+
+**Registry path (on each DC):**
+
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+Value: RC4DefaultDisablementPhase (REG_DWORD)
+```
+
+| Value | Mode | Behaviour |
+|:-----:|------|-----------|
+| **0** | Disabled | No audit, no enforcement — original behaviour (pre-Jan 2026) |
+| **1** | Audit | KDCSVC events 201–209 are logged, **RC4 still works** — no blocking |
+| **2** | Enforcement | `DefaultDomainSupportedEncTypes` internally defaults to `0x18` (AES-only), RC4 blocked for accounts without explicit `msDS-SupportedEncryptionTypes` |
+| Not set | (same as 0) | No audit, no enforcement — until April 2026 patch changes the default |
+
+```powershell
+# Enable Audit mode on a DC (recommended before April 2026):
+$path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+if (-not (Test-Path $path)) { New-Item -Path $path -Force }
+Set-ItemProperty -Path $path -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
+
+# Verify:
+Get-ItemProperty -Path $path -Name 'RC4DefaultDisablementPhase'
+```
+
+> **No reboot required.** The KDC picks up the change immediately.
+>
+> **Source:** [KB5073381 — CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
+
+### How `DefaultDomainSupportedEncTypes` Works
+
+`DefaultDomainSupportedEncTypes` is the KDC's fallback encryption type for accounts that do **not** have `msDS-SupportedEncryptionTypes` set in AD. It determines what encryption the KDC offers when the account has no explicit preference.
+
+**Decision logic:**
+
+```
+Account has msDS-SupportedEncryptionTypes set?
+├── YES → KDC uses account value (e.g. 0x1C = RC4+AES exception)
+└── NO  → KDC uses DefaultDomainSupportedEncTypes
+          ├── Before April 2026: 0x27 (DES+RC4+AES256-SK) → RC4 allowed
+          ├── After April 2026:  0x18 (AES-only) → RC4 blocked
+          └── RC4DefaultDisablementPhase=2: 0x18 (same as April)
+```
+
+| Phase | `DefaultDomainSupportedEncTypes` | `msDS-SupportedEncryptionTypes = 0x1C` |
+|-------|--------------------------------|---------------------------------------|
+| Before April 2026 | `0x27` (incl. RC4) | Account uses `0x1C` (RC4+AES) |
+| After April 2026 | `0x18` (AES-only) | Account **still uses `0x1C`** — per-account value always takes precedence |
+| After July 2026 | `0x18` (permanent) | Account **still uses `0x1C`** — exceptions continue to work |
+
+> **Warning: Never set `DefaultDomainSupportedEncTypes` to `0x1C` domain-wide.** This enables RC4 for _all_ accounts without explicit encryption types, making every account vulnerable to [CVE-2026-20833](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc). Use per-account `msDS-SupportedEncryptionTypes = 0x1C` exceptions instead.
+
+### Production vs. Test/QA Deployment Guide
+
+**Production (before April 2026):**
+
+```powershell
+# Audit-only — RC4 continues to work, KDCSVC events 201-209 are logged
+$path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+if (-not (Test-Path $path)) { New-Item -Path $path -Force }
+Set-ItemProperty -Path $path -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
+```
+
+**Test/QA (enforce AES-only now, without waiting for April patch):**
+
+```powershell
+# Enforcement — RC4 blocked for accounts without explicit 0x1C exception
+$path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+if (-not (Test-Path $path)) { New-Item -Path $path -Force }
+Set-ItemProperty -Path $path -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord
+```
+
+> After setting Phase 2 in Test/QA, verify that no services break. Accounts that need RC4 should be set to `msDS-SupportedEncryptionTypes = 0x1C` (per-account exception).
+
+### GPO: Kerberos Encryption Types
+
+The GPO **"Network security: Configure encryption types allowed for Kerberos"** configures which encryption types a computer offers and accepts:
+
+> Computer Configuration → Policies → Windows Settings → Security Settings → Local Policies → Security Options
+
+| Checkbox | Bit | Decimal | Recommendation |
+|----------|-----|---------|----------------|
+| DES_CBC_CRC | `0x01` | 1 | **Do not enable** |
+| DES_CBC_MD5 | `0x02` | 2 | **Do not enable** |
+| RC4_HMAC_MD5 | `0x04` | 4 | **Do not enable** (ineffective after July 2026) |
+| AES128_HMAC_SHA1 | `0x08` | 8 | ✅ Enable |
+| AES256_HMAC_SHA1 | `0x10` | 16 | ✅ Enable |
+| Future encryption types | `0x80000000` | 2147483648 | ✅ Enable (CIS Benchmark) |
+
+**Recommended:** AES128 + AES256 + Future = `0x80000018` (CIS Benchmark value).
+
+This GPO **writes** `msDS-SupportedEncryptionTypes` to each computer object in AD when Group Policy applies. It is separate from `DefaultDomainSupportedEncTypes` (KDC registry), which only affects accounts _without_ the attribute set.
+
+> **Source:** [Network security: Configure encryption types allowed for Kerberos](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/network-security-configure-encryption-types-allowed-for-kerberos)
 
 ### What Happens After July 2026
 
@@ -304,6 +400,8 @@ flowchart TD
 | 24 | 0x18 | AES128 + AES256 | **Recommended (AES-only)** |
 | 28 | 0x1C | RC4 + AES128 + AES256 | **RC4 exception with AES** |
 | 31 | 0x1F | DES-CBC-CRC, DES-CBC-MD5, RC4, AES128, AES256 | All types (insecure — includes DES) |
+| 39 | 0x27 | DES + RC4 + AES256-SK | Old default (pre-Nov 2022) — insecure |
+| 60 | 0x3C | RC4 + AES128 + AES256 + AES256-SK | Historical recommended — replace with `0x18` |
 | 2147483672 | 0x80000018 | AES128 + AES256 + Future encryption types | **CIS Benchmark recommended GPO value** |
 
 > **Tip:** The value is a bitmask — add the decimal values for the types you need.
@@ -327,8 +425,8 @@ klist purge
 
 # Domain-wide fallback (INSECURE - leaves all accounts vulnerable to CVE-2026-20833):
 # Only as last resort if per-account exceptions are not feasible:
-# Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
-#   -Name 'DefaultDomainSupportedEncTypes' -Value 0x1C -Type DWord
+# $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+# Set-ItemProperty -Path $path -Name 'DefaultDomainSupportedEncTypes' -Value 0x1C -Type DWord
 ```
 
 Document all exceptions and plan vendor upgrades.

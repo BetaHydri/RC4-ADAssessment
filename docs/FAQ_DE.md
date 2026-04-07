@@ -219,6 +219,56 @@ erforderlich.
 
 - **24 (0x18)** = AES128 + AES256 — **Empfohlen (nur AES)**
 - **28 (0x1C)** = RC4 + AES128 + AES256 — Letzter Ausweg für Legacy-Anwendungen
+- **60 (0x3C)** = RC4 + AES128 + AES256 + AES256-SK — Historisch empfohlen
+  (durch `0x18` ersetzen)
+- **2147483672 (0x80000018)** = AES128 + AES256 + Future — CIS-Benchmark-GPO-Wert
+
+**F: Welche Werte hat `RC4DefaultDisablementPhase`?**
+
+Der Registrierungsschlüssel befindet sich unter:
+
+```
+HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+```
+
+| Wert | Modus | Wirkung |
+|:----:|-------|---------|
+| 0 | Deaktiviert | Kein Audit, keine Durchsetzung |
+| 1 | Audit | KDCSVC-Events 201–209 werden geloggt, RC4 funktioniert weiterhin |
+| 2 | Durchsetzung | `DefaultDomainSupportedEncTypes` wird intern auf `0x18` gesetzt, RC4 blockiert |
+
+Kein Neustart erforderlich. Vor April 2026 auf `1` setzen, um die Überwachung zu
+aktivieren.
+
+**F: Was ändert sich nach dem April-2026-Patch?**
+
+Der April-Patch setzt `DefaultDomainSupportedEncTypes` intern auf `0x18`
+(nur AES). Konten ohne gesetztes `msDS-SupportedEncryptionTypes` erhalten keine
+RC4-Tickets mehr. Konten mit explizitem `0x1C` (RC4+AES) funktionieren weiterhin.
+Ein Rollback auf `RC4DefaultDisablementPhase = 1` (Audit) ist bis Juli 2026 noch
+möglich.
+
+**F: Wie bereite ich Produktion vs. Test/QA vor?**
+
+- **Produktion (vor April 2026):** `RC4DefaultDisablementPhase = 1` auf allen
+  DCs setzen — nur Audit, RC4 funktioniert weiter, KDCSVC-Events werden geloggt
+- **Test/QA (sofort durchsetzen):** `RC4DefaultDisablementPhase = 2` auf allen
+  DCs setzen — RC4 blockiert für Konten ohne explizite `0x1C`-Ausnahme
+
+**F: Sollte ich `DefaultDomainSupportedEncTypes` domänenweit auf `0x1C` setzen?**
+
+**Nein — niemals.** Das aktiviert RC4 für *alle* Konten ohne explizite
+Verschlüsselungstypen und macht die gesamte Domäne anfällig für CVE-2026-20833.
+Verwenden Sie stattdessen pro Konto `msDS-SupportedEncryptionTypes = 0x1C` nur
+für einzelne Legacy-Dienste, die RC4 tatsächlich benötigen.
+
+**F: Was macht die GPO „Kerberos-Verschlüsselungstypen konfigurieren"?**
+
+Sie konfiguriert, welche Verschlüsselungstypen ein Computer anbietet und
+akzeptiert. Aktivieren Sie AES128 + AES256 + Zukünftige Verschlüsselungstypen
+(= `0x80000018`, CIS-Benchmark). Diese GPO schreibt
+`msDS-SupportedEncryptionTypes` auf Computerobjekte im AD. Sie ist getrennt von
+`DefaultDomainSupportedEncTypes` (KDC-Registry-Fallback für Konten ohne Attribut).
 
 **F: Wie funktioniert die Erkennung „Fehlende AES-Schlüssel"?**
 

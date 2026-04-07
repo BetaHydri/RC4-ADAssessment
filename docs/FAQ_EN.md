@@ -204,6 +204,54 @@ remain AES-only. No domain-wide registry change is needed.
 
 - **24 (0x18)** = AES128 + AES256 — **Recommended (AES-only)**
 - **28 (0x1C)** = RC4 + AES128 + AES256 — Last resort for legacy applications
+- **60 (0x3C)** = RC4 + AES128 + AES256 + AES256-SK — Historical recommended
+  (replace with `0x18`)
+- **2147483672 (0x80000018)** = AES128 + AES256 + Future — CIS Benchmark GPO value
+
+**Q: What are the `RC4DefaultDisablementPhase` registry values?**
+
+The registry key is located at:
+
+```
+HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+```
+
+| Value | Mode | Effect |
+|:-----:|------|--------|
+| 0 | Disabled | No audit, no enforcement |
+| 1 | Audit | KDCSVC events 201–209 logged, RC4 still works |
+| 2 | Enforcement | `DefaultDomainSupportedEncTypes` defaults to `0x18`, RC4 blocked |
+
+No reboot required. Set to `1` before April 2026 to enable monitoring.
+
+**Q: What changes after the April 2026 patch?**
+
+The April patch internally changes `DefaultDomainSupportedEncTypes` to `0x18`
+(AES-only). Accounts without `msDS-SupportedEncryptionTypes` set will no longer
+get RC4 tickets. Accounts with explicit `0x1C` (RC4+AES) continue to work. You
+can still roll back to `RC4DefaultDisablementPhase = 1` (Audit) until July 2026.
+
+**Q: How should I prepare Production vs. Test/QA environments?**
+
+- **Production (before April 2026):** Set `RC4DefaultDisablementPhase = 1` on
+  all DCs — audit only, RC4 continues to work, KDCSVC events are logged
+- **Test/QA (enforce now):** Set `RC4DefaultDisablementPhase = 2` on all DCs —
+  RC4 blocked for accounts without explicit `0x1C` exception
+
+**Q: Should I set `DefaultDomainSupportedEncTypes` to `0x1C` domain-wide?**
+
+**No — never.** That enables RC4 for *all* accounts without explicit encryption
+types and makes the entire domain vulnerable to CVE-2026-20833. Use per-account
+`msDS-SupportedEncryptionTypes = 0x1C` exceptions only for specific legacy
+services that absolutely need RC4.
+
+**Q: What does the GPO "Configure encryption types allowed for Kerberos" do?**
+
+It configures which encryption types a computer offers and accepts. Enable
+AES128 + AES256 + Future encryption types (= `0x80000018`, CIS Benchmark). This
+GPO writes `msDS-SupportedEncryptionTypes` to computer objects in AD. It is
+separate from `DefaultDomainSupportedEncTypes` (KDC registry fallback for
+accounts without the attribute).
 
 **Q: How does "Missing AES Keys" detection work?**
 
