@@ -283,36 +283,32 @@ Describe 'Get-AccountEncryptionAssessment' {
                     DomainMode          = 'Windows2016Domain'
                 }
             }
-            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
-                if ("$Identity" -eq 'krbtgt') {
-                    return [PSCustomObject]@{
-                        SamAccountName                  = 'krbtgt'
-                        PasswordLastSet                 = (Get-Date).AddDays(-30)
-                        pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
-                        'msDS-SupportedEncryptionTypes' = 24
-                        WhenChanged                     = (Get-Date).AddDays(-30)
+            # Default mock: return null for any unmatched Get-ADUser call
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser { $null }
+            # KRBTGT identity lookup
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser -ParameterFilter { "$Identity" -eq 'krbtgt' } {
+                [PSCustomObject]@{
+                    SamAccountName                  = 'krbtgt'
+                    PasswordLastSet                 = (Get-Date).AddDays(-30)
+                    pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
+                    'msDS-SupportedEncryptionTypes' = 24
+                    WhenChanged                     = (Get-Date).AddDays(-30)
+                }
+            }
+            # Path A: LDAP filter query for explicit non-AES accounts
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser -ParameterFilter { $LDAPFilter -and $LDAPFilter -match 'msDS-SupportedEncryptionTypes' } {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'rc4onlysvc'
+                        DistinguishedName               = 'CN=rc4onlysvc,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddDays(-60)
+                        'msDS-SupportedEncryptionTypes' = 4
+                        ServicePrincipalName            = @('HTTP/app.contoso.com')
+                        WhenCreated                     = (Get-Date).AddDays(-365)
+                        lastLogonTimestamp               = (Get-Date).AddDays(-1).ToFileTime()
                     }
-                }
-                # Path A: LDAP filter query for explicit non-AES accounts
-                if ($LDAPFilter -match 'msDS-SupportedEncryptionTypes') {
-                    return @(
-                        [PSCustomObject]@{
-                            SamAccountName                  = 'rc4onlysvc'
-                            DistinguishedName               = 'CN=rc4onlysvc,DC=contoso,DC=com'
-                            Enabled                         = $true
-                            PasswordLastSet                 = (Get-Date).AddDays(-60)
-                            'msDS-SupportedEncryptionTypes' = 4
-                            ServicePrincipalName            = @('HTTP/app.contoso.com')
-                            WhenCreated                     = (Get-Date).AddDays(-365)
-                            lastLogonTimestamp               = (Get-Date).AddDays(-1).ToFileTime()
-                        }
-                    )
-                }
-                # Path B: Filter query for old passwords — return nothing
-                if ($Filter) {
-                    return $null
-                }
-                return $null
+                )
             }
         }
 
@@ -337,36 +333,34 @@ Describe 'Get-AccountEncryptionAssessment' {
                     DomainMode          = 'Windows2016Domain'
                 }
             }
-            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
-                if ("$Identity" -eq 'krbtgt') {
-                    return [PSCustomObject]@{
-                        SamAccountName                  = 'krbtgt'
-                        PasswordLastSet                 = (Get-Date).AddDays(-30)
-                        pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
-                        'msDS-SupportedEncryptionTypes' = 24
-                        WhenChanged                     = (Get-Date).AddDays(-30)
+            # Default mock: return null for any unmatched Get-ADUser call
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser { $null }
+            # KRBTGT identity lookup
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser -ParameterFilter { "$Identity" -eq 'krbtgt' } {
+                [PSCustomObject]@{
+                    SamAccountName                  = 'krbtgt'
+                    PasswordLastSet                 = (Get-Date).AddDays(-30)
+                    pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
+                    'msDS-SupportedEncryptionTypes' = 24
+                    WhenChanged                     = (Get-Date).AddDays(-30)
+                }
+            }
+            # Path A: LDAP filter — no explicit non-AES accounts
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser -ParameterFilter { $LDAPFilter -and $LDAPFilter -match 'msDS-SupportedEncryptionTypes' } { $null }
+            # Path B: Old password accounts with attribute not set
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser -ParameterFilter { $Filter -and "$Filter" -match 'PasswordLastSet' } {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'olduser'
+                        DistinguishedName               = 'CN=olduser,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddYears(-7)
+                        'msDS-SupportedEncryptionTypes' = $null
+                        ServicePrincipalName            = $null
+                        WhenCreated                     = (Get-Date).AddYears(-8)
+                        lastLogonTimestamp               = $null
                     }
-                }
-                # Path A: LDAP filter — no explicit non-AES accounts
-                if ($LDAPFilter -match 'msDS-SupportedEncryptionTypes') {
-                    return $null
-                }
-                # Path B: Old password accounts with attribute not set
-                if ($Filter) {
-                    return @(
-                        [PSCustomObject]@{
-                            SamAccountName                  = 'olduser'
-                            DistinguishedName               = 'CN=olduser,DC=contoso,DC=com'
-                            Enabled                         = $true
-                            PasswordLastSet                 = (Get-Date).AddYears(-7)
-                            'msDS-SupportedEncryptionTypes' = $null
-                            ServicePrincipalName            = $null
-                            WhenCreated                     = (Get-Date).AddYears(-8)
-                            lastLogonTimestamp               = $null
-                        }
-                    )
-                }
-                return $null
+                )
             }
         }
 
@@ -386,36 +380,32 @@ Describe 'Get-AccountEncryptionAssessment' {
                     DomainMode          = 'Windows2016Domain'
                 }
             }
-            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
-                if ("$Identity" -eq 'krbtgt') {
-                    return [PSCustomObject]@{
-                        SamAccountName                  = 'krbtgt'
-                        PasswordLastSet                 = (Get-Date).AddDays(-30)
-                        pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
-                        'msDS-SupportedEncryptionTypes' = 24
-                        WhenChanged                     = (Get-Date).AddDays(-30)
+            # Default mock: return null for any unmatched Get-ADUser call
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser { $null }
+            # KRBTGT identity lookup
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser -ParameterFilter { "$Identity" -eq 'krbtgt' } {
+                [PSCustomObject]@{
+                    SamAccountName                  = 'krbtgt'
+                    PasswordLastSet                 = (Get-Date).AddDays(-30)
+                    pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
+                    'msDS-SupportedEncryptionTypes' = 24
+                    WhenChanged                     = (Get-Date).AddDays(-30)
+                }
+            }
+            # Path A: account with AES bits set — should be skipped by the filter logic
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser -ParameterFilter { $LDAPFilter -and $LDAPFilter -match 'msDS-SupportedEncryptionTypes' } {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName                  = 'aesuser'
+                        DistinguishedName               = 'CN=aesuser,DC=contoso,DC=com'
+                        Enabled                         = $true
+                        PasswordLastSet                 = (Get-Date).AddYears(-7)
+                        'msDS-SupportedEncryptionTypes' = 0x1C
+                        ServicePrincipalName            = $null
+                        WhenCreated                     = (Get-Date).AddYears(-8)
+                        lastLogonTimestamp               = (Get-Date).AddDays(-5).ToFileTime()
                     }
-                }
-                # Path A: account with AES bits set — should be skipped
-                if ($LDAPFilter -match 'msDS-SupportedEncryptionTypes') {
-                    return @(
-                        [PSCustomObject]@{
-                            SamAccountName                  = 'aesuser'
-                            DistinguishedName               = 'CN=aesuser,DC=contoso,DC=com'
-                            Enabled                         = $true
-                            PasswordLastSet                 = (Get-Date).AddYears(-7)
-                            'msDS-SupportedEncryptionTypes' = 0x1C
-                            ServicePrincipalName            = $null
-                            WhenCreated                     = (Get-Date).AddYears(-8)
-                            lastLogonTimestamp               = (Get-Date).AddDays(-5).ToFileTime()
-                        }
-                    )
-                }
-                # Path B: no old accounts with unset attribute
-                if ($Filter) {
-                    return $null
-                }
-                return $null
+                )
             }
         }
 
