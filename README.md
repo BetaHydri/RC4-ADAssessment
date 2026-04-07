@@ -5,8 +5,7 @@
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![Build](https://img.shields.io/badge/build-Sampler-blueviolet)
 
-> **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference.  
-> **📌 v3.0 Migration:** This version migrates from standalone scripts to the **RC4-ADAssessment** PowerShell module built with [Sampler](https://github.com/gaelcolas/Sampler). See [Migrating from v2.x](#migrating-from-v2x-standalone-scripts) for the old→new mapping.
+> **📌 Note:** Legacy v1.0 files are archived in the [`archive/`](archive/) folder for reference. For migration from standalone scripts to the module, see [Migrating from v2.x](#migrating-from-v2x-standalone-scripts).
 
 A PowerShell module for assessing DES and RC4 Kerberos encryption usage in Active Directory. Scans DC encryption, trusts, KRBTGT, service accounts (SPN/gMSA/sMSA/dMSA), KDC registry keys, KDCSVC events 201–209 (CVE-2026-20833), and Security event logs (4768/4769) for actual RC4/DES ticket usage — with AES/RC4 correlation to detect accounts needing password reset, inline remediation commands, forest-wide scanning, assessment comparison, and a full reference manual. Built for the **July 2026 RC4 removal deadline**.
 
@@ -101,7 +100,7 @@ The module exports three commands:
 | `Invoke-RC4ForestAssessment` | Forest-wide assessment across all domains (replaces `Assess-ADForest.ps1`) |
 | `Invoke-RC4AssessmentComparison` | Compare two JSON exports to track progress (replaces `Compare-Assessments.ps1`) |
 
-> **Note:** The module also contains 20 private/internal functions (e.g. `Get-DomainControllerEncryption`, `Show-AssessmentSummary`) that are called internally by the three exported commands. See [Internal Function Mapping](#internal-function-mapping) for the full list.
+> **Note:** The module also contains private/internal functions (e.g., `Get-DomainControllerEncryption`, `Show-AssessmentSummary`) that are called internally by the three exported commands. See [Internal Function Mapping](#internal-function-mapping) for the full list.
 
 ## Parameters
 
@@ -143,7 +142,7 @@ The module exports three commands:
 
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.9.0
+DES/RC4 Kerberos Encryption Assessment v4.4.0
 ================================================================================
 
 Domain Controller Encryption Configuration
@@ -481,7 +480,7 @@ This toolkit implements the full [CVE-2026-20833 deployment guidance](https://su
 
 ### KDCSVC Event Reference (System Log, Provider: KDCSVC)
 
-These events are logged on Windows Server 2012+ domain controllers after installing the January 2026+ security updates. They require `RC4DefaultDisablementPhase >= 1` to appear.
+These events are logged on Windows Server 2012+ domain controllers after installing the January 2026+ security updates. They are logged regardless of `RC4DefaultDisablementPhase` — the phase controls enforcement behaviour, not event logging.
 
 | Event ID | RC4 Relation | Description | Phase |
 |----------|-------------|-------------|-------|

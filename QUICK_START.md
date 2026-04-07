@@ -1,6 +1,6 @@
 # RC4-ADAssessment Module — Quick Start Guide
 
-> **v3.0:** This toolkit is now a PowerShell module. Install with `Install-Module RC4-ADAssessment` or import from a local build.
+> Install with `Install-Module RC4-ADAssessment` or import from a local build. For migration from standalone v2.x scripts, see [README.md](README.md#migrating-from-v2x-standalone-scripts).
 
 ## 🔐 Using with Active Directory
 
@@ -101,7 +101,7 @@ Invoke-RC4AssessmentComparison -BaselineFile before.json -CurrentFile after.json
 ### Successful Quick Scan
 ```
 ================================================================================
-DES/RC4 Kerberos Encryption Assessment v2.9.0
+DES/RC4 Kerberos Encryption Assessment v4.4.0
 ================================================================================
 
 Domain Controller Encryption Configuration
@@ -176,7 +176,7 @@ Event Log Analysis - Actual DES/RC4 Usage
       #   0x1C = RC4 + AES128 + AES256
 ```
 
-### Event Log Access Failures (NEW in v2.0.1)
+### Event Log Access Failures
 ```
   ⚠  Event Log Query Failures:
   2 Domain Controller(s) could not be queried for event logs
@@ -214,7 +214,7 @@ Event Log Analysis - Actual DES/RC4 Usage
   PS> Add-ADGroupMember -Identity 'Event Log Readers' -Members 'YourAccount'
 ```
 
-### Summary Tables (NEW in v2.1.0)
+### Summary Tables
 
 At the end of every assessment, you'll see comprehensive summary tables:
 
@@ -382,7 +382,7 @@ Get Splunk/SIEM queries, KRBTGT rotation guidance, and continuous monitoring set
 
 ## 🆘 Troubleshooting
 
-### Event Log Access Issues (NEW in v2.0.1)
+### Event Log Access Issues
 
 **Problem:** Module shows "RPC server unavailable" or "Access denied" when querying DCs
 
@@ -420,7 +420,7 @@ Invoke-RC4Assessment -Domain child.contoso.com -Server DC01.child.contoso.com -A
 ```
 
 ### Emojis not displaying correctly
-**Solution**: Already fixed in v2.0.1! Script uses UTF-8 encoding and compatible Unicode characters for PowerShell 5.1
+**Solution**: Uses UTF-8 encoding and compatible Unicode characters for PowerShell 5.1
 
 ### Script runs very slowly
 **Solution**: Run without `-AnalyzeEventLogs` to skip remote DC queries
@@ -441,84 +441,12 @@ Invoke-RC4Assessment
 
 ---
 
-## 🎯 What's New
+## 🎯 What's New in v4.4.0
 
-> For the complete version history with full details, see [CHANGELOG.md](CHANGELOG.md).
+- **Missing AES Keys detection rewritten** — Two-path approach: Path A detects explicit non-AES encryption (e.g., RC4-only), Path B detects unset attributes with old passwords. Standard scan now catches RC4-only/DES-only accounts without `-DeepScan`.
+- **KDCSVC note corrected** — Events are logged regardless of `RC4DefaultDisablementPhase` (the phase controls enforcement, not logging).
 
-### v2.9.0 (March 2026) — Current
-
-- **AES/RC4 correlation** (major) — Detects accounts with AES configured but still issuing RC4 tickets (password reset needed)
-- **Event log deserialization fix** — Event analysis now correctly reports AES/RC4/DES ticket counts via remote XML parsing
-- **Guidance text file export** — `-ExportResults -IncludeGuidance` generates a plain-text guidance file in `Exports/`
-- **Per-DC event count fix** — Summary table now shows correct per-DC counts instead of aggregate totals
-- **KDCSVC event reference table** — Event IDs 201–209 with descriptions and recommended actions
-- **gMSA/sMSA creation guide** — Step-by-step Managed Service Account creation guidance
-
-### v2.8.0 (March 2026)
-
-- **lastLogonTimestamp for all flagged accounts** — Last Logon column in summary table, CSV, and JSON for triage prioritization
-- **Fine-Grained Password Policy (FGPP) workaround guidance** — Zero-disruption AES key generation for service accounts
-- **Explicit AES enforcement guidance** — Section 9c for cases where password reset alone doesn't generate AES keys
-- **Missing AES key accounts in summary table** — Now appear alongside other account types
-- **AzureADKerberos key rotation reminder** — `Set-AzureADKerberosServer -RotateServerKey` with module install steps
-
-### v2.7.2 (March 2026)
-
-- **SYSVOL GPO detection fallback fix**: Fixed silent failure in SYSVOL-based GPO encryption detection when GroupPolicy module is broken
-- Fixed Pester test mock parameter type mismatch for `Get-ADComputer` and `Get-ADObject` stubs
-
-### v2.7.1 (March 2026)
-
-- **Linux / Kerberos keytab impact guidance** added to KRBTGT rotation procedure and service account remediation
-- `ktpass` / `ktutil` keytab regeneration commands, verification steps, and reference links
-- Inline keytab warnings in KRBTGT and service account fix recommendations
-
-### v2.7.0 (March 2026)
-- **DC discovery refactored to `Get-ADDomainController -Filter *`** - Uses DC Locator (Configuration partition) instead of OU queries — no false positives from non-DC objects
-- AzureADKerberos filtering no longer needed for KDC registry, KDCSVC events, audit policy, event log functions
-- AzureADKerberos detection uses targeted `Get-ADComputer -Identity 'AzureADKerberos'` lookup
-
-### v2.6.0 (March 2026)
-- **AES-first hardening** - Default fix commands use `0x18` (AES-only); `0x1C` only as documented fallback
-- **RC4 exception account detection** - Accounts with explicit RC4 + AES flagged as WARNING
-- Updated guidance: AES-first approach with clear "last resort" language for RC4 exceptions
-
-### v2.5.1 (March 2026)
-- **DES-enabled account detection** - Accounts with DES bits alongside AES flagged as WARNING
-- **dMSA support** - Delegated Managed Service Accounts (Server 2025) correctly identified
-- **AzureADKerberos exclusion refinement** across KDC registry and KDCSVC queries
-
-### v2.5.0 (March 2026)
-- **AzureADKerberos detection** - Entra Kerberos proxy auto-detected and excluded from DC counts
-- Separate informational display in summary tables and CSV/JSON exports
-
-### v2.4.0 (March 2026)
-- **CVE-2026-20833 support** - KDCSVC System event scanning (events 201-209)
-- **`RC4DefaultDisablementPhase`** phased workflow (1 = Audit, 2 = Enforce)
-- Explicit RC4 exception value `0x1C` (RC4 + AES128 + AES256)
-
-### v2.3.0 (March 2026)
-- **KDC registry assessment** - `DefaultDomainSupportedEncTypes` and `RC4DefaultDisablementPhase` checked on all DCs
-- **Kerberos audit policy pre-check** - Verifies auditing is enabled before event log analysis
-- **Missing AES keys detection** - Accounts with passwords predating DFL 2008 raise (no AES keys)
-- **Inline remediation commands** - Every finding includes copy-paste PowerShell fix commands
-- **July 2026 RC4 removal timeline** - January 2026 and July 2026 milestone guidance
-- **Explicit RC4 exception workflow** - `0x1C` pattern for accounts that cannot use AES
-- **`klist purge`** - Included in all remediation steps for cache clearing
-- **Compare-Assessments.ps1** - Now compares account changes, registry keys, missing AES keys
-
-### v2.2.0 (February 2026)
-- **KRBTGT assessment** - Password age and encryption type checks with rotation guidance
-- **USE_DES_KEY_ONLY detection** - Accounts with this UserAccountControl flag
-- **Service account scan** - SPN accounts, gMSA/sMSA with RC4/DES-only encryption
-- **Stale password detection** - Service accounts >365 days old with RC4 enabled
-
-### v2.1.0 (December 2025)
-- WinRM-first event log queries with RPC fallback
-- Full forest DC enumeration per domain
-- Child domain support fixes
-- Comprehensive summary tables
-- Assess-ADForest.ps1 for forest-wide scanning
+For the complete version history, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
