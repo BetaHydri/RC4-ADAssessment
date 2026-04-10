@@ -33,6 +33,7 @@ Describe 'Get-TrustEncryptionAssessment' {
                 @([PSCustomObject]@{
                     Name = 'partner.com'
                     Direction = 'BiDirectional'
+                    TrustDirection = 3
                     TrustType = 'Forest'
                     'msDS-SupportedEncryptionTypes' = 24
                 })
@@ -48,6 +49,11 @@ Describe 'Get-TrustEncryptionAssessment' {
             $result = Get-TrustEncryptionAssessment -ServerParams @{}
             $result.RC4Risk | Should -Be 0
         }
+
+        It 'Includes direction label in details' {
+            $result = Get-TrustEncryptionAssessment -ServerParams @{}
+            $result.Details[0].Direction | Should -Be '3 (Bidirectional)'
+        }
     }
 
     Context 'When a trust has RC4 only' {
@@ -56,6 +62,7 @@ Describe 'Get-TrustEncryptionAssessment' {
                 @([PSCustomObject]@{
                     Name = 'legacy.com'
                     Direction = 'Outbound'
+                    TrustDirection = 2
                     TrustType = 'External'
                     'msDS-SupportedEncryptionTypes' = 4
                 })
@@ -65,6 +72,11 @@ Describe 'Get-TrustEncryptionAssessment' {
         It 'Reports RC4 risk' {
             $result = Get-TrustEncryptionAssessment -ServerParams @{}
             $result.RC4Risk | Should -Be 1
+        }
+
+        It 'Includes direction label in details' {
+            $result = Get-TrustEncryptionAssessment -ServerParams @{}
+            $result.Details[0].Direction | Should -Be '2 (Outbound)'
         }
     }
 }

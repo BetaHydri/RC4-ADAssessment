@@ -62,9 +62,36 @@ function Get-TrustEncryptionAssessment {
             $encValue = $trust.'msDS-SupportedEncryptionTypes'
             $encTypes = Get-EncryptionTypeString -Value $encValue
 
+            # Map TrustDirection integer to human-readable label
+            $directionLabels = @{
+                0 = 'Disabled'
+                1 = 'Inbound'
+                2 = 'Outbound'
+                3 = 'Bidirectional'
+            }
+            $rawDir = $trust.TrustDirection
+            $dirValue = $rawDir -as [int]
+            if ($null -eq $dirValue) {
+                # TrustDirection is a string (e.g. AD enum); resolve to integer
+                $dirValue = switch ([string]$rawDir) {
+                    'Disabled'      { 0 }
+                    'Inbound'       { 1 }
+                    'Outbound'      { 2 }
+                    'Bidirectional' { 3 }
+                    'BiDirectional' { 3 }
+                    default         { -1 }
+                }
+            }
+            $dirLabel = if ($directionLabels.ContainsKey($dirValue)) {
+                $directionLabels[$dirValue]
+            }
+            else {
+                'Unknown'
+            }
+
             $trustInfo = @{
                 Name                 = $trust.Name
-                Direction            = $trust.TrustDirection
+                Direction            = '{0} ({1})' -f $dirValue, $dirLabel
                 Type                 = $trust.TrustType
                 EncryptionValue      = $encValue
                 EncryptionTypes      = $encTypes
