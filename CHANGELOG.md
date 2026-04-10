@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-04-11
+
+### Added
+
+- Human-readable direction labels in trust assessment details (e.g. `3 (Bidirectional)`,
+  `2 (Outbound)`) replacing raw integer values
+- `TrustDirection` mapping handles both integer and string enum values from `Get-ADTrust`
+- 2 new Pester tests for direction label output (total: 494 tests)
+
 ## [4.5.0] - 2026-04-07
 
 ### Fixed
