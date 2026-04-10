@@ -187,6 +187,65 @@ References:
 - [KB5073381 — CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
 - [Detect and remediate RC4 usage in Kerberos](https://learn.microsoft.com/windows-server/security/kerberos/detect-remediate-rc4-kerberos)
 
+**Q: In Event 4769, why does the Account section show `0x0` while the Service
+section shows `0x1C`?**
+
+This is a common source of confusion. Event 4769 (TGS Service Ticket Request)
+has three sections that show different perspectives of the same ticket request:
+
+| Section | What it shows | Example |
+|---------|---------------|---------|
+| **Account Information** | The raw `msDS-SupportedEncryptionTypes` AD attribute on the *requesting* account | `0x0` (not set) |
+| **Service Information** | The *effective/computed* encryption types for the *target service* | `0x1C` (RC4 + AES128 + AES256) |
+| **Domain Controller Information** | The KDC that processed the request | `0x0` (also not set on the DC object) |
+
+The Account section reads the attribute value **directly from AD** — if
+`msDS-SupportedEncryptionTypes` is not configured, it shows `0x0`. The Service
+section shows the **effective** encryption types the KDC computed by looking at
+which cryptographic keys actually exist in the AD database for that account.
+Since DCs at 2008+ DFL automatically generate AES128 and AES256 keys (alongside
+the RC4/NT hash), the KDC knows all three key types are available — hence `0x1C`.
+
+**Why this matters for RC4 hardening:**
+
+With `msDS-SupportedEncryptionTypes = 0x0`, the KDC falls back to
+`DefaultDomainSupportedEncTypes` (the domain-wide default). Before July 2026,
+this default **includes RC4**, meaning RC4 tickets can and will be issued if a
+client requests them. After the July 2026 enforcement, the default changes to
+`0x18` (AES-only), so accounts with `0x0` will automatically stop receiving RC4
+tickets — no manual configuration needed.
+
+However, if you **explicitly** set `msDS-SupportedEncryptionTypes = 0x1C` on an
+account, you override the new default and **keep RC4 alive** for that account
+even after July 2026. This is useful as a transitional step or last-resort
+exception, but should not be left permanently.
+
+**Example — Event 4769 on a DC requesting a ticket to itself:**
+
+```
+Account Information:
+    Account Name:                    F1DC1$@FOREST1.NET
+    MSDS-SupportedEncryptionTypes:   0x0 (N/A)        ← not set in AD
+    Available Keys:                  N/A
+
+Service Information:
+    Service Name:                    F1DC1$
+    MSDS-SupportedEncryptionTypes:   0x1C (RC4, AES128-SHA96, AES256-SHA96)
+    Available Keys:                  RC4, AES128-SHA96, AES256-SHA96
+
+Additional Information:
+    Ticket Encryption Type:          0x12             ← AES256 ✓
+    Session Encryption Type:         0x12             ← AES256 ✓
+    Failure Code:                    0x0              ← Success
+```
+
+Even though the account attribute is `0x0` and the client advertised RC4
+variants alongside AES, the KDC chose **AES256 for both ticket and session
+key** — it picks the strongest available algorithm. This DC is clean. After
+July 2026 with `0x0`, the default changes to `0x18` (AES-only) and this behavior
+stays the same — AES256 would still be selected, with RC4 no longer even being
+an option.
+
 **Q: What about the AzureADKerberos object in the DC OU?**
 
 It is automatically detected and excluded from DC counts. The AzureADKerberos
