@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-04-13
+
+### Fixed
+
+- Export filenames in multi-forest scans now contain the correct assessed domain name instead
+  of the caller's (logged-in user's) domain. `Invoke-DomainAssessment` omitted `-Domain` when
+  passing `-Server`, causing `Invoke-RC4Assessment` to fall back to `(Get-ADDomain).DNSRoot`.
+- `Invoke-RC4Assessment` now resolves the domain name from the target server when only `-Server`
+  is provided (defense-in-depth)
+
+### Changed
+
+- Forest summary exports (`Forest_Assessment_*.json|csv`) now go to the `Exports/` subfolder,
+  consistent with per-domain exports
+
 ## [4.6.0] - 2026-04-11
 
 ### Added
