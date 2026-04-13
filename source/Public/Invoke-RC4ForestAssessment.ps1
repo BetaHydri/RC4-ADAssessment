@@ -164,16 +164,15 @@
             Write-Host "  Warning: This may fail for child domains if not directly reachable" -ForegroundColor Yellow
         }
 
-        # Build command parameters
-        $params = @{}
+        # Build command parameters — always pass -Domain so the assessed domain
+        # name appears in results and export filenames (not the caller's domain).
+        $params = @{
+            Domain = $DomainName
+        }
 
         if ($serverParam) {
-            # Use -Server with the discovered DC hostname
+            # Also use -Server with the discovered DC hostname
             $params['Server'] = $serverParam
-        }
-        else {
-            # Fall back to -Domain
-            $params['Domain'] = $DomainName
         }
 
         if ($AnalyzeLogs) {
@@ -397,13 +396,19 @@
         $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
         $forestSafe = $forest.Name -replace '\.', '_'
 
+        # Create Exports folder if it doesn't exist (consistent with Invoke-RC4Assessment)
+        $exportFolder = Join-Path -Path $PWD -ChildPath "Exports"
+        if (-not (Test-Path -Path $exportFolder)) {
+            New-Item -Path $exportFolder -ItemType Directory -Force | Out-Null
+        }
+
         # JSON export
-        $jsonPath = ".\Forest_Assessment_${forestSafe}_${timestamp}.json"
+        $jsonPath = Join-Path -Path $exportFolder -ChildPath "Forest_Assessment_${forestSafe}_${timestamp}.json"
         $forestResults | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
         Write-Host "  $([char]0x2713) Forest summary: $jsonPath" -ForegroundColor Green
 
         # CSV export
-        $csvPath = ".\Forest_Assessment_${forestSafe}_${timestamp}.csv"
+        $csvPath = Join-Path -Path $exportFolder -ChildPath "Forest_Assessment_${forestSafe}_${timestamp}.csv"
         $csvData = foreach ($domainResult in $forestResults.DomainResults) {
             [PSCustomObject]@{
                 Forest         = $forest.Name

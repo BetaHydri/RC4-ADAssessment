@@ -130,11 +130,28 @@ elseif ($PSBoundParameters.ContainsKey('Server')) {
     }
 }
 
+# Resolve domain name: explicit -Domain wins, then query the target server, then fall back to caller's domain
+$resolvedDomainName = if ($Domain) {
+    $Domain
+}
+elseif ($Server) {
+    try {
+        (Get-ADDomain @serverParams).DNSRoot
+    }
+    catch {
+        Write-Verbose "Could not resolve domain from server '$Server': $($_.Exception.Message)"
+        (Get-ADDomain).DNSRoot
+    }
+}
+else {
+    (Get-ADDomain).DNSRoot
+}
+
 # Initialize results object
 $results = @{
     AssessmentDate    = $script:AssessmentTimestamp
     Version           = $script:Version
-    Domain            = if ($Domain) { $Domain } else { (Get-ADDomain).DNSRoot }
+    Domain            = $resolvedDomainName
     DomainControllers = $null
     Trusts            = $null
     Accounts          = $null
