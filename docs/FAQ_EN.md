@@ -257,7 +257,10 @@ Domain Controller. Do not modify its encryption settings manually.
 **No.** The RC4 code path remains in the KDC after July 2026. Setting
 `msDS-SupportedEncryptionTypes = 0x1C` on a service account is sufficient — the
 KDC issues RC4 tickets for that specific account only, while all other accounts
-remain AES-only. No domain-wide registry change is needed.
+remain AES-only. No change to the `DefaultDomainSupportedEncTypes` registry key
+(KDC fallback) is needed. Note: this is separate from the GPO "Network security:
+Configure encryption types allowed for Kerberos", which writes
+`msDS-SupportedEncryptionTypes` to computer objects in AD.
 
 **Q: What is the recommended encryption type value?**
 

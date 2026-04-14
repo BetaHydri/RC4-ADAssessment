@@ -272,8 +272,10 @@ Verschlüsselungseinstellungen nicht manuell.
 **Nein.** Der RC4-Codepfad bleibt im KDC auch nach Juli 2026 bestehen. Das Setzen
 von `msDS-SupportedEncryptionTypes = 0x1C` auf einem Dienstkonto reicht aus — der
 KDC stellt RC4-Tickets nur für dieses spezifische Konto aus, während alle anderen
-Konten AES-only bleiben. Eine domänenweite Registrierungsänderung ist nicht
-erforderlich.
+Konten AES-only bleiben. Der `DefaultDomainSupportedEncTypes`-Registrierungsschlüssel
+(KDC-Fallback) muss dafür **nicht** RC4 enthalten. Hinweis: Dies ist unabhängig von
+der GPO „Netzwerksicherheit: Für Kerberos zulässige Verschlüsselungstypen konfigurieren",
+die `msDS-SupportedEncryptionTypes` auf Computerobjekte in AD schreibt.
 
 **F: Welcher Verschlüsselungstyp-Wert wird empfohlen?**
 

@@ -342,6 +342,10 @@ Account has msDS-SupportedEncryptionTypes set?
 
 > **Warning: Never set `DefaultDomainSupportedEncTypes` to `0x1C` domain-wide.** This enables RC4 for _all_ accounts without explicit encryption types, making every account vulnerable to [CVE-2026-20833](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc). Use per-account `msDS-SupportedEncryptionTypes = 0x1C` exceptions instead.
 
+> **Note:** On domain controllers with an **explicitly defined** `DefaultDomainSupportedEncTypes` registry value, behavior will **not** be functionally impacted by the April 2026 changes. The patch only changes the _implicit_ default for DCs where the key is not set. If you have already configured `DefaultDomainSupportedEncTypes`, your value takes precedence — but an Audit event KDCSVC Event ID 205 will still be logged if the configured value includes RC4. ([Source: KB5073381](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc))
+
+> **Why `0x18` and not `0x38`?** The AES256-SK bit (`0x20`) enforces AES session keys _when legacy ciphers are in use_ ([MS-KILE §2.2.7](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-kile/6cfc7b50-11ed-4b4d-846d-6f08f0812919)). In an AES-only environment (`0x18`), there are no legacy ciphers — session keys are already AES, making the SK bit redundant. Microsoft explicitly recommends `0x18` for AES-only environments ([KDC registry keys](https://learn.microsoft.com/en-us/troubleshoot/windows-server/windows-security/kerberos-protocol-registry-kdc-configuration-keys)). Use `0x3C` (which includes the SK bit) only in mixed environments where RC4 tickets are still needed alongside AES.
+
 ### Production vs. Test/QA Deployment Guide
 
 **Production (before April 2026):**
@@ -374,7 +378,7 @@ The GPO **"Network security: Configure encryption types allowed for Kerberos"** 
 |----------|-----|---------|----------------|
 | DES_CBC_CRC | `0x01` | 1 | **Do not enable** |
 | DES_CBC_MD5 | `0x02` | 2 | **Do not enable** |
-| RC4_HMAC_MD5 | `0x04` | 4 | **Do not enable** (ineffective after July 2026) |
+| RC4_HMAC_MD5 | `0x04` | 4 | **Do not enable** — RC4 blocked by default after April 2026 (per-account `0x1C` exceptions still work) |
 | AES128_HMAC_SHA1 | `0x08` | 8 | ✅ Enable |
 | AES256_HMAC_SHA1 | `0x10` | 16 | ✅ Enable |
 | Future encryption types | `0x80000000` | 2147483648 | ✅ Enable (CIS Benchmark) |
@@ -446,10 +450,12 @@ Document all exceptions and plan vendor upgrades.
 > - **Explicit RC4 flag (e.g. `0x1C`)** → KDC honors it and issues RC4 tickets for that account
 > - **No value set (0 or empty)** → KDC uses `DefaultDomainSupportedEncTypes` (AES-only after April 2026) → RC4 blocked
 >
-> You do **not** need to set `DefaultDomainSupportedEncTypes` to include RC4 on the DCs for
-> per-account exceptions to work. Setting `msDS-SupportedEncryptionTypes = 0x1C` on the service
-> account is sufficient — the KDC will issue RC4 tickets for that specific account only, while
-> all other accounts remain AES-only.
+> You do **not** need to set `DefaultDomainSupportedEncTypes` (KDC fallback registry) to include RC4
+> on the DCs for per-account exceptions to work. Setting `msDS-SupportedEncryptionTypes = 0x1C` on the
+> service account is sufficient — the KDC will issue RC4 tickets for that specific account only, while
+> all other accounts remain AES-only. Note: this refers specifically to the `DefaultDomainSupportedEncTypes`
+> registry key, **not** the GPO "Network security: Configure encryption types allowed for Kerberos" which
+> writes `msDS-SupportedEncryptionTypes` to computer objects.
 >
 > **Source:** Microsoft Core Infrastructure and Security team confirms this in
 > [Decrypting the Selection of Supported Kerberos Encryption Types](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797):
