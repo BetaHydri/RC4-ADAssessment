@@ -13,3 +13,6 @@ Thumbs.db
 
 # Exports from assessment runs
 Exports/
+
+# AI memory / context files
+.memory-bank/
