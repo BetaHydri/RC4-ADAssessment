@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.9.0] - 2026-04-15
+
 ### Added
 
 - Pester unit tests for `Invoke-RC4ForestAssessment` covering forest discovery,
