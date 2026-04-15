@@ -412,7 +412,8 @@
 
         # JSON export
         $jsonPath = Join-Path -Path $exportFolder -ChildPath "Forest_Assessment_${forestSafe}_${timestamp}.json"
-        $forestResults | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
+        $jsonContent = $forestResults | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($jsonPath, $jsonContent, [System.Text.Encoding]::UTF8)
         Write-Host "  $([char]0x2713) Forest summary: $jsonPath" -ForegroundColor Green
 
         # CSV export
@@ -425,7 +426,8 @@
                 AssessmentDate = $forestResults.AssessmentDate
             }
         }
-        $csvData | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        $csvContent = ($csvData | ConvertTo-Csv -NoTypeInformation) -join [Environment]::NewLine
+        [System.IO.File]::WriteAllText($csvPath, $csvContent, [System.Text.Encoding]::UTF8)
         Write-Host "  $([char]0x2713) Domain summary: $csvPath" -ForegroundColor Green
     }
 
