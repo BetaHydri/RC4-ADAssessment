@@ -34,7 +34,9 @@
         "keepachangelog",
         "notin",
         "pscmdlet",
-        "steppable"
+        "setvariable",
+        "steppable",
+        "updatebuildnumber"
     ],
     "[markdown]": {
         "files.trimTrailingWhitespace": false,

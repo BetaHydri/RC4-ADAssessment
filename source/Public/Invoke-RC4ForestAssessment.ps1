@@ -87,7 +87,7 @@
     }
     catch {
         Write-Error "Failed to get forest information: $($_.Exception.Message)"
-        exit 1
+        return
     }
 
     # Display forest info
@@ -109,9 +109,17 @@
     Write-Host "  Export Results: $(if ($ExportResults) { 'Yes' } else { 'No' })" -ForegroundColor White
     Write-Host "  Processing Mode: $(if ($Parallel -and $PSVersionTable.PSVersion.Major -ge 7) { "Parallel (max $MaxParallelDomains)" } else { 'Sequential' })" -ForegroundColor White
 
-    # Confirm before proceeding
-    Write-Host "`nPress any key to start assessment or Ctrl+C to cancel..." -ForegroundColor Yellow
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    # Confirm before proceeding (skip in non-interactive / CI environments)
+    $isNonInteractive = [Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^-NonI' }
+    if (-not $isNonInteractive) {
+        Write-Host "`nPress any key to start assessment or Ctrl+C to cancel..." -ForegroundColor Yellow
+        try {
+            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        }
+        catch {
+            Write-Verbose "ReadKey not available: $($_.Exception.Message)"
+        }
+    }
 
     # Initialize results collection
     $forestResults = @{
@@ -404,7 +412,7 @@
 
         # JSON export
         $jsonPath = Join-Path -Path $exportFolder -ChildPath "Forest_Assessment_${forestSafe}_${timestamp}.json"
-        $forestResults | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding UTF8
+        $forestResults | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding ([System.Text.Encoding]::UTF8)
         Write-Host "  $([char]0x2713) Forest summary: $jsonPath" -ForegroundColor Green
 
         # CSV export
@@ -417,7 +425,7 @@
                 AssessmentDate = $forestResults.AssessmentDate
             }
         }
-        $csvData | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        $csvData | Export-Csv -Path $csvPath -NoTypeInformation -Encoding ([System.Text.Encoding]::UTF8)
         Write-Host "  $([char]0x2713) Domain summary: $csvPath" -ForegroundColor Green
     }
 
