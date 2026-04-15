@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Remediation commands now note that gMSA/sMSA/dMSA require `Set-ADServiceAccount` instead
+  of `Set-ADUser` (which cannot find Managed Service Account objects). Added to all inline
+  fix commands in `Invoke-RC4Assessment`, `-IncludeGuidance` output (`Show-ManualValidationGuidance`),
+  and exported guidance text (`Get-GuidancePlainText`). Also clarifies that MSA passwords are
+  managed by AD — no manual `Set-ADAccountPassword` reset is needed; AES keys are generated
+  at the next automatic password rotation. Computer accounts already correctly use `Set-ADComputer`.
+
+### Changed
+
+- "RC4 tickets detected in event logs" downgraded from CRITICAL to WARNING — RC4 tickets may
+  originate from intentional `0x1C` exception accounts that will continue functioning after
+  July 2026 enforcement
+- "Missing AES keys" upgraded from WARNING to CRITICAL — accounts with no AES keys (explicit
+  non-AES encryption or very old passwords predating AES key generation) will break after
+  enforcement phase
+
 ## [4.9.0] - 2026-04-15
 
 ### Added

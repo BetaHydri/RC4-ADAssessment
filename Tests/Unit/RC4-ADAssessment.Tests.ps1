@@ -1846,14 +1846,15 @@ Describe 'Overall Assessment Scoring Logic' {
         $status | Should -Be "CRITICAL"
     }
 
-    It 'Returns CRITICAL when RC4 tickets found in event logs' {
+    It 'Returns WARNING when RC4 tickets found in event logs' {
         $criticalIssues = 0
+        $warnings = 0
         $eventResult = @{ RC4Tickets = 5 }
 
-        if ($eventResult.RC4Tickets -gt 0) { $criticalIssues++ }
+        if ($eventResult.RC4Tickets -gt 0) { $warnings++ }
 
-        $status = if ($criticalIssues -gt 0) { "CRITICAL" } else { "OK" }
-        $status | Should -Be "CRITICAL"
+        $status = if ($criticalIssues -gt 0) { "CRITICAL" } elseif ($warnings -gt 0) { "WARNING" } else { "OK" }
+        $status | Should -Be "WARNING"
     }
 
     It 'Returns WARNING when stale service accounts with RC4 exist' {
@@ -1867,15 +1868,15 @@ Describe 'Overall Assessment Scoring Logic' {
         $status | Should -Be "WARNING"
     }
 
-    It 'Returns WARNING when missing AES key accounts exist' {
+    It 'Returns CRITICAL when missing AES key accounts exist' {
         $criticalIssues = 0
         $warnings = 0
         $accountResult = @{ TotalMissingAES = 5 }
 
-        if ($accountResult.TotalMissingAES -gt 0) { $warnings++ }
+        if ($accountResult.TotalMissingAES -gt 0) { $criticalIssues++ }
 
         $status = if ($criticalIssues -gt 0) { "CRITICAL" } elseif ($warnings -gt 0) { "WARNING" } else { "OK" }
-        $status | Should -Be "WARNING"
+        $status | Should -Be "CRITICAL"
     }
 
     It 'Returns WARNING when RC4DefaultDisablementPhase is not set' {

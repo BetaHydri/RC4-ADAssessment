@@ -181,6 +181,7 @@ Overall Security Assessment
     • WARNING: [contoso.com] 1 account(s) have explicit RC4 exception (0x1C)
       # To harden: remove RC4 and set AES-only:
       PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # Test application access - if it breaks, re-add RC4 exception
 
@@ -222,6 +223,7 @@ Event Log Analysis - Actual DES/RC4 Usage
       # For each account using RC4, try AES first:
       PS> Set-ADUser '<AccountName>' -Replace @{
             'msDS-SupportedEncryptionTypes'=24}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES fails, add explicit RC4 exception:
       #   -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
@@ -426,8 +428,10 @@ If a service absolutely cannot use AES after April/July 2026 (per [CVE-2026-2083
 ```powershell
 # Per-account exception (recommended):
 Set-ADUser 'svc_LegacyApp' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
 # 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)
 Set-ADAccountPassword 'svc_LegacyApp' -Reset; klist purge
+# MSA passwords are managed by AD - no manual reset needed
 
 # Computer account (rare):
 Set-ADComputer 'LEGACYHOST' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
@@ -797,6 +801,7 @@ Overall Security Assessment
       # These accounts explicitly allow RC4 (msDS-SupportedEncryptionTypes includes 0x4 + AES)
       # To harden: remove RC4 and set AES-only:
       PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 
     • WARNING: [contoso.com] 1 account(s) may be missing AES keys: tim (last logon: 2026-03-30)
@@ -804,6 +809,7 @@ Overall Security Assessment
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES is still not used after password reset, explicitly set AES:
       PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 ```
 
@@ -825,6 +831,7 @@ This account has AES keys available (confirmed by the event log). It is not flag
 > **Tip:** Remove the DES and RC4 bits to prepare for July 2026:
 > ```powershell
 > Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+> # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
 > Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 > ```
 > `24` = `0x18` = AES128 + AES256 (AES-only).

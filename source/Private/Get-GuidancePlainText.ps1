@@ -239,6 +239,7 @@ ktpass command reference:
 
    Update service accounts to AES:
    PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+   # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
    # Then reset the password to generate new AES keys
    # After changing encryption types, purge cached tickets:
    # CMD> klist purge
@@ -300,6 +301,7 @@ ktpass command reference:
 
    a) Step 1: Try AES First
       PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
       * Test application access
@@ -309,6 +311,7 @@ ktpass command reference:
 
       For USER/SERVICE accounts:
       PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
       * Test application access
