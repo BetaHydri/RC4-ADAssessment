@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Pester unit tests for `Invoke-RC4ForestAssessment` covering forest discovery,
+  sequential domain assessment, parameter forwarding, DC hostname extraction,
+  status aggregation, export logic, and error handling paths
+
+### Changed
+
+- Azure Pipelines now publishes JaCoCo code coverage as a visual report tab
+- Pipeline ensures `testResults/` directory exists before publishing artifacts
+
 ## [4.8.0] - 2026-04-15
 
 ### Fixed
