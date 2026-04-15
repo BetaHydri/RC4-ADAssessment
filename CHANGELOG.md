@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.10.0] - 2026-04-15
+
 ### Fixed
 
 - Remediation commands now note that gMSA/sMSA/dMSA require `Set-ADServiceAccount` instead
