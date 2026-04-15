@@ -2268,6 +2268,29 @@ Describe 'Get-KdcSvcEventAssessment' {
             $result.QueriedDCs | Should -HaveCount 0
         }
     }
+
+    Context 'XPath filter includes both KDC provider names' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
+                [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com' }
+            }
+            $script:capturedFilterXml = $null
+            Mock -ModuleName 'RC4-ADAssessment' Invoke-Command {
+                $script:capturedFilterXml = $ArgumentList[0]
+                @()
+            }
+        }
+
+        It 'Queries for KDCSVC provider' {
+            Get-KdcSvcEventAssessment -ServerParams @{}
+            $script:capturedFilterXml | Should -Match "Provider\[@Name='KDCSVC'\]"
+        }
+
+        It 'Queries for Microsoft-Windows-Kerberos-Key-Distribution-Center provider' {
+            Get-KdcSvcEventAssessment -ServerParams @{}
+            $script:capturedFilterXml | Should -Match "Provider\[@Name='Microsoft-Windows-Kerberos-Key-Distribution-Center'\]"
+        }
+    }
 }
 
 # ============================================================

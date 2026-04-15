@@ -60,7 +60,7 @@ function Get-KdcSvcEventAssessment {
         Write-Finding -Status "INFO" -Message "Checking KDCSVC events 201-209 on $($dcs.Count) Domain Controller(s)"
         Write-Host "  These events indicate RC4 risks related to CVE-2026-20833" -ForegroundColor Gray
         Write-Host ""
-        Write-Host "  KDCSVC Event Reference (Provider: KDCSVC, Log: System)" -ForegroundColor White
+        Write-Host "  KDCSVC Event Reference (Provider: KDCSVC / Microsoft-Windows-Kerberos-Key-Distribution-Center, Log: System)" -ForegroundColor White
         Write-Host "  $([char]0x250C)$([string]::new([char]0x2500, 8))$([char]0x252C)$([string]::new([char]0x2500, 14))$([char]0x252C)$([string]::new([char]0x2500, 72))$([char]0x2510)" -ForegroundColor DarkGray
         Write-Host "  $([char]0x2502) Event  $([char]0x2502) RC4 Relation $([char]0x2502) Description                                                            $([char]0x2502)" -ForegroundColor DarkGray
         Write-Host "  $([char]0x251C)$([string]::new([char]0x2500, 8))$([char]0x253C)$([string]::new([char]0x2500, 14))$([char]0x253C)$([string]::new([char]0x2500, 72))$([char]0x2524)" -ForegroundColor DarkGray
@@ -86,7 +86,7 @@ function Get-KdcSvcEventAssessment {
 <QueryList>
   <Query Id="0" Path="System">
     <Select Path="System">
-      *[System[Provider[@Name='KDCSVC'] and (EventID &gt;= 201 and EventID &lt;= 209)]]
+      *[System[(Provider[@Name='KDCSVC'] or Provider[@Name='Microsoft-Windows-Kerberos-Key-Distribution-Center']) and (EventID &gt;= 201 and EventID &lt;= 209)]]
     </Select>
   </Query>
 </QueryList>
