@@ -4,12 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.8.0] - 2026-04-15
+
 ### Fixed
 
 - KDCSVC event query now matches both provider names (`KDCSVC` and
   `Microsoft-Windows-Kerberos-Key-Distribution-Center`). Some Windows Server versions log
   KDC events 201-209 under the latter provider, causing the assessment to report zero events
   even when events exist.
+
+### Changed
+
+- Azure Pipelines now publishes JaCoCo code coverage as a visual report tab (not just
+  a downloadable artifact)
 
 ## [4.7.0] - 2026-04-13
 
