@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- KDCSVC event query now matches both provider names (`KDCSVC` and
+  `Microsoft-Windows-Kerberos-Key-Distribution-Center`). Some Windows Server versions log
+  KDC events 201-209 under the latter provider, causing the assessment to report zero events
+  even when events exist.
+
 ## [4.7.0] - 2026-04-13
 
 ### Fixed
