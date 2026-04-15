@@ -310,6 +310,8 @@ try {
             Fix     = @(
                 "# Investigate each account and update to AES:"
                 "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# For gMSA/sMSA/dMSA use Set-ADServiceAccount; for computers use Set-ADComputer"
+                "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
             )
         }
@@ -344,14 +346,16 @@ try {
     }
 
     if ($results.EventLogs -and $results.EventLogs.RC4Tickets -gt 0) {
-        $criticalIssues++
+        $warnings++
         $rc4AcctList = if ($results.EventLogs.RC4Accounts.Count -gt 0) { ($results.EventLogs.RC4Accounts | Select-Object -First 5) -join ', ' } else { 'unknown' }
         $results.Recommendations += @{
-            Level   = "CRITICAL"
+            Level   = "WARNING"
             Message = "[$($results.Domain)] RC4 tickets detected in event logs ($($results.EventLogs.RC4Tickets) tickets, accounts: $rc4AcctList)"
             Fix     = @(
                 "# For each account using RC4, try AES first:"
                 "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# For gMSA/sMSA/dMSA use Set-ADServiceAccount; for computers use Set-ADComputer"
+                "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 "# If AES fails, add explicit RC4 exception (CVE-2026-20833 safe):"
                 "# Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
@@ -433,6 +437,8 @@ try {
                 Fix     = @(
                     "# Update each service account to AES and reset password:"
                     "Set-ADUser '<ServiceAccount>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
+                    "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                     "Set-ADAccountPassword '<ServiceAccount>' -Reset; klist purge"
                     "# Update the service with the new password, then test access"
                 )
@@ -447,6 +453,9 @@ try {
                 Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption: $msaNames"
                 Fix     = @(
                     "Set-ADServiceAccount '<MSAName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "# MSA passwords are managed by AD - no manual reset needed"
+                    "# AES keys are generated at the next automatic password rotation"
+                    "# Run 'klist purge' on the host(s) using this MSA to clear cached tickets"
                 )
             }
         }
@@ -462,6 +471,8 @@ try {
                     "# After July 2026 they will be the only accounts still able to obtain RC4 tickets"
                     "# To harden: remove RC4 and set AES-only:"
                     "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
+                    "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                     "# Test application access - if it breaks, re-add RC4 exception and plan vendor upgrade"
                 )
@@ -477,6 +488,8 @@ try {
                 Fix     = @(
                     "# Remove DES bits and set AES-only:"
                     "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
+                    "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                     "# 24 = 0x18 = AES128 + AES256 (recommended)"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
@@ -498,14 +511,14 @@ try {
         }
 
         if ($results.Accounts.TotalMissingAES -gt 0) {
-            $warnings++
+            $criticalIssues++
             $missingNames = ($results.Accounts.MissingAESKeyAccounts | Select-Object -First 5 | ForEach-Object {
                     $logon = if ($_.LastLogon) { " (last logon: $($_.LastLogon.ToString('yyyy-MM-dd')))" } else { " (never logged on)" }
                     "$($_.Name)$logon"
                 }) -join ', '
             $results.Recommendations += @{
-                Level   = "WARNING"
-                Message = "[$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys: $missingNames"
+                Level   = "CRITICAL"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys (will break after enforcement): $missingNames"
                 Fix     = @(
                     "# Option 1: Reset password to generate AES keys:"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
@@ -654,6 +667,8 @@ try {
                 "# Review KDCSVC events 201-209 in System event log on each DC"
                 "# For accounts triggering events 201-203 (audit), set AES-only first:"
                 "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# For gMSA/sMSA/dMSA use Set-ADServiceAccount; for computers use Set-ADComputer"
+                "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                 "# 24 = 0x18 = AES128 + AES256 (recommended)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 "# If AES breaks the application, fall back to explicit RC4 exception:"

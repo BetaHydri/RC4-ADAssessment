@@ -221,6 +221,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
    Update service accounts to AES:
    PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+   # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
    # Then reset the password to generate new AES keys
    # IMPORTANT: After changing encryption types, purge cached tickets:
    # CMD> klist purge
@@ -285,6 +286,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    a) Step 1: Try AES First
       PS> # Set account to AES-only
       PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> # Reset password to generate AES keys
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
@@ -295,6 +297,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
       For USER/SERVICE accounts:
       PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}
+      # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       # 0x1C = RC4 (0x4) + AES128 (0x8) + AES256 (0x10)
       # This allows RC4 ticket encryption while also supporting AES
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
