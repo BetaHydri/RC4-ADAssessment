@@ -744,8 +744,7 @@ try {
 
         # Export JSON
         $jsonPath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Assessment_${domain}_${timestamp}.json"
-        $jsonContent = $results | ConvertTo-Json -Depth 10
-        [System.IO.File]::WriteAllText($jsonPath, $jsonContent, [System.Text.Encoding]::UTF8)
+        $results | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath
         Write-Finding -Status "OK" -Message "JSON export: $jsonPath"
 
         # Export CSV summary
@@ -993,8 +992,7 @@ try {
             }
         }
 
-        $csvContent = ($csvData | ConvertTo-Csv -NoTypeInformation) -join [Environment]::NewLine
-        [System.IO.File]::WriteAllText($csvPath, $csvContent, [System.Text.Encoding]::UTF8)
+        $csvData | Export-Csv -Path $csvPath -NoTypeInformation
         Write-Finding -Status "OK" -Message "CSV export: $csvPath"
 
         # Export guidance text file (when both -ExportResults and -IncludeGuidance are used)
@@ -1002,7 +1000,7 @@ try {
             $guidancePath = Join-Path -Path $exportFolder -ChildPath "DES_RC4_Guidance_${domain}_${timestamp}.txt"
             $assessmentDateStr = if ($results.AssessmentDate) { $results.AssessmentDate.ToString('yyyy-MM-dd HH:mm:ss') } else { (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }
             $guidanceText = Get-GuidancePlainText -Domain $results.Domain -AssessmentDate $assessmentDateStr -Version $script:Version
-            [System.IO.File]::WriteAllText($guidancePath, $guidanceText, [System.Text.Encoding]::UTF8)
+            $guidanceText | Out-File -FilePath $guidancePath
             Write-Finding -Status "OK" -Message "Guidance export: $guidancePath"
         }
     }

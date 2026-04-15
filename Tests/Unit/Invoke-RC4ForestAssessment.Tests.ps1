@@ -255,10 +255,23 @@ Describe 'Invoke-RC4ForestAssessment' {
             }
         }
 
-        It 'Does not create Exports directory when ExportResults is not specified' {
+        It 'Exports JSON forest summary when ExportResults is specified' {
+            Invoke-RC4ForestAssessment -ExportResults
+
+            Should -Invoke -ModuleName 'RC4-ADAssessment' -CommandName Out-File -Times 1
+        }
+
+        It 'Exports CSV domain summary when ExportResults is specified' {
+            Invoke-RC4ForestAssessment -ExportResults
+
+            Should -Invoke -ModuleName 'RC4-ADAssessment' -CommandName Export-Csv -Times 1
+        }
+
+        It 'Does not export when ExportResults is not specified' {
             Invoke-RC4ForestAssessment
 
-            Should -Invoke -ModuleName 'RC4-ADAssessment' -CommandName New-Item -Times 0
+            Should -Invoke -ModuleName 'RC4-ADAssessment' -CommandName Out-File -Times 0
+            Should -Invoke -ModuleName 'RC4-ADAssessment' -CommandName Export-Csv -Times 0
         }
     }
 
