@@ -55,6 +55,8 @@
         TotalDESEnabled        = 0
         TotalStaleSvc          = 0
         TotalMissingAES                   = 0
+        RODCKrbtgtAccounts                = @()
+        TotalRODCKrbtgt                   = 0
         Details                           = @()
         DeepScanRC4OnlyUsers              = @()
         DeepScanDESOnlyUsers              = @()
@@ -148,6 +150,80 @@
         }
         catch {
             Write-Finding -Status "WARNING" -Message "Could not query KRBTGT account: $($_.Exception.Message)"
+        }
+
+        # ────────────────────────────────────────────────
+        # 1b. RODC KRBTGT Accounts (krbtgt_XXXXX)
+        # ────────────────────────────────────────────────
+        Write-Host "`n  Checking RODC KRBTGT accounts (krbtgt_*)..." -ForegroundColor Cyan
+
+        try {
+            $rodcKrbtgtAccounts = @(Get-ADUser -Filter 'Name -like "krbtgt_*"' `
+                -Properties pwdLastSet, 'msDS-SupportedEncryptionTypes', PasswordLastSet, WhenChanged, Enabled @ServerParams -ErrorAction Stop)
+
+            if ($rodcKrbtgtAccounts.Count -gt 0) {
+                $assessment.TotalRODCKrbtgt = $rodcKrbtgtAccounts.Count
+                Write-Finding -Status "INFO" -Message "Found $($rodcKrbtgtAccounts.Count) RODC KRBTGT account(s)"
+
+                foreach ($rodcKrbtgt in $rodcKrbtgtAccounts) {
+                    $pwdLastSet = $rodcKrbtgt.PasswordLastSet
+                    if (-not $pwdLastSet -and $rodcKrbtgt.pwdLastSet) {
+                        $pwdLastSet = [DateTime]::FromFileTime($rodcKrbtgt.pwdLastSet)
+                    }
+
+                    $passwordAgeDays = if ($pwdLastSet) { ((Get-Date) - $pwdLastSet).Days } else { -1 }
+                    $encValue = $rodcKrbtgt.'msDS-SupportedEncryptionTypes'
+                    $encTypes = Get-EncryptionTypeString -Value $encValue
+
+                    $status = "OK"
+                    if ($passwordAgeDays -lt 0) {
+                        $status = "UNKNOWN"
+                    }
+                    elseif ($passwordAgeDays -gt 365) {
+                        $status = "CRITICAL"
+                    }
+                    elseif ($passwordAgeDays -gt 180) {
+                        $status = "WARNING"
+                    }
+
+                    $rodcInfo = @{
+                        Name             = $rodcKrbtgt.SamAccountName
+                        DN               = $rodcKrbtgt.DistinguishedName
+                        Enabled          = $rodcKrbtgt.Enabled
+                        PasswordLastSet  = $pwdLastSet
+                        PasswordAgeDays  = $passwordAgeDays
+                        EncryptionValue  = $encValue
+                        EncryptionTypes  = $encTypes
+                        Status           = $status
+                    }
+                    $assessment.RODCKrbtgtAccounts += $rodcInfo
+
+                    # Report findings per RODC KRBTGT
+                    $pwdDateStr = if ($pwdLastSet) { $pwdLastSet.ToString('yyyy-MM-dd') } else { 'Unknown' }
+                    if ($status -eq "CRITICAL") {
+                        Write-Finding -Status "CRITICAL" -Message "$($rodcKrbtgt.SamAccountName) password is $passwordAgeDays days old (last set: $pwdDateStr)" `
+                            -Detail "RODC KRBTGT passwords should be rotated at least every 180 days"
+                    }
+                    elseif ($status -eq "WARNING") {
+                        Write-Finding -Status "WARNING" -Message "$($rodcKrbtgt.SamAccountName) password is $passwordAgeDays days old (last set: $pwdDateStr)"
+                    }
+                    else {
+                        Write-Finding -Status "OK" -Message "$($rodcKrbtgt.SamAccountName) password age: $passwordAgeDays days (last set: $pwdDateStr)"
+                    }
+
+                    # Check encryption types
+                    if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
+                        Write-Finding -Status "CRITICAL" -Message "$($rodcKrbtgt.SamAccountName) has RC4-only encryption configured" `
+                            -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X')))"
+                    }
+                }
+            }
+            else {
+                Write-Finding -Status "INFO" -Message "No RODC KRBTGT accounts found (no RODCs in this domain)"
+            }
+        }
+        catch {
+            Write-Finding -Status "WARNING" -Message "Could not query RODC KRBTGT accounts: $($_.Exception.Message)"
         }
 
         # ────────────────────────────────────────────────

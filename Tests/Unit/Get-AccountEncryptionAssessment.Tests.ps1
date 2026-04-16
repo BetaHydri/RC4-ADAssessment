@@ -417,5 +417,125 @@ Describe 'Get-AccountEncryptionAssessment' {
             $result.TotalMissingAES | Should -Be 0
         }
     }
+
+    Context 'When RODC KRBTGT accounts exist' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                if ($Filter -and $Filter -match 'krbtgt_') {
+                    return @(
+                        [PSCustomObject]@{
+                            SamAccountName                  = 'krbtgt_12345'
+                            DistinguishedName               = 'CN=krbtgt_12345,CN=Users,DC=contoso,DC=com'
+                            PasswordLastSet                 = (Get-Date).AddDays(-90)
+                            pwdLastSet                      = (Get-Date).AddDays(-90).ToFileTime()
+                            'msDS-SupportedEncryptionTypes' = 24
+                            WhenChanged                     = (Get-Date).AddDays(-90)
+                            Enabled                         = $false
+                        },
+                        [PSCustomObject]@{
+                            SamAccountName                  = 'krbtgt_67890'
+                            DistinguishedName               = 'CN=krbtgt_67890,CN=Users,DC=contoso,DC=com'
+                            PasswordLastSet                 = (Get-Date).AddDays(-400)
+                            pwdLastSet                      = (Get-Date).AddDays(-400).ToFileTime()
+                            'msDS-SupportedEncryptionTypes' = 24
+                            WhenChanged                     = (Get-Date).AddDays(-400)
+                            Enabled                         = $false
+                        }
+                    )
+                }
+                return $null
+            }
+        }
+
+        It 'Discovers RODC KRBTGT accounts' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalRODCKrbtgt | Should -Be 2
+        }
+
+        It 'Reports correct password age for each RODC KRBTGT' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $okAccount = $result.RODCKrbtgtAccounts | Where-Object { $_.Name -eq 'krbtgt_12345' }
+            $okAccount.PasswordAgeDays | Should -BeGreaterOrEqual 89
+            $okAccount.Status | Should -Be 'OK'
+        }
+
+        It 'Flags stale RODC KRBTGT passwords as CRITICAL' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $staleAccount = $result.RODCKrbtgtAccounts | Where-Object { $_.Name -eq 'krbtgt_67890' }
+            $staleAccount.PasswordAgeDays | Should -BeGreaterOrEqual 399
+            $staleAccount.Status | Should -Be 'CRITICAL'
+        }
+    }
+
+    Context 'When no RODC KRBTGT accounts exist' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                if ($Filter -and $Filter -match 'krbtgt_') {
+                    return @()
+                }
+                return $null
+            }
+        }
+
+        It 'Reports zero RODC KRBTGT accounts' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalRODCKrbtgt | Should -Be 0
+            $result.RODCKrbtgtAccounts.Count | Should -Be 0
+        }
+    }
+
+    Context 'When RODC KRBTGT has RC4-only encryption' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                if ($Filter -and $Filter -match 'krbtgt_') {
+                    return @(
+                        [PSCustomObject]@{
+                            SamAccountName                  = 'krbtgt_rc4only'
+                            DistinguishedName               = 'CN=krbtgt_rc4only,CN=Users,DC=contoso,DC=com'
+                            PasswordLastSet                 = (Get-Date).AddDays(-60)
+                            pwdLastSet                      = (Get-Date).AddDays(-60).ToFileTime()
+                            'msDS-SupportedEncryptionTypes' = 4
+                            WhenChanged                     = (Get-Date).AddDays(-60)
+                            Enabled                         = $false
+                        }
+                    )
+                }
+                return $null
+            }
+        }
+
+        It 'Reports RC4-only encryption for RODC KRBTGT' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $rc4Account = $result.RODCKrbtgtAccounts | Where-Object { $_.Name -eq 'krbtgt_rc4only' }
+            $rc4Account.EncryptionValue | Should -Be 4
+        }
+    }
 }
 }

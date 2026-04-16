@@ -52,6 +52,7 @@ function Show-AssessmentSummary {
 
             $dcTable += [PSCustomObject]@{
                 'Domain Controller' = $dc.Name
+                'Type'              = if ($dc.IsReadOnly) { 'RODC' } else { 'RWDC' }
                 'Status'            = $status
                 'Encryption Types'  = $dc.EncryptionTypes
                 'Attribute Value'   = if ($dc.EncryptionValue) { "0x$($dc.EncryptionValue.ToString('X'))" } else { "Not Set" }
@@ -91,6 +92,9 @@ function Show-AssessmentSummary {
         if ($Results.DomainControllers.AESConfigured -gt 0) {
             Write-Host "    AES Configured: $($Results.DomainControllers.AESConfigured)" -ForegroundColor Green
         }
+        if ($Results.DomainControllers.RODCCount -gt 0) {
+            Write-Host "    Read-Only DCs (RODCs): $($Results.DomainControllers.RODCCount)" -ForegroundColor Cyan
+        }
 
         # Display AzureADKerberos separately if present
         if ($Results.DomainControllers.AzureADKerberos) {
@@ -116,6 +120,47 @@ function Show-AssessmentSummary {
     }
     else {
         Write-Host "  No Domain Controller data available" -ForegroundColor Yellow
+    }
+
+    # 1b. RODC KRBTGT Account Summary
+    if ($Results.Accounts.RODCKrbtgtAccounts -and $Results.Accounts.RODCKrbtgtAccounts.Count -gt 0) {
+        Write-Host "`n`n  RODC KRBTGT ACCOUNT SUMMARY" -ForegroundColor Cyan
+        Write-Host ("  " + ([string]([char]0x2500) * 100)) -ForegroundColor DarkGray
+
+        $rodcTable = @()
+        foreach ($rodcK in $Results.Accounts.RODCKrbtgtAccounts) {
+            $pwdDateStr = if ($rodcK.PasswordLastSet) { $rodcK.PasswordLastSet.ToString('yyyy-MM-dd') } else { 'Unknown' }
+            $rodcTable += [PSCustomObject]@{
+                'Account'          = $rodcK.Name
+                'Status'           = $rodcK.Status
+                'Password Age'     = "$($rodcK.PasswordAgeDays) days"
+                'Password Last Set' = $pwdDateStr
+                'Encryption Types' = if ($rodcK.EncryptionTypes) { $rodcK.EncryptionTypes } else { 'Not Set (domain default)' }
+                'Enabled'          = $rodcK.Enabled
+            }
+        }
+
+        $rodcTable | Format-Table -AutoSize | Out-String -Stream | ForEach-Object {
+            if ($_ -match "CRITICAL") {
+                Write-Host "  $_" -ForegroundColor Red
+            }
+            elseif ($_ -match "WARNING") {
+                Write-Host "  $_" -ForegroundColor Yellow
+            }
+            elseif ($_ -match "OK") {
+                Write-Host "  $_" -ForegroundColor Green
+            }
+            elseif ($_ -match "Account|^-+$") {
+                Write-Host "  $_" -ForegroundColor Cyan
+            }
+            else {
+                Write-Host "  $_"
+            }
+        }
+
+        Write-Host "  $([char]0x24D8)  Each RODC has its own krbtgt_XXXXX account used to sign tickets for cached accounts." -ForegroundColor Gray
+        Write-Host "  Rotate these passwords independently from the domain-wide KRBTGT account." -ForegroundColor Gray
+        Write-Host "  Use: Reset-ComputerMachinePassword on the RODC, or reset via AD Users & Computers." -ForegroundColor Gray
     }
 
     # 2. Event Log Summary Table

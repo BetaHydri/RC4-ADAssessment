@@ -21,8 +21,8 @@ Start-Process -FilePath pwsh -ArgumentList @(
 for ($i = 0; $i -lt 120; $i++) {
     Start-Sleep 3
     if (Test-Path $logPath) {
-        $c = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
-        if ($c -match 'Build (FAILED|succeeded)') {
+        $hit = Select-String -Path $logPath -Pattern 'Build (FAILED|succeeded)' -Quiet -ErrorAction SilentlyContinue
+        if ($hit) {
             Get-Content $logPath -Tail 30
             break
         }
