@@ -73,5 +73,59 @@ Describe 'Get-DomainControllerEncryption' {
             $result.RC4Configured | Should -Be 1
         }
     }
+
+    Context 'When domain has an RODC' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com'; IsReadOnly = $false },
+                    [PSCustomObject]@{ Name = 'RODC01'; HostName = 'rodc01.contoso.com'; ComputerObjectDN = 'CN=RODC01,OU=Domain Controllers,DC=contoso,DC=com'; IsReadOnly = $true }
+                )
+            }
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADComputer -ParameterFilter { $Identity -ne 'AzureADKerberos' } {
+                [PSCustomObject]@{ Name = 'DC'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' }
+            }
+        }
+
+        It 'Counts RODCs separately' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.RODCCount | Should -Be 1
+        }
+
+        It 'Still counts RODC in total DC count' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.TotalDCs | Should -Be 2
+        }
+
+        It 'Marks the RODC detail entry as read-only' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $rodcDetail = $result.Details | Where-Object { $_.Name -eq 'RODC01' }
+            $rodcDetail.IsReadOnly | Should -BeTrue
+        }
+
+        It 'Marks the RWDC detail entry as not read-only' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $rwdcDetail = $result.Details | Where-Object { $_.Name -eq 'DC01' }
+            $rwdcDetail.IsReadOnly | Should -BeFalse
+        }
+    }
+
+    Context 'When no RODCs exist' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{ Name = 'DC01'; HostName = 'dc01.contoso.com'; ComputerObjectDN = 'CN=DC01,OU=Domain Controllers,DC=contoso,DC=com'; IsReadOnly = $false }
+                )
+            }
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADComputer -ParameterFilter { $Identity -ne 'AzureADKerberos' } {
+                [PSCustomObject]@{ Name = 'DC01'; 'msDS-SupportedEncryptionTypes' = 24; OperatingSystem = 'Windows Server 2022' }
+            }
+        }
+
+        It 'Reports zero RODCs' {
+            $result = Get-DomainControllerEncryption -ServerParams @{}
+            $result.RODCCount | Should -Be 0
+        }
+    }
 }
 }

@@ -27,6 +27,7 @@ function Get-DomainControllerEncryption {
 
     $assessment = @{
         TotalDCs           = 0
+        RODCCount          = 0
         AESConfigured      = 0
         RC4Configured      = 0
         DESConfigured      = 0
@@ -86,12 +87,18 @@ function Get-DomainControllerEncryption {
             $dcComputer = Get-ADComputer $dc.ComputerObjectDN -Properties msDS-SupportedEncryptionTypes, OperatingSystem @ServerParams
             $encValue = $dcComputer.'msDS-SupportedEncryptionTypes'
             $encTypes = Get-EncryptionTypeString -Value $encValue
+            $isRODC = [bool]$dc.IsReadOnly
+
+            if ($isRODC) {
+                $assessment.RODCCount++
+            }
 
             $dcInfo = @{
                 Name            = $dc.Name
                 EncryptionValue = $encValue
                 EncryptionTypes = $encTypes
                 OperatingSystem = $dcComputer.OperatingSystem
+                IsReadOnly      = $isRODC
                 Status          = "Unknown"
             }
 
@@ -215,6 +222,9 @@ function Get-DomainControllerEncryption {
         Write-Host "  $([char]0x2022) RC4 Configured: $($assessment.RC4Configured)" -ForegroundColor $(if ($assessment.RC4Configured -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  $([char]0x2022) DES Configured: $($assessment.DESConfigured)" -ForegroundColor $(if ($assessment.DESConfigured -gt 0) { "Red" } else { "Green" })
         Write-Host "  $([char]0x2022) Not Configured (GPO Inherited): $($assessment.NotConfigured)" -ForegroundColor Cyan
+        if ($assessment.RODCCount -gt 0) {
+            Write-Host "  $([char]0x2022) Read-Only DCs (RODCs): $($assessment.RODCCount)" -ForegroundColor Cyan
+        }
         if ($assessment.AzureADKerberos) {
             Write-Host "  $([char]0x2022) AzureADKerberos (Entra proxy): Excluded from DC counts (managed by Entra ID)" -ForegroundColor DarkCyan
         }
@@ -229,7 +239,8 @@ function Get-DomainControllerEncryption {
                     "DES" { "Red" }
                     default { "Cyan" }
                 }
-                Write-Host "    $([char]0x2022) $($dcInfo.Name): $($dcInfo.Status)" -ForegroundColor $statusColor
+                $rodcLabel = if ($dcInfo.IsReadOnly) { ' [RODC]' } else { '' }
+                Write-Host "    $([char]0x2022) $($dcInfo.Name)$($rodcLabel): $($dcInfo.Status)" -ForegroundColor $statusColor
                 if ($dcInfo.EncryptionValue) {
                     Write-Host "      Types: $($dcInfo.EncryptionTypes)" -ForegroundColor Gray
                 }
