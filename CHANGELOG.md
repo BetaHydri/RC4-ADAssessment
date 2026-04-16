@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.12.0] - 2026-04-16
+
+### Added
+
+- RODC (Read-Only Domain Controller) assessment support in `Get-DomainControllerEncryption`:
+  tracks `RODCCount` and `IsReadOnly` per DC, displays `[RODC]` label in console output
+- RODC KRBTGT account (`krbtgt_*`) discovery and assessment in
+  `Get-AccountEncryptionAssessment`: checks password age (CRITICAL >365d, WARNING >180d)
+  and detects RC4-only encryption
+- RODC KRBTGT summary table in `Show-AssessmentSummary` with color-coded status and
+  password rotation guidance
+- Null-safety for environments without RODCs — all RODC counters default to zero
+- 9 new Pester unit tests for RODC DC detection, RODC KRBTGT discovery, password age,
+  encryption type checks, and no-RODC scenarios (524 total tests, 67.69% coverage)
+
 ## [4.11.0] - 2026-04-16
 
 ### Fixed
