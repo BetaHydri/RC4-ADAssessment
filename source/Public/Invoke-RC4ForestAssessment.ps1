@@ -71,7 +71,7 @@
     }
 
     Write-Host "`n$("=" * 80)" -ForegroundColor Cyan
-    Write-Host "Active Directory Forest - DES/RC4 Assessment" -ForegroundColor Cyan
+    Write-Host "Active Directory Forest - DES/RC4 Assessment v$script:Version" -ForegroundColor Cyan
     Write-Host $("=" * 80) -ForegroundColor Cyan
 
     # Get forest information
