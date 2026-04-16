@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.11.0] - 2026-04-16
+
+### Fixed
+
+- Banner version in all three public commands (`Invoke-RC4Assessment`,
+  `Invoke-RC4ForestAssessment`, `Invoke-RC4AssessmentComparison`) now dynamically
+  reads the module version from the manifest at import time, so the displayed
+  version always matches the installed release
+- `Invoke-RC4ForestAssessment` and `Invoke-RC4AssessmentComparison` banners were
+  missing the version number entirely
+- Removed stale `CHANGELOG-Surface_Laptop7.md` duplicate file
+
 ## [4.10.0] - 2026-04-15
 
 ### Fixed

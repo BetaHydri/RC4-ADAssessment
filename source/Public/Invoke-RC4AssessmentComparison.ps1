@@ -31,7 +31,7 @@ function Invoke-RC4AssessmentComparison {
 
     try {
         # Load assessment files
-        Write-ComparisonHeader "RC4/DES Assessment Comparison"
+        Write-ComparisonHeader "RC4/DES Assessment Comparison v$script:Version"
 
         Write-Host "Loading baseline: " -NoNewline -ForegroundColor White
         Write-Host $BaselineFile -ForegroundColor Cyan
