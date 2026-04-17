@@ -33,7 +33,7 @@ This toolkit helps you:
 | **KRBTGT Assessment** | Password age, encryption types, rotation guidance |
 | **Service Account Scan** | SPN accounts, gMSA/sMSA, and delegated Managed Service Accounts (dMSA) with RC4/DES-only encryption |
 | **USE_DES_KEY_ONLY Detection** | Accounts with the UserAccountControl flag forcing DES |
-| **Missing AES Keys** | Two-path detection: (A) accounts with explicit non-AES encryption, (B) accounts with unset attribute and very old passwords |
+| **Missing AES Keys** | Two-path detection: (A) accounts with explicit non-AES encryption, (B) accounts with unset attribute and password predating the domain's AES threshold (DFL 2008 upgrade date, auto-detected via RODC group) |
 | **AzureADKerberos Detection** | Entra Kerberos proxy object excluded from DC counts (Cloud Kerberos Trust) |
 | **Stale Password Detection** | Service accounts with passwords >365 days old and RC4 enabled |
 | **Inline Fix Commands** | Every finding includes copy-paste PowerShell remediation commands |
