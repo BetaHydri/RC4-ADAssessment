@@ -180,13 +180,13 @@ Overall Security Assessment
   Recommendations & Remediation:
     • WARNING: [contoso.com] 1 account(s) have explicit RC4 exception (0x1C)
       # To harden: remove RC4 and set AES-only:
-      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
       # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # Test application access - if it breaks, re-add RC4 exception
 
     • WARNING: [contoso.com] Remove RC4 encryption from 1 Domain Controller(s): DC01
-      PS> Set-ADComputer DC01 -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADComputer DC01 -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
 
   💡 Tip: Use -IncludeGuidance for the full reference manual
      (audit setup, SIEM queries, KRBTGT rotation, July 2026 timeline).
@@ -222,7 +222,7 @@ Event Log Analysis - Actual DES/RC4 Usage
         accounts: LEGACY-APP$, SQL2008-SRV$)
       # For each account using RC4, try AES first:
       PS> Set-ADUser '<AccountName>' -Replace @{
-            'msDS-SupportedEncryptionTypes'=24}
+            'msDS-SupportedEncryptionTypes'=0x18}
       # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES fails, add explicit RC4 exception:
@@ -400,24 +400,24 @@ This GPO **writes** `msDS-SupportedEncryptionTypes` to each computer object in A
 
 ### `msDS-SupportedEncryptionTypes` Reference
 
-| Decimal | Hex | Encryption Types | Use Case |
-|---------|------|------------------|----------|
-| 0 | 0x0 | Not set — defaults to RC4 (pre-Nov 2022) or AES (post-Nov 2022) | Default behaviour |
-| 1 | 0x1 | DES-CBC-CRC | **Insecure — do not use** |
-| 2 | 0x2 | DES-CBC-MD5 | **Insecure — do not use** |
-| 3 | 0x3 | DES-CBC-CRC, DES-CBC-MD5 | **Insecure — do not use** |
-| 4 | 0x4 | RC4-HMAC | RC4 only (no AES — avoid) |
-| 8 | 0x8 | AES128-CTS-HMAC-SHA1-96 | AES128 only |
-| 16 | 0x10 | AES256-CTS-HMAC-SHA1-96 | AES256 only |
-| 24 | 0x18 | AES128 + AES256 | **Recommended (AES-only)** |
-| 28 | 0x1C | RC4 + AES128 + AES256 | **RC4 exception with AES** |
-| 31 | 0x1F | DES-CBC-CRC, DES-CBC-MD5, RC4, AES128, AES256 | All types (insecure — includes DES) |
-| 39 | 0x27 | DES + RC4 + AES256-SK | Old default (pre-Nov 2022) — insecure |
-| 60 | 0x3C | RC4 + AES128 + AES256 + AES256-SK | Historical recommended — replace with `0x18` |
-| 2147483672 | 0x80000018 | AES128 + AES256 + Future encryption types | **CIS Benchmark recommended GPO value** |
+| Hex | Decimal | Encryption Types | Use Case |
+|------|---------|------------------|----------|
+| 0x0 | 0 | Not set — defaults to RC4 (pre-Nov 2022) or AES (post-Nov 2022) | Default behaviour |
+| 0x1 | 1 | DES-CBC-CRC | **Insecure — do not use** |
+| 0x2 | 2 | DES-CBC-MD5 | **Insecure — do not use** |
+| 0x3 | 3 | DES-CBC-CRC, DES-CBC-MD5 | **Insecure — do not use** |
+| 0x4 | 4 | RC4-HMAC | RC4 only (no AES — avoid) |
+| 0x8 | 8 | AES128-CTS-HMAC-SHA1-96 | AES128 only |
+| 0x10 | 16 | AES256-CTS-HMAC-SHA1-96 | AES256 only |
+| 0x18 | 24 | AES128 + AES256 | **Recommended (AES-only)** |
+| 0x1C | 28 | RC4 + AES128 + AES256 | **RC4 exception with AES** |
+| 0x1F | 31 | DES-CBC-CRC, DES-CBC-MD5, RC4, AES128, AES256 | All types (insecure — includes DES) |
+| 0x27 | 39 | DES + RC4 + AES256-SK | Old default (pre-Nov 2022) — insecure |
+| 0x3C | 60 | RC4 + AES128 + AES256 + AES256-SK | Historical recommended — replace with `0x18` |
+| 0x80000018 | 2147483672 | AES128 + AES256 + Future encryption types | **CIS Benchmark recommended GPO value** |
 
-> **Tip:** The value is a bitmask — add the decimal values for the types you need.
-> For per-account RC4 exceptions, use **28 (`0x1C`)** = RC4 (4) + AES128 (8) + AES256 (16).
+> **Tip:** The value is a bitmask — add the individual bit values for the types you need.
+> For per-account RC4 exceptions, use **`0x1C` (28)** = RC4 (`0x4`) + AES128 (`0x8`) + AES256 (`0x10`).
 >
 > Source: [Decrypting the Selection of Supported Kerberos Encryption Types](https://techcommunity.microsoft.com/blog/coreinfrastructureandsecurityblog/decrypting-the-selection-of-supported-kerberos-encryption-types/1628797) (Microsoft Core Infrastructure and Security Blog)
 
@@ -800,7 +800,7 @@ Overall Security Assessment
       review and remove RC4 when possible: gmsa-ces$
       # These accounts explicitly allow RC4 (msDS-SupportedEncryptionTypes includes 0x4 + AES)
       # To harden: remove RC4 and set AES-only:
-      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
       # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 
@@ -808,7 +808,7 @@ Overall Security Assessment
       # Option 1: Reset password to generate AES keys:
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES is still not used after password reset, explicitly set AES:
-      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
       # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 ```
@@ -830,11 +830,11 @@ This account has AES keys available (confirmed by the event log). It is not flag
 
 > **Tip:** Remove the DES and RC4 bits to prepare for July 2026:
 > ```powershell
-> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
 > # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
 > Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 > ```
-> `24` = `0x18` = AES128 + AES256 (AES-only).
+> `0x18` (24) = AES128 + AES256 (AES-only).
 
 ### When to Investigate
 

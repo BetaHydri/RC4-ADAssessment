@@ -169,7 +169,7 @@ Event Log Analysis - Actual DES/RC4 Usage
         accounts: LEGACY-APP$, SQL2008-SRV$)
       # For each account using RC4, try AES first:
       PS> Set-ADUser '<AccountName>' -Replace @{
-            'msDS-SupportedEncryptionTypes'=24}
+            'msDS-SupportedEncryptionTypes'=0x18}
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES fails, add explicit RC4 exception (CVE-2026-20833 safe):
       #   -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}

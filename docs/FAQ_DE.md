@@ -279,11 +279,11 @@ die `msDS-SupportedEncryptionTypes` auf Computerobjekte in AD schreibt.
 
 **F: Welcher Verschlüsselungstyp-Wert wird empfohlen?**
 
-- **24 (0x18)** = AES128 + AES256 — **Empfohlen (nur AES)**
-- **28 (0x1C)** = RC4 + AES128 + AES256 — Letzter Ausweg für Legacy-Anwendungen
-- **60 (0x3C)** = RC4 + AES128 + AES256 + AES256-SK — Historisch empfohlen
+- **`0x18` (24)** = AES128 + AES256 — **Empfohlen (nur AES)**
+- **`0x1C` (28)** = RC4 + AES128 + AES256 — Letzter Ausweg für Legacy-Anwendungen
+- **`0x3C` (60)** = RC4 + AES128 + AES256 + AES256-SK — Historisch empfohlen
   (durch `0x18` ersetzen)
-- **2147483672 (0x80000018)** = AES128 + AES256 + Future — CIS-Benchmark-GPO-Wert
+- **`0x80000018` (2147483672)** = AES128 + AES256 + Future — CIS-Benchmark-GPO-Wert
 
 **F: Was bedeuten die Verschlüsselungstyp-Codes in den Ereignisprotokollen (4768/4769)?**
 

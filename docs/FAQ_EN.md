@@ -264,11 +264,11 @@ Configure encryption types allowed for Kerberos", which writes
 
 **Q: What is the recommended encryption type value?**
 
-- **24 (0x18)** = AES128 + AES256 — **Recommended (AES-only)**
-- **28 (0x1C)** = RC4 + AES128 + AES256 — Last resort for legacy applications
-- **60 (0x3C)** = RC4 + AES128 + AES256 + AES256-SK — Historical recommended
+- **`0x18` (24)** = AES128 + AES256 — **Recommended (AES-only)**
+- **`0x1C` (28)** = RC4 + AES128 + AES256 — Last resort for legacy applications
+- **`0x3C` (60)** = RC4 + AES128 + AES256 + AES256-SK — Historical recommended
   (replace with `0x18`)
-- **2147483672 (0x80000018)** = AES128 + AES256 + Future — CIS Benchmark GPO value
+- **`0x80000018` (2147483672)** = AES128 + AES256 + Future — CIS Benchmark GPO value
 
 **Q: What do the encryption type codes in event logs mean (4768/4769)?**
 
