@@ -338,9 +338,11 @@ accounts without the attribute).
 **Q: How does "Missing AES Keys" detection work?**
 
 Accounts are flagged when `msDS-SupportedEncryptionTypes` is not set **and**
-`PasswordLastSet` is older than 5 years. These accounts may never have had AES
-keys generated (because AES keys are only created when a password is set while the
-Domain Functional Level is 2008 or higher). Fix: reset the password.
+`PasswordLastSet` predates the domain's AES threshold (the date when DFL was
+raised to 2008, detected via the "Read-only Domain Controllers" group creation
+date). These accounts may never have had AES keys generated (because AES keys
+are only created when a password is set while the Domain Functional Level is
+2008 or higher). Fix: reset the password.
 
 **Q: What does the AES/RC4 correlation detect?**
 
