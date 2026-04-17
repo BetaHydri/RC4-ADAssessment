@@ -556,6 +556,31 @@
             $dflSupportsAES = $dfl -match '2008|2012|2016|Windows2008|Windows2012|Windows2016|2025'
 
             if ($dflSupportsAES) {
+                # Determine AES threshold date dynamically:
+                # The "Read-only Domain Controllers" group is created when DFL is raised to 2008+.
+                # Its Created date is the authoritative proxy for when AES key generation became
+                # available in this domain. Accounts whose password was last set before this date
+                # may lack AES keys.
+                $aesThresholdDate = $null
+                try {
+                    $rodcGroup = Get-ADGroup 'Read-only Domain Controllers' -Properties Created @ServerParams -ErrorAction SilentlyContinue
+                    if ($rodcGroup -and $rodcGroup.Created) {
+                        $aesThresholdDate = $rodcGroup.Created
+                        Write-Finding -Status "INFO" -Message "AES threshold date: $($aesThresholdDate.ToString('yyyy-MM-dd')) (DFL 2008 upgrade detected via RODC group creation)"
+                    }
+                }
+                catch {
+                    Write-Verbose "Could not query Read-only Domain Controllers group: $($_.Exception.Message)"
+                }
+
+                if (-not $aesThresholdDate) {
+                    # Fallback: Windows Server 2008 GA date — conservative lower bound
+                    $aesThresholdDate = [DateTime]::new(2008, 2, 27)
+                    Write-Finding -Status "INFO" -Message "AES threshold date: $($aesThresholdDate.ToString('yyyy-MM-dd')) (fallback — RODC group not found, using Server 2008 GA date)"
+                }
+
+                $aesThresholdAgeDays = ((Get-Date) - $aesThresholdDate).Days
+
                 # Two detection paths for accounts missing AES keys:
                 #
                 # Path A: msDS-SupportedEncryptionTypes is explicitly set to a non-zero value WITHOUT AES bits
@@ -563,10 +588,10 @@
                 #         regardless of password age. Already flagged by RC4-only/DES-only checks but also
                 #         belong in the Missing AES Keys category for completeness.
                 #
-                # Path B: msDS-SupportedEncryptionTypes is not set (null/0) AND password is very old.
-                #         When not set, the account uses domain defaults — AES keys are generated at
-                #         password change time if DFL >= 2008. Only flag if password age suggests it may
-                #         predate the DFL 2008 upgrade.
+                # Path B: msDS-SupportedEncryptionTypes is not set (null/0) AND password predates the AES
+                #         threshold (DFL 2008 upgrade). When not set, the account uses domain defaults —
+                #         AES keys are generated at password change time if DFL >= 2008. Only flag if the
+                #         password was last set before the DFL was raised.
 
                 $missingAESAccounts = @()
 
@@ -599,9 +624,8 @@
                     }
                 }
 
-                # Path B: Attribute not set + very old password (may predate DFL 2008 upgrade)
-                $fiveYearsAgo = (Get-Date).AddYears(-5)
-                $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $fiveYearsAgo } `
+                # Path B: Attribute not set + password predates AES threshold (DFL 2008 upgrade)
+                $oldAccounts = Get-ADUser -Filter { Enabled -eq $true -and PasswordLastSet -lt $aesThresholdDate } `
                     -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated, lastLogonTimestamp @ServerParams -ErrorAction Stop
 
                 if ($oldAccounts) {
@@ -610,8 +634,8 @@
                         $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
 
                         # Only flag if msDS-SupportedEncryptionTypes is not set (null/0)
-                        # AND password is very old — may predate DFL 2008 upgrade
-                        if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt 1825) {
+                        # AND password predates AES threshold — set before DFL 2008 upgrade
+                        if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt $aesThresholdAgeDays) {
                             # Skip if already added by Path A
                             if ($acct.SamAccountName -notin $missingAESAccounts.Name) {
                                 $logon = ConvertFrom-LastLogonTimestamp -RawValue $acct.lastLogonTimestamp

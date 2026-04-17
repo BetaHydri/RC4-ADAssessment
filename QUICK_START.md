@@ -299,7 +299,7 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 Detected via two paths in the standard scan (no `-DeepScan` needed):
 
 - **Path A** — `msDS-SupportedEncryptionTypes` explicitly set to a non-zero value **without AES bits** (e.g., `0x4` = RC4-only). These accounts definitively lack AES support regardless of password age
-- **Path B** — `msDS-SupportedEncryptionTypes` not set (null/0) AND password older than 5 years. May predate the DFL 2008 upgrade and never had AES keys generated
+- **Path B** — `msDS-SupportedEncryptionTypes` not set (null/0) AND password predates the domain's AES threshold (DFL 2008 upgrade date, detected via "Read-only Domain Controllers" group creation). These accounts may never have had AES keys generated
 
 > Since v4.4.0, RC4-only and DES-only accounts are caught by the standard scan. `-DeepScan` is no longer needed for these — it now focuses on RC4-exception/DES-enabled users without SPNs and computer account scanning.
 

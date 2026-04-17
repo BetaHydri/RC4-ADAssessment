@@ -238,7 +238,7 @@ ktpass command reference:
        ForEach-Object { Set-ADAccountControl ``$_ -UseDESKeyOnly ``$false }
 
    Update service accounts to AES:
-   PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+   PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
    # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
    # Then reset the password to generate new AES keys
    # After changing encryption types, purge cached tickets:
@@ -300,7 +300,7 @@ ktpass command reference:
    registry key is removed entirely. Use this workflow for exceptions:
 
    a) Step 1: Try AES First
-      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
       # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
@@ -347,10 +347,12 @@ ktpass command reference:
    for RC4-only or DES-only encryption regardless of password age.
    Examples: 0x4 (RC4-only), 0x3 (DES-only), 0x7 (DES+RC4, no AES).
 
-   Path B - Attribute Not Set + Old Password:
+   Path B - Attribute Not Set + Password Predating AES Threshold:
    Accounts where msDS-SupportedEncryptionTypes is not set (null/0) AND
-   the password is older than 5 years. These accounts may predate the
-   DFL 2008 upgrade and never had AES keys generated.
+   the password predates the DFL 2008 upgrade. The tool dynamically
+   determines this date by querying the 'Read-only Domain Controllers'
+   group creation date (exists in every domain at DFL 2008+, even
+   without RODCs deployed).
 
    Find Path A accounts (explicit non-AES):
    PS> Get-ADUser -LDAPFilter '(&(!(userAccountControl:1.2.840.113556.1.4.803:=2))(msDS-SupportedEncryptionTypes=*))' ``
@@ -364,10 +366,13 @@ ktpass command reference:
                else { 'Never' }
            }}
 
-   Find Path B accounts (attribute not set + old password, including last logon):
+   Find Path B accounts (attribute not set + password predating AES threshold):
+   PS> # Determine AES threshold: when was DFL raised to 2008?
+   PS> ``$rodcGroup = Get-ADGroup 'Read-only Domain Controllers' -Properties Created
+   PS> ``$aesThreshold = ``$rodcGroup.Created  # e.g. 2012-06-15
    PS> Get-ADUser -Filter 'Enabled -eq ``$true' -Properties PasswordLastSet, ``
        'msDS-SupportedEncryptionTypes', lastLogonTimestamp |
-       Where-Object { ``$_.PasswordLastSet -lt (Get-Date).AddYears(-5) -and
+       Where-Object { ``$_.PasswordLastSet -lt ``$aesThreshold -and
                        (-not ``$_.'msDS-SupportedEncryptionTypes' -or
                         ``$_.'msDS-SupportedEncryptionTypes' -eq 0) } |
        Select-Object Name, PasswordLastSet, @{N='LastLogon';E={
@@ -380,7 +385,7 @@ ktpass command reference:
 
    Remediation for Path A (explicit non-AES):
    First set the account to AES-only, then reset the password:
-   PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+   PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
    PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 
    Remediation for Path B (attribute not set + old password):
@@ -428,7 +433,8 @@ ktpass command reference:
       4768 still shows 'Available Keys: RC4' after the password reset, you
       must explicitly set the account's msDS-SupportedEncryptionTypes to AES:
 
-      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}
+      PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
+      # 0x18 (24) = AES128 + AES256
       PS> Set-ADAccountPassword '<AccountName>' -Reset ``
             -NewPassword (ConvertTo-SecureString '<Password>' -AsPlainText -Force)
       CMD> klist purge

@@ -747,14 +747,14 @@ Accounts where `msDS-SupportedEncryptionTypes` is **explicitly set to a non-zero
 
 **Examples:** `0x4` (RC4-only), `0x3` (DES-only), `0x7` (DES + RC4, no AES).
 
-### Path B — Attribute Not Set + Old Password
+### Path B — Attribute Not Set + Password Predating AES Threshold
 
-Accounts where `msDS-SupportedEncryptionTypes` is **not set (null) or equals 0** AND `PasswordLastSet` is **older than 5 years** (1825 days). When the attribute is not set, the account uses domain defaults — but AES keys are only generated at password change time if DFL ≥ 2008. These accounts may predate the DFL upgrade.
+Accounts where `msDS-SupportedEncryptionTypes` is **not set (null) or equals 0** AND `PasswordLastSet` **predates the domain's AES threshold**. The tool dynamically determines this date by querying the `Created` date of the built-in "Read-only Domain Controllers" group — a reliable proxy for when the DFL was raised to 2008 and AES key generation became available. This group exists in every domain at DFL 2008+, even without RODCs deployed. If the group is not found, the tool falls back to the Windows Server 2008 GA date (2008-02-27).
 
 ### When an Account is NOT Flagged
 
 - **Path A skips** accounts that have AES bits set (e.g., `0x18`, `0x1C`, `0x27`) — they already support AES
-- **Path B skips** accounts with passwords less than 5 years old — they likely had AES keys generated
+- **Path B skips** accounts whose password was set after the AES threshold date — they had AES keys generated
 
 If `msDS-SupportedEncryptionTypes` has a non-zero value that includes AES (e.g., `0x27`, `0x18`, `0x1C`), the account is handled by other checks (RC4-exception, DES-enabled) rather than Missing AES Keys.
 
@@ -838,7 +838,7 @@ This account has AES keys available (confirmed by the event log). It is not flag
 
 ### When to Investigate
 
-Accounts that **are** flagged (attribute not set + password > 5 years) should have their passwords reset to generate AES keys:
+Accounts that **are** flagged (attribute not set + password predating AES threshold) should have their passwords reset to generate AES keys:
 
 ```powershell
 # Reset password twice to ensure AES key generation:
@@ -910,7 +910,7 @@ All flagged accounts include `lastLogonTimestamp` data to help determine if the 
 | `lastLogonTimestamp` | Yes (all DCs) | ~9-14 day lag | Single DC query |
 | `lastLogon` | No (per-DC only) | Exact | Must query **every** DC |
 
-The assessment identifies accounts with passwords >5 years old or >365 days stale — a 9-14 day lag is negligible for that purpose. Querying all DCs for `lastLogon` would significantly slow down the script, especially in large environments with many DCs.
+The assessment identifies accounts with passwords predating the AES threshold or >365 days stale — a 9-14 day lag is negligible for that purpose. Querying all DCs for `lastLogon` would significantly slow down the script, especially in large environments with many DCs.
 
 > **Note:** The `lastLogonTimestamp` value could be off by up to ~14 days (controlled by `ms-DS-Logon-Time-Sync-Interval`, default 14 days minus random 0-5 days). This does not change the remediation decision for accounts flagged by this assessment.
 

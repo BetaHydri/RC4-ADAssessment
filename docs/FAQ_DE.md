@@ -355,7 +355,9 @@ akzeptiert. Aktivieren Sie AES128 + AES256 + Zukünftige Verschlüsselungstypen
 **F: Wie funktioniert die Erkennung „Fehlende AES-Schlüssel"?**
 
 Konten werden markiert, wenn `msDS-SupportedEncryptionTypes` nicht gesetzt ist
-**und** `PasswordLastSet` älter als 5 Jahre ist. Diese Konten haben möglicherweise
+**und** `PasswordLastSet` vor dem AES-Schwellendatum der Domäne liegt (dem Datum
+der DFL-Erhöhung auf 2008, ermittelt über das Erstellungsdatum der Gruppe
+„Read-only Domain Controllers“). Diese Konten haben möglicherweise
 nie AES-Schlüssel generiert (da AES-Schlüssel nur erstellt werden, wenn ein
 Kennwort gesetzt wird, während die Domänenfunktionsebene 2008 oder höher ist).
 Lösung: Kennwort zurücksetzen.

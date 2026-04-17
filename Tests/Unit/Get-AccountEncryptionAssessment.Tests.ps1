@@ -11,6 +11,9 @@ BeforeAll {
     if (-not (Get-Command 'Get-ADServiceAccount' -ErrorAction SilentlyContinue)) {
         function global:Get-ADServiceAccount { param([string]$Identity, [string]$Filter, [string[]]$Properties, [string]$Server, $ErrorAction) }
     }
+    if (-not (Get-Command 'Get-ADGroup' -ErrorAction SilentlyContinue)) {
+        function global:Get-ADGroup { param([string]$Identity, [string[]]$Properties, [string]$Server, $ErrorAction) }
+    }
 }
 
 InModuleScope 'RC4-ADAssessment' {
@@ -21,6 +24,12 @@ Describe 'Get-AccountEncryptionAssessment' {
             [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
         }
         Mock -ModuleName 'RC4-ADAssessment' Get-ADServiceAccount { $null }
+        Mock -ModuleName 'RC4-ADAssessment' Get-ADGroup {
+            [PSCustomObject]@{
+                Name    = 'Read-only Domain Controllers'
+                Created = [DateTime]::new(2012, 6, 15)
+            }
+        }
     }
 
     Context 'When KRBTGT has healthy AES config' {
@@ -325,13 +334,20 @@ Describe 'Get-AccountEncryptionAssessment' {
         }
     }
 
-    Context 'When accounts have unset attribute and very old password (Missing AES Path B)' {
+    Context 'When accounts have unset attribute and password predating AES threshold (Missing AES Path B)' {
         BeforeEach {
             Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
                 [PSCustomObject]@{
                     DNSRoot             = 'contoso.com'
                     DistinguishedName   = 'DC=contoso,DC=com'
                     DomainMode          = 'Windows2016Domain'
+                }
+            }
+            # RODC group created in 2012 — password from 2010 predates this threshold
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADGroup {
+                [PSCustomObject]@{
+                    Name    = 'Read-only Domain Controllers'
+                    Created = [DateTime]::new(2012, 6, 15)
                 }
             }
             Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
@@ -348,17 +364,17 @@ Describe 'Get-AccountEncryptionAssessment' {
                 if (-not $Identity -and -not $Filter) {
                     return $null
                 }
-                # Path B: old password accounts (matched by -Filter containing PasswordLastSet)
+                # Path B: password predates AES threshold (matched by -Filter containing PasswordLastSet)
                 if ("$Filter" -match 'PasswordLastSet') {
                     return @(
                         [PSCustomObject]@{
                             SamAccountName                  = 'olduser'
                             DistinguishedName               = 'CN=olduser,DC=contoso,DC=com'
                             Enabled                         = $true
-                            PasswordLastSet                 = (Get-Date).AddYears(-7)
+                            PasswordLastSet                 = [DateTime]::new(2010, 3, 15)
                             'msDS-SupportedEncryptionTypes' = $null
                             ServicePrincipalName            = $null
-                            WhenCreated                     = (Get-Date).AddYears(-8)
+                            WhenCreated                     = [DateTime]::new(2009, 1, 10)
                             lastLogonTimestamp               = $null
                         }
                     )
@@ -367,10 +383,60 @@ Describe 'Get-AccountEncryptionAssessment' {
             }
         }
 
-        It 'Detects accounts with unset attribute and old password as Missing AES Keys' {
+        It 'Detects accounts with unset attribute and password predating AES threshold' {
             $result = Get-AccountEncryptionAssessment -ServerParams @{}
             $result.TotalMissingAES | Should -Be 1
             $result.MissingAESKeyAccounts[0].Name | Should -Be 'olduser'
+        }
+    }
+
+    Context 'When RODC group is not found (Missing AES Path B fallback)' {
+        BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
+                [PSCustomObject]@{
+                    DNSRoot             = 'contoso.com'
+                    DistinguishedName   = 'DC=contoso,DC=com'
+                    DomainMode          = 'Windows2016Domain'
+                }
+            }
+            # Simulate RODC group not found — fallback to Server 2008 GA date
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADGroup { $null }
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
+                if ("$Identity" -eq 'krbtgt') {
+                    return [PSCustomObject]@{
+                        SamAccountName                  = 'krbtgt'
+                        PasswordLastSet                 = (Get-Date).AddDays(-30)
+                        pwdLastSet                      = (Get-Date).AddDays(-30).ToFileTime()
+                        'msDS-SupportedEncryptionTypes' = 24
+                        WhenChanged                     = (Get-Date).AddDays(-30)
+                    }
+                }
+                if (-not $Identity -and -not $Filter) {
+                    return $null
+                }
+                # Path B: password from 2007 predates the 2008-02-27 fallback threshold
+                if ("$Filter" -match 'PasswordLastSet') {
+                    return @(
+                        [PSCustomObject]@{
+                            SamAccountName                  = 'ancientuser'
+                            DistinguishedName               = 'CN=ancientuser,DC=contoso,DC=com'
+                            Enabled                         = $true
+                            PasswordLastSet                 = [DateTime]::new(2007, 5, 1)
+                            'msDS-SupportedEncryptionTypes' = $null
+                            ServicePrincipalName            = $null
+                            WhenCreated                     = [DateTime]::new(2005, 1, 1)
+                            lastLogonTimestamp               = $null
+                        }
+                    )
+                }
+                return $null
+            }
+        }
+
+        It 'Falls back to Server 2008 GA date and detects pre-2008 accounts' {
+            $result = Get-AccountEncryptionAssessment -ServerParams @{}
+            $result.TotalMissingAES | Should -Be 1
+            $result.MissingAESKeyAccounts[0].Name | Should -Be 'ancientuser'
         }
     }
 

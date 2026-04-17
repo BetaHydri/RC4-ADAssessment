@@ -282,8 +282,8 @@ try {
             Level   = "CRITICAL"
             Message = "[$($results.Domain)] Remove DES encryption from $($results.DomainControllers.DESConfigured) Domain Controller(s): $desDCs"
             Fix     = @(
-                "Set-ADComputer <DCName> -Replace @{'msDS-SupportedEncryptionTypes'=24}"
-                "# 24 = AES128 + AES256 only. Apply to: $desDCs"
+                "Set-ADComputer <DCName> -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
+                "# 0x18 (24) = AES128 + AES256 only. Apply to: $desDCs"
             )
         }
     }
@@ -295,7 +295,7 @@ try {
             Level   = "CRITICAL"
             Message = "[$($results.Domain)] Remove DES encryption from $($results.Trusts.DESRisk) trust(s): $desTrusts"
             Fix     = @(
-                "Set-ADObject (Get-ADTrust '<TrustName>').DistinguishedName -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "Set-ADObject (Get-ADTrust '<TrustName>').DistinguishedName -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                 "# Or clear the attribute to use AES default: -Clear 'msDS-SupportedEncryptionTypes'"
             )
         }
@@ -309,7 +309,7 @@ try {
             Message = "[$($results.Domain)] DES tickets detected in event logs ($($results.EventLogs.DESTickets) tickets, accounts: $desAcctList)"
             Fix     = @(
                 "# Investigate each account and update to AES:"
-                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                 "# For gMSA/sMSA/dMSA use Set-ADServiceAccount; for computers use Set-ADComputer"
                 "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
@@ -325,7 +325,7 @@ try {
             Level   = "WARNING"
             Message = "[$($results.Domain)] Remove RC4 encryption from $($results.DomainControllers.RC4Configured) Domain Controller(s): $rc4DCs"
             Fix     = @(
-                "Set-ADComputer $rc4DCs -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "Set-ADComputer $rc4DCs -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                 "# Or configure via GPO: 'Network security: Configure encryption types allowed for Kerberos' = AES128 + AES256 + Future encryption types"
             )
         }
@@ -340,7 +340,7 @@ try {
             Fix     = @(
                 "# Remove explicit setting to use AES default (post-Nov 2022):"
                 "Set-ADObject (Get-ADTrust '<TrustName>').DistinguishedName -Clear 'msDS-SupportedEncryptionTypes'"
-                "# Or set to AES-only: -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "# Or set to AES-only: -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
             )
         }
     }
@@ -353,7 +353,7 @@ try {
             Message = "[$($results.Domain)] RC4 tickets detected in event logs ($($results.EventLogs.RC4Tickets) tickets, accounts: $rc4AcctList)"
             Fix     = @(
                 "# For each account using RC4, try AES first:"
-                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                 "# For gMSA/sMSA/dMSA use Set-ADServiceAccount; for computers use Set-ADComputer"
                 "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
@@ -436,7 +436,7 @@ try {
                 Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only encryption: $svcNames"
                 Fix     = @(
                     "# Update each service account to AES and reset password:"
-                    "Set-ADUser '<ServiceAccount>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<ServiceAccount>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
                     "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                     "Set-ADAccountPassword '<ServiceAccount>' -Reset; klist purge"
@@ -452,7 +452,7 @@ try {
                 Level   = "WARNING"
                 Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption: $msaNames"
                 Fix     = @(
-                    "Set-ADServiceAccount '<MSAName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADServiceAccount '<MSAName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "# MSA passwords are managed by AD - no manual reset needed"
                     "# AES keys are generated at the next automatic password rotation"
                     "# Run 'klist purge' on the host(s) using this MSA to clear cached tickets"
@@ -470,7 +470,7 @@ try {
                     "# These accounts explicitly allow RC4 (msDS-SupportedEncryptionTypes includes 0x4 + AES)"
                     "# After July 2026 they will be the only accounts still able to obtain RC4 tickets"
                     "# To harden: remove RC4 and set AES-only:"
-                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
                     "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
@@ -487,10 +487,10 @@ try {
                 Message = "[$($results.Domain)] $($results.Accounts.TotalDESEnabled) account(s) have DES encryption bits enabled (insecure, removed in Server 2025): $desNames"
                 Fix     = @(
                     "# Remove DES bits and set AES-only:"
-                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
                     "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
-                    "# 24 = 0x18 = AES128 + AES256 (recommended)"
+                    "# 0x18 (24) = AES128 + AES256 (recommended)"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
             }
@@ -527,7 +527,9 @@ try {
                     "# reset password with the same value, then remove the FGPP."
                     "# This avoids service disruption while generating AES keys."
                     "# If AES is still not used after password reset, explicitly set AES:"
-                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
+                    "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
+                    "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
             }
@@ -541,7 +543,7 @@ try {
                 Level   = "CRITICAL"
                 Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanRC4OnlyUsers) user account(s) have RC4-only encryption: $dsNames"
                 Fix     = @(
-                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
             }
@@ -554,7 +556,7 @@ try {
                 Level   = "CRITICAL"
                 Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanDESOnlyUsers) user account(s) have DES-only encryption: $dsNames"
                 Fix     = @(
-                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
             }
@@ -568,7 +570,7 @@ try {
                 Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanDESEnabledUsers) user account(s) have DES bits enabled alongside AES: $dsNames"
                 Fix     = @(
                     "# Remove DES bits and set AES-only:"
-                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                 )
             }
         }
@@ -581,7 +583,7 @@ try {
                 Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanRC4ExceptionUsers) user account(s) have explicit RC4 exception: $dsNames"
                 Fix     = @(
                     "# Remove RC4 when possible:"
-                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 )
             }
@@ -608,7 +610,7 @@ try {
                 Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanComputersProblematic) computer(s) have non-default RC4/DES encryption: $dsNames"
                 Fix     = @(
                     "# Investigate each computer and update to AES-only:"
-                    "Set-ADComputer '<ComputerName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                    "Set-ADComputer '<ComputerName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                 )
             }
         }
@@ -624,7 +626,7 @@ try {
                 Fix     = @(
                     "# On each DC, update the registry to include AES:"
                     "Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' -Name 'DefaultDomainSupportedEncTypes' -Value 24 -Type DWord"
-                    "# 24 = 0x18 = AES128 + AES256 (AES-only, recommended)"
+                    "# 0x18 (24) = AES128 + AES256 (AES-only, recommended)"
                     "# For per-account RC4 exceptions: set msDS-SupportedEncryptionTypes=0x1C on the account, NOT domain-wide"
                 )
             }
@@ -666,10 +668,10 @@ try {
             Fix     = @(
                 "# Review KDCSVC events 201-209 in System event log on each DC"
                 "# For accounts triggering events 201-203 (audit), set AES-only first:"
-                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=24}"
+                "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                 "# For gMSA/sMSA/dMSA use Set-ADServiceAccount; for computers use Set-ADComputer"
                 "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
-                "# 24 = 0x18 = AES128 + AES256 (recommended)"
+                "# 0x18 (24) = AES128 + AES256 (recommended)"
                 "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                 "# If AES breaks the application, fall back to explicit RC4 exception:"
                 "# Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x1C}"
