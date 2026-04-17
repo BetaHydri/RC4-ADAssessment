@@ -2421,6 +2421,12 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
 
     Context 'When accounts with very old passwords exist' {
         BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADGroup {
+                [PSCustomObject]@{
+                    Name    = 'Read-only Domain Controllers'
+                    Created = (Get-Date).AddDays(-1500)
+                }
+            }
             Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{
@@ -2494,6 +2500,12 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
 
     Context 'When no old accounts exist' {
         BeforeEach {
+            Mock -ModuleName 'RC4-ADAssessment' Get-ADGroup {
+                [PSCustomObject]@{
+                    Name    = 'Read-only Domain Controllers'
+                    Created = (Get-Date).AddDays(-1500)
+                }
+            }
             Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
                 if ("$Identity" -eq 'krbtgt') {
                     return [PSCustomObject]@{

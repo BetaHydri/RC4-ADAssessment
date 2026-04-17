@@ -574,9 +574,9 @@
                 }
 
                 if (-not $aesThresholdDate) {
-                    # Fallback: Windows Server 2008 GA date — conservative lower bound
+                    # Fallback: Windows Server 2008 GA date -- conservative lower bound
                     $aesThresholdDate = [DateTime]::new(2008, 2, 27)
-                    Write-Finding -Status "INFO" -Message "AES threshold date: $($aesThresholdDate.ToString('yyyy-MM-dd')) (fallback — RODC group not found, using Server 2008 GA date)"
+                    Write-Finding -Status "INFO" -Message "AES threshold date: $($aesThresholdDate.ToString('yyyy-MM-dd')) (fallback -- RODC group not found, using Server 2008 GA date)"
                 }
 
                 $aesThresholdAgeDays = ((Get-Date) - $aesThresholdDate).Days
