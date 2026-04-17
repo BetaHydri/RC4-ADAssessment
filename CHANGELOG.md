@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.13.0] - 2026-04-17
+
+### Changed
+
+- Missing AES Keys Path B now uses a dynamic AES threshold date derived from the
+  "Read-only Domain Controllers" group creation date (proxy for DFL 2008 upgrade)
+  instead of a hardcoded 5-year password age heuristic
+- Falls back to Windows Server 2008 GA date (2008-02-27) when the RODC group is absent
+- Displays the detected AES threshold date as an INFO finding during assessment
+
+### Fixed
+
+- PS 5.1 parse error caused by em-dash (U+2014) in string literal corrupting to
+  `a]"` after ModuleBuilder BOM stripping -- replaced with ASCII `--`
+- Missing `Set-ADServiceAccount` caveat on the "Missing AES Keys" remediation command
+- Added `Get-ADGroup` mock to `RC4-ADAssessment.Tests.ps1` Missing AES Keys tests
+  for correct dynamic threshold resolution in CI
+
 ## [4.12.0] - 2026-04-16
 
 ### Added
