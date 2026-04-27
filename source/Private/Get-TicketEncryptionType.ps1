@@ -25,6 +25,7 @@ function Get-TicketEncryptionType {
         0x12 { return "AES256-HMAC-SHA1" }
         0x17 { return "RC4-HMAC" }
         0x18 { return "RC4-HMAC-EXP" }
+        -1 { return "Enforcement Block (0xFFFFFFFF)" }
         default { return "Unknown (0x$($EncryptionType.ToString('X')))" }
     }
 }

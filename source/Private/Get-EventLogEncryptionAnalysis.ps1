@@ -37,6 +37,7 @@
         RC4Tickets             = 0
         AESTickets             = 0
         UnknownTickets         = 0
+        EnforcementBlocks      = 0
         SessionKeyDES          = 0
         SessionKeyRC4          = 0
         SessionKeyAES          = 0
@@ -45,6 +46,7 @@
         TimeRange              = $Hours
         DESAccounts            = @()
         RC4Accounts            = @()
+        EnforcementBlockAccounts = @()  # Accounts whose RC4 requests were blocked by enforcement
         PasswordResetNeeded    = @()   # Accounts with AES configured but using RC4 (need password reset)
         Details                = @()
         FailedDCs              = @()   # Track DCs that couldn't be queried
@@ -141,7 +143,7 @@
                 }
                 catch {
                     if ($_.Exception.Message -match 'No events were found') {
-                        # Query succeeded but no matching events — not a failure
+                        # Query succeeded but no matching events -- not a failure
                         $events = @()
                         $usedWinRM = $true
                     }
@@ -166,7 +168,7 @@
                 if (-not $events -or @($events).Count -eq 0) {
                     Write-Host "    $([char]0x24D8) No events found on $dcName" -ForegroundColor Gray
                     $assessment.QueriedDCs += $dcName  # Still track as successfully queried
-                    $assessment.PerDcStats[$dcName] = @{ EventsAnalyzed = 0; RC4Tickets = 0; DESTickets = 0; AESTickets = 0; SessionKeyRC4 = 0; SessionKeyDES = 0; SessionKeyAES = 0 }
+                    $assessment.PerDcStats[$dcName] = @{ EventsAnalyzed = 0; RC4Tickets = 0; DESTickets = 0; AESTickets = 0; EnforcementBlocks = 0; SessionKeyRC4 = 0; SessionKeyDES = 0; SessionKeyAES = 0 }
                     continue
                 }
 
@@ -175,7 +177,7 @@
                     Write-Host "    $([char]0x2713) Retrieved $($events.Count) events from $dcName" -ForegroundColor Green
                     $assessment.EventsAnalyzed += $events.Count
                     $assessment.QueriedDCs += $dcName  # Track successfully queried DC
-                    $dcStats = @{ EventsAnalyzed = $events.Count; RC4Tickets = 0; DESTickets = 0; AESTickets = 0; SessionKeyRC4 = 0; SessionKeyDES = 0; SessionKeyAES = 0 }
+                    $dcStats = @{ EventsAnalyzed = $events.Count; RC4Tickets = 0; DESTickets = 0; AESTickets = 0; EnforcementBlocks = 0; SessionKeyRC4 = 0; SessionKeyDES = 0; SessionKeyAES = 0 }
 
                     foreach ($evt in $events) {
                         $encType = $null
@@ -235,6 +237,14 @@
                                 # AES
                                 $assessment.AESTickets++
                                 $dcStats.AESTickets++
+                            }
+                            -1 {
+                                # Enforcement block (0xFFFFFFFF) -- KDC refused the request
+                                $assessment.EnforcementBlocks++
+                                $dcStats.EnforcementBlocks++
+                                if ($account -and $account -notin $assessment.EnforcementBlockAccounts) {
+                                    $assessment.EnforcementBlockAccounts += $account
+                                }
                             }
                             default {
                                 $assessment.UnknownTickets++
@@ -301,6 +311,7 @@
         Write-Host "    $([char]0x2022) AES Tickets: $($assessment.AESTickets)" -ForegroundColor Green
         Write-Host "    $([char]0x2022) RC4 Tickets: $($assessment.RC4Tickets)" -ForegroundColor $(if ($assessment.RC4Tickets -gt 0) { "Red" } else { "Green" })
         Write-Host "    $([char]0x2022) DES Tickets: $($assessment.DESTickets)" -ForegroundColor $(if ($assessment.DESTickets -gt 0) { "Red" } else { "Green" })
+        Write-Host "    $([char]0x2022) Enforcement Blocks: $($assessment.EnforcementBlocks)" -ForegroundColor $(if ($assessment.EnforcementBlocks -gt 0) { "Yellow" } else { "Green" })
         Write-Host "  Session Key Encryption:" -ForegroundColor White
         $totalSessionKeys = $assessment.SessionKeyAES + $assessment.SessionKeyRC4 + $assessment.SessionKeyDES + $assessment.SessionKeyUnknown
         if ($assessment.EventsAnalyzed -gt 0 -and $totalSessionKeys -eq 0) {
@@ -311,6 +322,16 @@
             Write-Host "    $([char]0x2022) AES Session Keys: $($assessment.SessionKeyAES)" -ForegroundColor Green
             Write-Host "    $([char]0x2022) RC4 Session Keys: $($assessment.SessionKeyRC4)" -ForegroundColor $(if ($assessment.SessionKeyRC4 -gt 0) { "Yellow" } else { "Green" })
             Write-Host "    $([char]0x2022) DES Session Keys: $($assessment.SessionKeyDES)" -ForegroundColor $(if ($assessment.SessionKeyDES -gt 0) { "Red" } else { "Green" })
+        }
+
+        if ($assessment.EnforcementBlocks -gt 0) {
+            Write-Finding -Status "WARNING" -Message "$($assessment.EnforcementBlocks) enforcement block(s) detected (TicketEncryptionType=0xFFFFFFFF) -- RC4 requests the KDC refused"
+            Write-Host "  Unique accounts blocked: $($assessment.EnforcementBlockAccounts.Count)" -ForegroundColor Yellow
+            if ($assessment.EnforcementBlockAccounts.Count -le 10) {
+                foreach ($acct in $assessment.EnforcementBlockAccounts) {
+                    Write-Host "    - $acct" -ForegroundColor Yellow
+                }
+            }
         }
 
         if ($assessment.RC4Tickets -gt 0) {

@@ -302,10 +302,10 @@ Value: RC4DefaultDisablementPhase (REG_DWORD)
 
 | Value | Mode | Behaviour |
 |:-----:|------|-----------|
-| **0** | Disabled | No enforcement — original behaviour (pre-Jan 2026). KDCSVC audit events still logged after installing the security update. |
-| **1** | Audit (checkpoint) | Administrative checkpoint — confirms review before enforcement. KDCSVC events logged, **RC4 still works** — no blocking. No behaviour change vs. `0`. |
+| **0** | Rollback (silent) | RC4 allowed for all accounts. No KDCSVC events. Use for emergency rollback without event-log volume. |
+| **1** | Rollback (audit) | RC4 allowed. KDCSVC events 201/202 and 206/207 logged per RC4 request. Same ticket-issuance behaviour as `0`, but with per-request audit events. |
 | **2** | Enforcement | `DefaultDomainSupportedEncTypes` internally defaults to `0x18` (AES-only), RC4 blocked for accounts without explicit `msDS-SupportedEncryptionTypes` |
-| Not set | (same as 0) | No enforcement — until April 2026 patch changes the default |
+| Not set | Enforcement (implicit) | After KB5078763 (April 2026), `not set` equals enforcement — operationally identical to `2` |
 
 ```powershell
 # Enable Audit mode on a DC (recommended before April 2026):
@@ -317,7 +317,8 @@ Set-ItemProperty -Path $path -Name 'RC4DefaultDisablementPhase' -Value 1 -Type D
 Get-ItemProperty -Path $path -Name 'RC4DefaultDisablementPhase'
 ```
 
-> **No reboot required.** The KDC picks up the change immediately.
+> **KDC restart required.** Unlike `DefaultDomainSupportedEncTypes`, the Phase key is cached at KDC service start.
+> After setting the value, run `Restart-Service Kdc` (or restart the DC) to apply.
 >
 > **Source:** [KB5073381 — CVE-2026-20833 deployment guidance](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc)
 

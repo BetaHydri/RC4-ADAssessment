@@ -122,12 +122,12 @@ Describe 'Get-EncryptionTypeString' {
         Get-EncryptionTypeString -Value 31 | Should -Be "DES-CBC-CRC, DES-CBC-MD5, RC4-HMAC, AES128-HMAC, AES256-HMAC"
     }
 
-    It 'Returns "Future" for value 0x80000000' {
-        Get-EncryptionTypeString -Value ([int]0x80000000) | Should -Be "Future"
+    It 'Returns bit 31 warning for value 0x80000000' {
+        Get-EncryptionTypeString -Value ([int]0x80000000) | Should -Be "bit 31 set (not meaningful on msDS-SET)"
     }
 
-    It 'Returns AES + Future for CIS-recommended GPO value 0x80000018' {
-        Get-EncryptionTypeString -Value ([int]0x80000018) | Should -Be "AES128-HMAC, AES256-HMAC, Future"
+    It 'Returns AES + bit 31 warning for CIS-recommended GPO value 0x80000018' {
+        Get-EncryptionTypeString -Value ([int]0x80000018) | Should -Be "AES128-HMAC, AES256-HMAC, bit 31 set (not meaningful on msDS-SET)"
     }
 }
 }

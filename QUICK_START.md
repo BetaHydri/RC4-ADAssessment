@@ -140,8 +140,9 @@ Overall Security Assessment
     • WARNING: [contoso.com] RC4DefaultDisablementPhase not set
       # Step 1: Deploy January 2026+ security updates on all DCs
       # Step 2: Set RC4DefaultDisablementPhase to 1 (administrative checkpoint before enforcement):
-      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' `
+      PS> Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters' `
             -Name 'RC4DefaultDisablementPhase' -Value 1 -Type DWord
+      PS> Restart-Service Kdc
       # Step 3: Monitor KDCSVC events 201-209 (logged automatically after installing the security update)
       # Step 4: When audit events are clear, enable Enforcement mode (value 2)
 

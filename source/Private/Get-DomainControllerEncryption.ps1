@@ -159,7 +159,7 @@ function Get-DomainControllerEncryption {
                             }
 
                             Write-Finding -Status "OK" -Message "GPO '$($gpoLink.DisplayName)' configures Kerberos encryption" `
-                                -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
+                                -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes -Context gpo)"
                             break
                         }
                     }
@@ -202,7 +202,7 @@ function Get-DomainControllerEncryption {
                                 catch { Write-Verbose "Could not resolve GPO display name: $($_.Exception.Message)" }
 
                                 Write-Finding -Status "OK" -Message "GPO '$gpoDisplayName' configures Kerberos encryption (detected via SYSVOL)" `
-                                    -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes)"
+                                    -Detail "Encryption types: $(Get-EncryptionTypeString -Value $assessment.GPOEncryptionTypes -Context gpo)"
                                 break
                             }
                         }

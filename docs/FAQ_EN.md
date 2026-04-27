@@ -300,11 +300,12 @@ HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Paramet
 
 | Value | Mode | Effect |
 |:-----:|------|--------|
-| 0 | Disabled | No audit, no enforcement |
-| 1 | Audit | KDCSVC events 201–209 logged, RC4 still works |
+| 0 | Rollback (silent) | RC4 allowed, no KDCSVC events |
+| 1 | Rollback (audit) | RC4 allowed, KDCSVC events 201/202 and 206/207 logged per RC4 request |
 | 2 | Enforcement | `DefaultDomainSupportedEncTypes` defaults to `0x18`, RC4 blocked |
+| Not set | Enforcement (implicit) | After April 2026 CU, same as `2` |
 
-No reboot required. Set to `1` before April 2026 to enable monitoring.
+KDC restart required after changing the value (`Restart-Service Kdc`).
 
 **Q: What changes after the April 2026 patch?**
 

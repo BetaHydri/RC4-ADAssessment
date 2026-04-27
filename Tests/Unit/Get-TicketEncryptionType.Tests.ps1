@@ -27,5 +27,9 @@ InModuleScope 'RC4-ADAssessment' {
     It 'Returns Unknown with hex value for unrecognized type' {
         Get-TicketEncryptionType -EncryptionType 0xFF | Should -Be 'Unknown (0xFF)'
     }
+
+    It 'Returns "Enforcement Block (0xFFFFFFFF)" for -1 (0xFFFFFFFF)' {
+        Get-TicketEncryptionType -EncryptionType (-1) | Should -Be 'Enforcement Block (0xFFFFFFFF)'
+    }
 }
 }

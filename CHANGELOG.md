@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Context-aware `Get-EncryptionTypeString` with `-Context` parameter (`msds`,
+  `ddset`, `gpo`) — same bitmask is now decoded differently per context (#30)
+- AES256-HMAC-SK (bit `0x20`) decoding in `Get-EncryptionTypeString` (#25)
+- Feature flag decoding (bits 16-19: FAST, Compound-Identity, Claims,
+  Resource-SID-Compression) for `msds` context
+- Enforcement block detection (`TicketEncryptionType = 0xFFFFFFFF`) in
+  `Get-TicketEncryptionType` and `Get-EventLogEncryptionAnalysis` with per-DC
+  counter and affected-account tracking (#27)
+
+### Changed
+
+- `Get-KdcRegistryAssessment` reads `RC4DefaultDisablementPhase` from the correct
+  Policies registry path instead of `Services\Kdc` (#23)
+- `Get-AccountEncryptionAssessment` RODC group lookup uses well-known RID 521
+  instead of English display name — works on non-English DCs (#24)
+- `RC4DefaultDisablementPhase` assessment messages updated for post-April 2026
+  semantics: `not set` = implicit enforcement, Phase 0/1 = rollback states (#28)
+- Phase 1 description clarifies per-request KDCSVC event logging (#29)
+- GPO encryption type callers pass `-Context gpo`, DDSET callers pass
+  `-Context ddset` for accurate bitmask decoding
+
+### Fixed
+
+- `Get-EncryptionTypeString` no longer labels bit 31 as "Future" universally —
+  "Future encryption types" at the GPO level is bits 5-30 (`0x7FFFFFE0`),
+  not bit 31 (#30)
+- README/FAQ/QUICK_START: "No reboot required" corrected to "KDC restart
+  required" for `RC4DefaultDisablementPhase` (#26)
+- README/FAQ: Phase value table updated — `not set` is now enforcement (not
+  same as 0) after April 2026 CU (#28)
+- QUICK_START: Registry path in remediation snippet corrected to Policies path (#23)
+
 ## [4.13.0] - 2026-04-17
 
 ### Changed

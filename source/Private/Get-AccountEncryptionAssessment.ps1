@@ -563,7 +563,10 @@
                 # may lack AES keys.
                 $aesThresholdDate = $null
                 try {
-                    $rodcGroup = Get-ADGroup 'Read-only Domain Controllers' -Properties Created @ServerParams -ErrorAction SilentlyContinue
+                    # Use well-known RID 521 (Read-only Domain Controllers) — locale-invariant,
+                    # works on non-English DCs where the display name is localised.
+                    $domainSID = (Get-ADDomain @ServerParams).DomainSID.Value
+                    $rodcGroup = Get-ADGroup -Identity "$domainSID-521" -Properties Created @ServerParams -ErrorAction SilentlyContinue
                     if ($rodcGroup -and $rodcGroup.Created) {
                         $aesThresholdDate = $rodcGroup.Created
                         Write-Finding -Status "INFO" -Message "AES threshold date: $($aesThresholdDate.ToString('yyyy-MM-dd')) (DFL 2008 upgrade detected via RODC group creation)"
