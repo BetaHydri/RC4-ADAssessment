@@ -260,17 +260,22 @@ ktpass command reference:
      RC4 in msDS-SupportedEncryptionTypes.
 
    Registry Keys to Configure:
-   * HKLM\SYSTEM\CurrentControlSet\Services\Kdc
 
    a) RC4DefaultDisablementPhase (DWORD):
-      * Value = 0: RC4 disablement not active
-      * Value = 1: Audit mode only (logs KDCSVC events but allows RC4)
-      * Value = 2: Enforcement mode (blocks RC4 for default accounts)
-      * Deploy to ALL Domain Controllers after January 2026 updates
-      PS> Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\Kdc' ``
-            -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord
+      Path: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters
+      * Not set: Enforcement (implicit after April 2026 CU, same as 2)
+      * Value = 0: Rollback (silent) -- RC4 allowed, no KDCSVC events
+      * Value = 1: Rollback (audit) -- RC4 allowed, KDCSVC events 201/202
+        and 206/207 logged per RC4 request
+      * Value = 2: Enforcement -- RC4 blocked for default accounts
+      * KDC restart required after change (Restart-Service Kdc)
+      PS> $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters'
+      PS> if (-not (Test-Path $path)) { New-Item -Path $path -Force }
+      PS> Set-ItemProperty -Path $path -Name 'RC4DefaultDisablementPhase' -Value 2 -Type DWord
+      PS> Restart-Service Kdc
 
    b) DefaultDomainSupportedEncTypes (DWORD):
+      Path: HKLM\SYSTEM\CurrentControlSet\Services\Kdc
       * Controls default encryption types for the domain
       * After April 2026 updates, defaults to 0x18 (AES-only)
       * Should be set to 0x18 (24) for AES-only (recommended)

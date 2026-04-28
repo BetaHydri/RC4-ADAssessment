@@ -328,6 +328,15 @@ types and makes the entire domain vulnerable to CVE-2026-20833. Use per-account
 `msDS-SupportedEncryptionTypes = 0x1C` exceptions only for specific legacy
 services that absolutely need RC4.
 
+> **Note:** On domain controllers with an **explicitly defined**
+> `DefaultDomainSupportedEncTypes` registry value, behavior will **not** be
+> functionally impacted by the April 2026 changes. The patch only changes the
+> *implicit* default for DCs where the key is not set. If you have already
+> configured `DefaultDomainSupportedEncTypes`, your value takes precedence — but
+> an Audit event KDCSVC Event ID 205 will still be logged if the configured value
+> includes RC4.
+> ([Source: KB5073381](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc))
+
 **Q: What does the GPO "Configure encryption types allowed for Kerberos" do?**
 
 It configures which encryption types a computer offers and accepts. Enable

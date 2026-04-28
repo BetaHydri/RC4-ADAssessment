@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.15.0] - 2026-04-28
+
+### Changed
+
+- `DefaultDomainSupportedEncTypes` with RC4 now reported as WARNING instead of
+  OK/INFO — DDSET with RC4 overrides enforcement for ALL accounts without explicit
+  `msDS-SupportedEncryptionTypes`, not just per-account exceptions (#34)
+- Clarified that per-account RC4 exceptions (`0x1C`) do NOT require DDSET to
+  include RC4
+
+### Fixed
+
+- FAQ (DE): `RC4DefaultDisablementPhase` table updated — added "Not set" row,
+  corrected Phase 0/1 descriptions, fixed "Kein Neustart" to
+  "KDC-Neustart erforderlich" (#26, #28, #29)
+- FAQ (DE/EN): Added KB5073381 note that explicit DDSET overrides implicit
+  enforcement default (#32)
+- Guidance text: `RC4DefaultDisablementPhase` registry path corrected from
+  `Services\Kdc` to Policies path (#23)
+- Guidance text: Phase 0/1 descriptions updated for post-April 2026
+  semantics (#28, #29)
+
 ## [4.14.0] - 2026-04-28
 
 ### Added

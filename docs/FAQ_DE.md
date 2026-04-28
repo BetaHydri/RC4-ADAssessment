@@ -315,12 +315,12 @@ HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Paramet
 
 | Wert | Modus | Wirkung |
 |:----:|-------|---------|
-| 0 | Deaktiviert | Kein Audit, keine Durchsetzung |
-| 1 | Audit | KDCSVC-Events 201–209 werden geloggt, RC4 funktioniert weiterhin |
+| 0 | Rollback (still) | RC4 erlaubt, keine KDCSVC-Events |
+| 1 | Rollback (Audit) | RC4 erlaubt, KDCSVC-Events 201/202 und 206/207 werden pro RC4-Anfrage geloggt |
 | 2 | Durchsetzung | `DefaultDomainSupportedEncTypes` wird intern auf `0x18` gesetzt, RC4 blockiert |
+| Nicht gesetzt | Durchsetzung (implizit) | Nach April 2026 CU identisch mit `2` |
 
-Kein Neustart erforderlich. Vor April 2026 auf `1` setzen, um die Überwachung zu
-aktivieren.
+KDC-Neustart erforderlich nach Änderung (`Restart-Service Kdc`).
 
 **F: Was ändert sich nach dem April-2026-Patch?**
 
@@ -343,6 +343,15 @@ möglich.
 Verschlüsselungstypen und macht die gesamte Domäne anfällig für CVE-2026-20833.
 Verwenden Sie stattdessen pro Konto `msDS-SupportedEncryptionTypes = 0x1C` nur
 für einzelne Legacy-Dienste, die RC4 tatsächlich benötigen.
+
+> **Hinweis:** Auf Domain Controllern mit einem **explizit gesetzten**
+> `DefaultDomainSupportedEncTypes`-Registrierungswert wird das Verhalten durch die
+> April-2026-Änderungen **nicht** beeinflusst. Der Patch ändert nur den *impliziten*
+> Standard für DCs, bei denen der Schlüssel nicht gesetzt ist. Wenn Sie
+> `DefaultDomainSupportedEncTypes` bereits konfiguriert haben, hat Ihr Wert Vorrang
+> — aber ein Audit-Event KDCSVC Event ID 205 wird trotzdem geloggt, wenn der
+> konfigurierte Wert RC4 enthält.
+> ([Quelle: KB5073381](https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc))
 
 **F: Was macht die GPO „Kerberos-Verschlüsselungstypen konfigurieren"?**
 
