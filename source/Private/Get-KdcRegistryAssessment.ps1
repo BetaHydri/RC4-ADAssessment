@@ -1,4 +1,4 @@
-function Get-KdcRegistryAssessment {
+﻿function Get-KdcRegistryAssessment {
     <#
     .SYNOPSIS
         Assesses KDC registry settings on Domain Controllers for RC4 disablement configuration.
@@ -179,15 +179,15 @@ function Get-KdcRegistryAssessment {
                         try {
                             $val = Get-ItemProperty -Path $ddsetPath -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
                             if ($val) { $regValues.DefaultDomainSupportedEncTypes = $val.DefaultDomainSupportedEncTypes }
-                        } catch { }
+                        } catch { Write-Verbose "Local registry read failed for DefaultDomainSupportedEncTypes: $($_.Exception.Message)" }
                         try {
                             $val = Get-ItemProperty -Path $phasePath -Name 'RC4DefaultDisablementPhase' -ErrorAction SilentlyContinue
                             if ($val) { $regValues.RC4DefaultDisablementPhase = $val.RC4DefaultDisablementPhase }
-                        } catch { }
+                        } catch { Write-Verbose "Local registry read failed for RC4DefaultDisablementPhase: $($_.Exception.Message)" }
                         try {
                             $val = Get-ItemProperty -Path $phasePath -Name 'SupportedEncryptionTypes' -ErrorAction SilentlyContinue
                             if ($val) { $regValues.GPOSupportedEncryptionTypes = $val.SupportedEncryptionTypes }
-                        } catch { }
+                        } catch { Write-Verbose "Local registry read failed for SupportedEncryptionTypes: $($_.Exception.Message)" }
 
                         $assessment.QueriedDCs += $dcName
 
