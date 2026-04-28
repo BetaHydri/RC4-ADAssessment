@@ -170,8 +170,90 @@ function Get-KdcRegistryAssessment {
                 }
             }
             catch {
-                $assessment.FailedDCs += @{ Name = $dcName; Error = $_.Exception.Message }
-                Write-Host "    $([char]0x26A0) Could not query registry on $dcName" -ForegroundColor Yellow
+                # WinRM failed — try local registry read if we're on this DC
+                $localHostName = [System.Net.Dns]::GetHostEntry('localhost').HostName
+                if ($dcName -eq $localHostName -or $dc.Name -eq $env:COMPUTERNAME) {
+                    Write-Host "    $([char]0x26A0) WinRM unavailable, reading local registry..." -ForegroundColor DarkYellow
+                    try {
+                        $regValues = @{ DefaultDomainSupportedEncTypes = $null; RC4DefaultDisablementPhase = $null; GPOSupportedEncryptionTypes = $null }
+                        try {
+                            $val = Get-ItemProperty -Path $ddsetPath -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
+                            if ($val) { $regValues.DefaultDomainSupportedEncTypes = $val.DefaultDomainSupportedEncTypes }
+                        } catch { }
+                        try {
+                            $val = Get-ItemProperty -Path $phasePath -Name 'RC4DefaultDisablementPhase' -ErrorAction SilentlyContinue
+                            if ($val) { $regValues.RC4DefaultDisablementPhase = $val.RC4DefaultDisablementPhase }
+                        } catch { }
+                        try {
+                            $val = Get-ItemProperty -Path $phasePath -Name 'SupportedEncryptionTypes' -ErrorAction SilentlyContinue
+                            if ($val) { $regValues.GPOSupportedEncryptionTypes = $val.SupportedEncryptionTypes }
+                        } catch { }
+
+                        $assessment.QueriedDCs += $dcName
+
+                        $dcDetail = @{
+                            Name                           = $dcName
+                            DefaultDomainSupportedEncTypes = $regValues.DefaultDomainSupportedEncTypes
+                            RC4DefaultDisablementPhase     = $regValues.RC4DefaultDisablementPhase
+                            GPOSupportedEncryptionTypes    = $regValues.GPOSupportedEncryptionTypes
+                        }
+                        $assessment.Details += $dcDetail
+
+                        if ($null -ne $regValues.DefaultDomainSupportedEncTypes) {
+                            $encVal = [int]$regValues.DefaultDomainSupportedEncTypes
+                            $assessment.DefaultDomainSupportedEncTypes.Configured = $true
+                            $assessment.DefaultDomainSupportedEncTypes.Value = $encVal
+                            $assessment.DefaultDomainSupportedEncTypes.Types = Get-EncryptionTypeString -Value $encVal -Context ddset
+                            $assessment.DefaultDomainSupportedEncTypes.IncludesRC4 = [bool]($encVal -band 0x4)
+                            $assessment.DefaultDomainSupportedEncTypes.IncludesAES = [bool]($encVal -band 0x18)
+                            Write-Host "    DefaultDomainSupportedEncTypes: $encVal ($(Get-EncryptionTypeString -Value $encVal -Context ddset))" -ForegroundColor Gray
+                        }
+
+                        if ($null -ne $regValues.RC4DefaultDisablementPhase) {
+                            $assessment.RC4DefaultDisablementPhase.Configured = $true
+                            $assessment.RC4DefaultDisablementPhase.Value = [int]$regValues.RC4DefaultDisablementPhase
+                            Write-Host "    RC4DefaultDisablementPhase: $($regValues.RC4DefaultDisablementPhase)" -ForegroundColor Gray
+                        }
+
+                        if ($null -ne $regValues.GPOSupportedEncryptionTypes) {
+                            $gpoEncVal = [int]$regValues.GPOSupportedEncryptionTypes
+                            $gpoEffective = $gpoEncVal -band 0x7FFFFFFF
+                            Write-Host "    GPO SupportedEncryptionTypes: 0x$($gpoEncVal.ToString('X')) (effective: 0x$($gpoEffective.ToString('X')) = $(Get-EncryptionTypeString -Value $gpoEffective))" -ForegroundColor Gray
+                            try {
+                                $dcComputer = Get-ADComputer $dc.ComputerObjectDN -Properties 'msDS-SupportedEncryptionTypes' @ServerParams -ErrorAction Stop
+                                $msdsSET = $dcComputer.'msDS-SupportedEncryptionTypes'
+                                if ($null -ne $msdsSET -and $gpoEffective -ne [int]$msdsSET) {
+                                    $driftEntry = @{
+                                        DCName       = $dcName
+                                        GPORegistry  = $gpoEncVal
+                                        GPOEffective = $gpoEffective
+                                        MsDsSET      = [int]$msdsSET
+                                        GPOTypes     = Get-EncryptionTypeString -Value $gpoEffective
+                                        ADTypes      = Get-EncryptionTypeString -Value ([int]$msdsSET)
+                                    }
+                                    $assessment.EtypeDrift += $driftEntry
+                                    $assessment.TotalEtypeDrift++
+                                    Write-Finding -Status "WARNING" -Message "Etype drift on $dcName -- GPO registry (0x$($gpoEffective.ToString('X'))) differs from AD msDS-SupportedEncryptionTypes (0x$($msdsSET.ToString('X')))" `
+                                        -Detail "GPO: $(Get-EncryptionTypeString -Value $gpoEffective) | AD: $(Get-EncryptionTypeString -Value ([int]$msdsSET)). Restart the Kerberos service (Restart-Service Kdc) on $dcName or wait for the next refresh cycle."
+                                }
+                                elseif ($null -ne $msdsSET) {
+                                    Write-Host "    msDS-SupportedEncryptionTypes: 0x$($msdsSET.ToString('X')) -- matches GPO (no drift)" -ForegroundColor Gray
+                                }
+                            }
+                            catch {
+                                Write-Verbose "Could not read msDS-SupportedEncryptionTypes for $dcName : $($_.Exception.Message)"
+                            }
+                        }
+                    }
+                    catch {
+                        $assessment.FailedDCs += @{ Name = $dcName; Error = "Local fallback failed: $($_.Exception.Message)" }
+                        Write-Host "    $([char]0x26A0) Local registry read also failed on $dcName" -ForegroundColor Yellow
+                    }
+                }
+                else {
+                    $assessment.FailedDCs += @{ Name = $dcName; Error = $_.Exception.Message }
+                    Write-Host "    $([char]0x26A0) Could not query registry on $dcName" -ForegroundColor Yellow
+                }
             }
         }
 

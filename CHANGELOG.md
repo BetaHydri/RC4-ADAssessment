@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 - Etype drift tracking in `Invoke-RC4AssessmentComparison` — shows drift DC count
   changes between baseline and current assessments (#31)
 
+### Fixed
+
+- `Get-KdcRegistryAssessment` falls back to local registry read when
+  `Invoke-Command` fails on the DC the tool is running on (loopback WinRM
+  cold-start issue)
+
 ## [4.15.0] - 2026-04-28
 
 ### Changed
