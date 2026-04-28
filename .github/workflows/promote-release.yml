@@ -1,0 +1,168 @@
+name: Promote Pre-release to Stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease_tag:
+        description: 'Pre-release tag to promote (e.g. v4.16.0-preview.1)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run — show report only, do not tag'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  promote:
+    name: Promote to stable release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate pre-release tag
+        id: validate
+        run: |
+          TAG="${{ inputs.prerelease_tag }}"
+
+          # Must match v<major>.<minor>.<patch>-<prerelease>
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(.+)$ ]]; then
+            echo "::error::Tag '$TAG' is not a valid pre-release tag (expected v<major>.<minor>.<patch>-<prerelease>)"
+            exit 1
+          fi
+
+          # Tag must exist
+          if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag '$TAG' does not exist in the repository"
+            exit 1
+          fi
+
+          # Derive stable version (strip prerelease suffix)
+          STABLE_TAG=$(echo "$TAG" | sed 's/-.*//')
+          echo "stable_tag=$STABLE_TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease_tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Get tag date
+          TAG_DATE=$(git log -1 --format=%aI "$TAG")
+          echo "tag_date=$TAG_DATE" >> "$GITHUB_OUTPUT"
+
+          # Days since tag
+          TAG_EPOCH=$(date -d "$TAG_DATE" +%s)
+          NOW_EPOCH=$(date +%s)
+          DAYS_SINCE=$(( (NOW_EPOCH - TAG_EPOCH) / 86400 ))
+          echo "days_since=$DAYS_SINCE" >> "$GITHUB_OUTPUT"
+
+      - name: Check for new issues since pre-release
+        id: issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_DATE="${{ steps.validate.outputs.tag_date }}"
+          # ISO date only (YYYY-MM-DD)
+          SINCE_DATE=$(echo "$TAG_DATE" | cut -dT -f1)
+
+          echo "### Issues created since $SINCE_DATE"
+
+          # Count bug issues created after the tag date
+          BUG_ISSUES=$(gh issue list \
+            --state open \
+            --search "created:>=$SINCE_DATE" \
+            --label bug \
+            --json number,title,createdAt \
+            --jq 'length')
+
+          ALL_ISSUES=$(gh issue list \
+            --state open \
+            --search "created:>=$SINCE_DATE" \
+            --json number,title,createdAt \
+            --jq 'length')
+
+          echo "bug_count=$BUG_ISSUES" >> "$GITHUB_OUTPUT"
+          echo "all_count=$ALL_ISSUES" >> "$GITHUB_OUTPUT"
+
+          # List issues for the summary
+          gh issue list \
+            --state open \
+            --search "created:>=$SINCE_DATE" \
+            --json number,title,labels,createdAt \
+            --jq '.[] | "- #\(.number) \(.title) (\(.labels | map(.name) | join(", ")))"' \
+            > /tmp/issues.txt || true
+
+          if [ -s /tmp/issues.txt ]; then
+            echo "issues_list<<EOF" >> "$GITHUB_OUTPUT"
+            cat /tmp/issues.txt >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          else
+            echo "issues_list=None" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate promotion report
+        id: report
+        run: |
+          PRERELEASE="${{ steps.validate.outputs.prerelease_tag }}"
+          STABLE="${{ steps.validate.outputs.stable_tag }}"
+          DAYS="${{ steps.validate.outputs.days_since }}"
+          BUGS="${{ steps.issues.outputs.bug_count }}"
+          ALL="${{ steps.issues.outputs.all_count }}"
+          DRY_RUN="${{ inputs.dry_run }}"
+
+          echo "## Promotion Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Item | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pre-release tag | \`$PRERELEASE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stable tag | \`$STABLE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Days since pre-release | $DAYS |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Open bug issues since tag | $BUGS |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| All open issues since tag | $ALL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry run | $DRY_RUN |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$BUGS" -gt 0 ]; then
+            echo "### :warning: Bug issues found" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "${{ steps.issues.outputs.issues_list }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> Promotion blocked — resolve bug issues first or override with dry_run=false." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DAYS" -lt 7 ]; then
+            echo "### :hourglass: Bake period not reached" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> Pre-release is only $DAYS day(s) old. Recommended bake period is 7 days." >> "$GITHUB_STEP_SUMMARY"
+            echo "> You can override by running with dry_run=false." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### :white_check_mark: Ready to promote" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> No bug issues, bake period reached. Safe to promote." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Block on bugs only in non-dry-run mode
+          if [ "$DRY_RUN" = "false" ] && [ "$BUGS" -gt 0 ]; then
+            echo "::error::Promotion blocked — $BUGS open bug issue(s) found since $PRERELEASE"
+            exit 1
+          fi
+
+      - name: Create stable tag
+        if: inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRERELEASE="${{ steps.validate.outputs.prerelease_tag }}"
+          STABLE="${{ steps.validate.outputs.stable_tag }}"
+
+          # Get the commit the pre-release tag points to
+          COMMIT=$(git rev-list -n 1 "$PRERELEASE")
+
+          echo "Creating tag $STABLE at commit $COMMIT (same as $PRERELEASE)"
+          git tag "$STABLE" "$COMMIT"
+          git push origin "$STABLE"
+
+          echo "## :rocket: Tag \`$STABLE\` created" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Azure Pipelines will pick up the new tag and publish the stable release." >> "$GITHUB_STEP_SUMMARY"
