@@ -171,8 +171,18 @@
             }
             catch {
                 # WinRM failed — try local registry read if we're on this DC
-                $localHostName = [System.Net.Dns]::GetHostEntry('localhost').HostName
-                if ($dcName -eq $localHostName -or $dc.Name -eq $env:COMPUTERNAME) {
+                $isLocalDC = $false
+                try {
+                    $localHostName = [System.Net.Dns]::GetHostEntry('localhost').HostName
+                    $isLocalDC = ($dcName -eq $localHostName)
+                }
+                catch {
+                    Write-Verbose "DNS lookup for localhost failed: $($_.Exception.Message)"
+                }
+                if (-not $isLocalDC) {
+                    $isLocalDC = ($dc.Name -eq $env:COMPUTERNAME)
+                }
+                if ($isLocalDC) {
                     Write-Host "    $([char]0x26A0) WinRM unavailable, reading local registry..." -ForegroundColor DarkYellow
                     try {
                         $regValues = @{ DefaultDomainSupportedEncTypes = $null; RC4DefaultDisablementPhase = $null; GPOSupportedEncryptionTypes = $null }
@@ -247,12 +257,12 @@
                     }
                     catch {
                         $assessment.FailedDCs += @{ Name = $dcName; Error = "Local fallback failed: $($_.Exception.Message)" }
-                        Write-Host "    $([char]0x26A0) Local registry read also failed on $dcName" -ForegroundColor Yellow
+                        Write-Host "    $([char]0x26A0) Local registry read also failed on $dcName : $($_.Exception.Message)" -ForegroundColor Yellow
                     }
                 }
                 else {
                     $assessment.FailedDCs += @{ Name = $dcName; Error = $_.Exception.Message }
-                    Write-Host "    $([char]0x26A0) Could not query registry on $dcName" -ForegroundColor Yellow
+                    Write-Host "    $([char]0x26A0) Could not query registry on $dcName : $($_.Exception.Message)" -ForegroundColor Yellow
                 }
             }
         }
