@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.14.0] - 2026-04-28
+
 ### Added
 
 - Context-aware `Get-EncryptionTypeString` with `-Context` parameter (`msds`,
