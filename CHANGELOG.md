@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.17.0] - 2026-04-28
+
 ### Added
 
 - GPO-vs-AD etype drift detection in `Get-KdcRegistryAssessment` — reads
