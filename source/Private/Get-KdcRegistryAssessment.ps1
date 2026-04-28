@@ -136,9 +136,9 @@ function Get-KdcRegistryAssessment {
                     -Detail "Value: $($assessment.DefaultDomainSupportedEncTypes.Value) ($($assessment.DefaultDomainSupportedEncTypes.Types))"
             }
             elseif ($assessment.DefaultDomainSupportedEncTypes.IncludesRC4) {
-                $assessment.DefaultDomainSupportedEncTypes.Status = "OK"
-                Write-Finding -Status "INFO" -Message "DefaultDomainSupportedEncTypes includes RC4 (needed for explicit RC4 exceptions post-July 2026)" `
-                    -Detail "Value: $($assessment.DefaultDomainSupportedEncTypes.Value) ($($assessment.DefaultDomainSupportedEncTypes.Types))"
+                $assessment.DefaultDomainSupportedEncTypes.Status = "WARNING"
+                Write-Finding -Status "WARNING" -Message "DefaultDomainSupportedEncTypes includes RC4 -- overrides enforcement for ALL accounts without explicit msDS-SupportedEncryptionTypes" `
+                    -Detail "Value: $($assessment.DefaultDomainSupportedEncTypes.Value) ($($assessment.DefaultDomainSupportedEncTypes.Types)). Per-account RC4 exceptions (0x1C) do NOT require DDSET to include RC4. Consider removing RC4 from DDSET or deleting the key to use the OS default (0x18, AES-only)."
             }
             else {
                 $assessment.DefaultDomainSupportedEncTypes.Status = "OK"
