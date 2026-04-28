@@ -233,6 +233,70 @@ Event Log Analysis - Actual DES/RC4 Usage
         using RC4 tickets - password reset needed: SQL2008-SRV$
 ```
 
+### Comparison — Etype Drift Detected
+
+```
+================================================================================
+RC4/DES Assessment Comparison v4.17.0
+================================================================================
+Loading baseline: .\assessment_before.json
+Loading current:  .\assessment_after.json
+
+Assessment Information
+------------------------------------------------------------
+  Domain: forest1.net
+  Baseline Date: 04/28/2026 01:00:01
+  Current Date:  04/28/2026 02:28:18
+
+Overall Status Change
+------------------------------------------------------------
+  Baseline: WARNING
+  Current:  WARNING
+
+Domain Controller Changes
+------------------------------------------------------------
+  Total DCs:       1 → 1
+  AES Configured:  1 → 1
+  RC4 Configured:  1 → 1
+  DES Configured:  0 → 0
+
+Trust Changes
+------------------------------------------------------------
+  Total Trusts:    1 → 1
+  RC4 Risk:        0 → 0
+  DES Risk:        0 → 0
+
+Account Changes
+------------------------------------------------------------
+  KRBTGT Status:   OK → OK
+  KRBTGT Pwd Age:  17d → 17d
+  DES Flag Accts:  0 → 0
+  RC4-Only SvcAcc: 0 → 0
+  Stale Svc(RC4):  0 → 0
+  Missing AES:     0 → 0
+  DES-Enabled:     0 → 0
+  RC4 Exceptions:  0 → 0
+
+KDC Registry Changes
+------------------------------------------------------------
+  RC4Disablement:  Not Set → Not Set
+  DefaultEncTypes: Not Set → Not Set
+  Etype Drift DCs: 0 ↑ 1
+
+Change Summary
+------------------------------------------------------------
+  ✓ Improvements: 0
+  ⚠ Degradations: 1
+
+  ⚠ Overall DEGRADATION in security posture!
+```
+
+> The `Etype Drift DCs: 0 ↑ 1` line shows a new drift was detected — the GPO
+> writes `SupportedEncryptionTypes = 0x80000018` (AES-only) to the registry, but
+> the DC's `msDS-SupportedEncryptionTypes` in AD still has `0x1C` (RC4+AES).
+> This typically resolves after `Restart-Service Kdc` or the next Kerberos service
+> refresh cycle.
+
 ## Recommended Workflow
 
 ```mermaid
