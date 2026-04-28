@@ -4,11 +4,15 @@ function Get-KdcRegistryAssessment {
         Assesses KDC registry settings on Domain Controllers for RC4 disablement configuration.
 
     .DESCRIPTION
-        Connects to each Domain Controller via WinRM and reads two KDC-related registry values:
-        RC4DefaultDisablementPhase (controls RC4 deprecation phase) and
-        DefaultDomainSupportedEncTypes (controls which encryption types are advertised by default).
-        Returns a hashtable with status for each setting, per-DC details, and a list of DCs that
-        could not be queried. AzureADKerberos proxy objects are automatically excluded.
+        Connects to each Domain Controller via WinRM and reads three KDC-related registry values:
+        RC4DefaultDisablementPhase (controls RC4 deprecation phase),
+        DefaultDomainSupportedEncTypes (controls which encryption types are advertised by default),
+        and SupportedEncryptionTypes from the GPO Policies path (the GPO-written etype filter).
+        The GPO registry value is compared against each DC's msDS-SupportedEncryptionTypes AD
+        attribute to detect drift (GPO applied but Kerberos service not yet restarted, or manual
+        override). Returns a hashtable with status for each setting, per-DC details, drift
+        findings, and a list of DCs that could not be queried. AzureADKerberos proxy objects are
+        automatically excluded.
 
     .PARAMETER ServerParams
         A hashtable of parameters passed through to Active Directory cmdlets. Supports a
@@ -43,6 +47,8 @@ function Get-KdcRegistryAssessment {
         QueriedDCs                     = @()
         FailedDCs                      = @()
         Details                        = @()
+        EtypeDrift                     = @()
+        TotalEtypeDrift                = 0
     }
 
     try {
@@ -79,7 +85,7 @@ function Get-KdcRegistryAssessment {
             try {
                 $regValues = Invoke-Command -ComputerName $dcName -ScriptBlock {
                     param($DdsetPath, $PhasePath)
-                    $result = @{ DefaultDomainSupportedEncTypes = $null; RC4DefaultDisablementPhase = $null }
+                    $result = @{ DefaultDomainSupportedEncTypes = $null; RC4DefaultDisablementPhase = $null; GPOSupportedEncryptionTypes = $null }
                     try {
                         $val = Get-ItemProperty -Path $DdsetPath -Name 'DefaultDomainSupportedEncTypes' -ErrorAction SilentlyContinue
                         if ($val) { $result.DefaultDomainSupportedEncTypes = $val.DefaultDomainSupportedEncTypes }
@@ -88,6 +94,11 @@ function Get-KdcRegistryAssessment {
                     try {
                         $val = Get-ItemProperty -Path $PhasePath -Name 'RC4DefaultDisablementPhase' -ErrorAction SilentlyContinue
                         if ($val) { $result.RC4DefaultDisablementPhase = $val.RC4DefaultDisablementPhase }
+                    }
+                    catch { Write-Verbose "Registry read failed: $($_.Exception.Message)" }
+                    try {
+                        $val = Get-ItemProperty -Path $PhasePath -Name 'SupportedEncryptionTypes' -ErrorAction SilentlyContinue
+                        if ($val) { $result.GPOSupportedEncryptionTypes = $val.SupportedEncryptionTypes }
                     }
                     catch { Write-Verbose "Registry read failed: $($_.Exception.Message)" }
                     $result
@@ -99,6 +110,7 @@ function Get-KdcRegistryAssessment {
                     Name                           = $dcName
                     DefaultDomainSupportedEncTypes = $regValues.DefaultDomainSupportedEncTypes
                     RC4DefaultDisablementPhase     = $regValues.RC4DefaultDisablementPhase
+                    GPOSupportedEncryptionTypes    = $regValues.GPOSupportedEncryptionTypes
                 }
                 $assessment.Details += $dcDetail
 
@@ -121,11 +133,54 @@ function Get-KdcRegistryAssessment {
 
                     Write-Host "    RC4DefaultDisablementPhase: $($regValues.RC4DefaultDisablementPhase)" -ForegroundColor Gray
                 }
+
+                # Process GPO SupportedEncryptionTypes and detect drift against msDS-SupportedEncryptionTypes
+                if ($null -ne $regValues.GPOSupportedEncryptionTypes) {
+                    $gpoEncVal = [int]$regValues.GPOSupportedEncryptionTypes
+                    # Strip the high bit (0x80000000) that GPO adds as a "configured" flag
+                    $gpoEffective = $gpoEncVal -band 0x7FFFFFFF
+                    Write-Host "    GPO SupportedEncryptionTypes: 0x$($gpoEncVal.ToString('X')) (effective: 0x$($gpoEffective.ToString('X')) = $(Get-EncryptionTypeString -Value $gpoEffective))" -ForegroundColor Gray
+
+                    # Read the DC's msDS-SupportedEncryptionTypes from AD for drift comparison
+                    try {
+                        $dcComputer = Get-ADComputer $dc.ComputerObjectDN -Properties 'msDS-SupportedEncryptionTypes' @ServerParams -ErrorAction Stop
+                        $msdsSET = $dcComputer.'msDS-SupportedEncryptionTypes'
+
+                        if ($null -ne $msdsSET -and $gpoEffective -ne [int]$msdsSET) {
+                            $driftEntry = @{
+                                DCName       = $dcName
+                                GPORegistry  = $gpoEncVal
+                                GPOEffective = $gpoEffective
+                                MsDsSET      = [int]$msdsSET
+                                GPOTypes     = Get-EncryptionTypeString -Value $gpoEffective
+                                ADTypes      = Get-EncryptionTypeString -Value ([int]$msdsSET)
+                            }
+                            $assessment.EtypeDrift += $driftEntry
+                            $assessment.TotalEtypeDrift++
+                            Write-Finding -Status "WARNING" -Message "Etype drift on $dcName -- GPO registry (0x$($gpoEffective.ToString('X'))) differs from AD msDS-SupportedEncryptionTypes (0x$($msdsSET.ToString('X')))" `
+                                -Detail "GPO: $(Get-EncryptionTypeString -Value $gpoEffective) | AD: $(Get-EncryptionTypeString -Value ([int]$msdsSET)). Restart the Kerberos service (Restart-Service Kdc) on $dcName or wait for the next refresh cycle."
+                        }
+                        elseif ($null -ne $msdsSET) {
+                            Write-Host "    msDS-SupportedEncryptionTypes: 0x$($msdsSET.ToString('X')) -- matches GPO (no drift)" -ForegroundColor Gray
+                        }
+                    }
+                    catch {
+                        Write-Verbose "Could not read msDS-SupportedEncryptionTypes for $dcName : $($_.Exception.Message)"
+                    }
+                }
             }
             catch {
                 $assessment.FailedDCs += @{ Name = $dcName; Error = $_.Exception.Message }
                 Write-Host "    $([char]0x26A0) Could not query registry on $dcName" -ForegroundColor Yellow
             }
+        }
+
+        # Etype drift summary
+        if ($assessment.TotalEtypeDrift -gt 0) {
+            Write-Finding -Status "WARNING" -Message "GPO-vs-AD etype drift detected on $($assessment.TotalEtypeDrift) DC(s) -- Kerberos service restart may be pending"
+        }
+        elseif ($assessment.QueriedDCs.Count -gt 0 -and ($assessment.Details | Where-Object { $null -ne $_.GPOSupportedEncryptionTypes }).Count -gt 0) {
+            Write-Finding -Status "OK" -Message "No GPO-vs-AD etype drift detected -- all DCs consistent"
         }
 
         # Assess DefaultDomainSupportedEncTypes

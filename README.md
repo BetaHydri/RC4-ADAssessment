@@ -25,7 +25,8 @@ This toolkit helps you:
 |---------|-------------|
 | **DC Encryption Check** | Scans all DCs for `msDS-SupportedEncryptionTypes` and GPO Kerberos policy |
 | **Trust Assessment** | Post-Nov 2022 logic: trusts default to AES when attribute is not set |
-| **KDC Registry Check** | Reads `DefaultDomainSupportedEncTypes` and `RC4DefaultDisablementPhase` from all DCs |
+| **KDC Registry Check** | Reads `DefaultDomainSupportedEncTypes`, `RC4DefaultDisablementPhase`, and GPO `SupportedEncryptionTypes` from all DCs |
+| **GPO-vs-AD Etype Drift** | Compares the GPO-written `SupportedEncryptionTypes` registry value against each DC's `msDS-SupportedEncryptionTypes` AD attribute to detect pending Kerberos service restarts or manual overrides |
 | **KDCSVC Event Scan** | Queries System log events 201-209 for RC4 risks (CVE-2026-20833) |
 | **Audit Policy Verification** | Checks if Kerberos auditing (4768/4769) is enabled before event log analysis |
 | **Event Log Analysis** | Queries events 4768/4769 from all DCs to find actual RC4/DES ticket usage |
@@ -164,6 +165,7 @@ KDC Registry Configuration Assessment
 ────────────────────────────────────────────────────────────────
 ⓘ  DefaultDomainSupportedEncTypes: Not set (uses OS defaults)
 ✓ RC4DefaultDisablementPhase = 1 (Audit mode active)
+✓ No GPO-vs-AD etype drift detected -- all DCs consistent
 
 KRBTGT & ACCOUNT ENCRYPTION SUMMARY
 ────────────────────────────────────────────────────────────────
@@ -487,6 +489,7 @@ This toolkit implements the full [CVE-2026-20833 deployment guidance](https://su
 | **Domain-wide fallback (`0x1C` on DCs)** | Documented as last resort with CVE-2026-20833 vulnerability warning |
 | **Event 205** (insecure `DefaultDomainSupportedEncTypes`) | Registry check detects RC4 in `DefaultDomainSupportedEncTypes` |
 | **Events 206-208** (Enforcement blocking) | Detected with recommendation to migrate to AES (0x18) or add per-account `0x1C` exception as last resort |
+| **GPO-vs-AD etype drift** | GPO `SupportedEncryptionTypes` registry value compared against `msDS-SupportedEncryptionTypes` AD attribute per DC — detects pending KDC restarts or manual overrides |
 | **Installing updates alone doesn't fix CVE** | Recommendations explicitly guide to enable Enforcement (value 2) |
 
 ### KDCSVC Event Reference (System Log, Provider: KDCSVC)

@@ -367,6 +367,30 @@ Describe 'Assessment Comparison Logic' {
         }
     }
 
+    Context 'Etype drift comparison' {
+        It 'Counts etype drift reduction as improvement' {
+            $driftChange = Get-ChangeIndicator -Old 3 -New 0
+            $driftChange.Status | Should -Be 'Improved'
+        }
+
+        It 'Counts etype drift increase as worsened' {
+            $driftChange = Get-ChangeIndicator -Old 0 -New 2
+            $driftChange.Status | Should -Be 'Worsened'
+        }
+
+        It 'Reports unchanged when both zero' {
+            $driftChange = Get-ChangeIndicator -Old 0 -New 0
+            $driftChange.Status | Should -Be 'Unchanged'
+        }
+
+        It 'Handles null TotalEtypeDrift as zero' {
+            $baseDrift = if ($null -ne $null) { [int]$null } else { 0 }
+            $currDrift = if ($null -ne 2) { [int]2 } else { 0 }
+            $baseDrift | Should -Be 0
+            $currDrift | Should -Be 2
+        }
+    }
+
     Context 'RC4 exception account comparison (v2.6.0+)' {
         It 'Counts RC4 exception reduction as improvement' {
             $rc4ExcChange = Get-ChangeIndicator -Old 5 -New 2

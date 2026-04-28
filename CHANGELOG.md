@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- GPO-vs-AD etype drift detection in `Get-KdcRegistryAssessment` — reads
+  `SupportedEncryptionTypes` from the GPO Policies registry path on each DC and
+  compares against the DC's `msDS-SupportedEncryptionTypes` AD attribute to detect
+  pending Kerberos service restarts or manual overrides (#31)
+- Etype drift tracking in `Invoke-RC4AssessmentComparison` — shows drift DC count
+  changes between baseline and current assessments (#31)
+
 ## [4.15.0] - 2026-04-28
 
 ### Changed

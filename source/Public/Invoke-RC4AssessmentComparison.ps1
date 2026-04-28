@@ -174,6 +174,14 @@ function Invoke-RC4AssessmentComparison {
             $currEncTypes = if ($current.KdcRegistry.DefaultDomainSupportedEncTypes.Configured) { $current.KdcRegistry.DefaultDomainSupportedEncTypes.Types } else { "Not Set" }
             Write-Host "  DefaultEncTypes: $baseEncTypes $([char]0x2192) $currEncTypes" -ForegroundColor Gray
 
+            # Etype drift comparison
+            $baseDrift = if ($null -ne $baseline.KdcRegistry.TotalEtypeDrift) { [int]$baseline.KdcRegistry.TotalEtypeDrift } else { 0 }
+            $currDrift = if ($null -ne $current.KdcRegistry.TotalEtypeDrift) { [int]$current.KdcRegistry.TotalEtypeDrift } else { 0 }
+            $driftChange = Get-ChangeIndicator -Old $baseDrift -New $currDrift
+            Write-Host "  Etype Drift DCs: $baseDrift $($driftChange.Symbol) $currDrift" -ForegroundColor $(if ($driftChange.Status -eq "Improved") { "Green" } else { $driftChange.Color })
+            if ($driftChange.Status -eq "Improved") { $improvements++ }
+            if ($driftChange.Status -eq "Worsened") { $degradations++ }
+
             # Count KDC registry improvements/degradations
             # RC4Disablement: becoming configured (value 1) is an improvement; becoming unconfigured is a degradation
             if ($baseRC4Phase -ne $currRC4Phase) {
