@@ -136,10 +136,10 @@
 
                 # Process GPO SupportedEncryptionTypes and detect drift against msDS-SupportedEncryptionTypes
                 if ($null -ne $regValues.GPOSupportedEncryptionTypes) {
-                    $gpoEncVal = [int]$regValues.GPOSupportedEncryptionTypes
+                    $gpoEncRaw = [long]$regValues.GPOSupportedEncryptionTypes
                     # Strip the high bit (0x80000000) that GPO adds as a "configured" flag
-                    $gpoEffective = $gpoEncVal -band 0x7FFFFFFF
-                    Write-Host "    GPO SupportedEncryptionTypes: 0x$($gpoEncVal.ToString('X')) (effective: 0x$($gpoEffective.ToString('X')) = $(Get-EncryptionTypeString -Value $gpoEffective))" -ForegroundColor Gray
+                    $gpoEffective = [int]($gpoEncRaw -band 0x7FFFFFFF)
+                    Write-Host "    GPO SupportedEncryptionTypes: 0x$($gpoEncRaw.ToString('X')) (effective: 0x$($gpoEffective.ToString('X')) = $(Get-EncryptionTypeString -Value $gpoEffective))" -ForegroundColor Gray
 
                     # Read the DC's msDS-SupportedEncryptionTypes from AD for drift comparison
                     try {
@@ -149,7 +149,7 @@
                         if ($null -ne $msdsSET -and $gpoEffective -ne [int]$msdsSET) {
                             $driftEntry = @{
                                 DCName       = $dcName
-                                GPORegistry  = $gpoEncVal
+                                GPORegistry  = $gpoEncRaw
                                 GPOEffective = $gpoEffective
                                 MsDsSET      = [int]$msdsSET
                                 GPOTypes     = Get-EncryptionTypeString -Value $gpoEffective
@@ -226,16 +226,16 @@
                         }
 
                         if ($null -ne $regValues.GPOSupportedEncryptionTypes) {
-                            $gpoEncVal = [int]$regValues.GPOSupportedEncryptionTypes
-                            $gpoEffective = $gpoEncVal -band 0x7FFFFFFF
-                            Write-Host "    GPO SupportedEncryptionTypes: 0x$($gpoEncVal.ToString('X')) (effective: 0x$($gpoEffective.ToString('X')) = $(Get-EncryptionTypeString -Value $gpoEffective))" -ForegroundColor Gray
+                            $gpoEncRaw = [long]$regValues.GPOSupportedEncryptionTypes
+                            $gpoEffective = [int]($gpoEncRaw -band 0x7FFFFFFF)
+                            Write-Host "    GPO SupportedEncryptionTypes: 0x$($gpoEncRaw.ToString('X')) (effective: 0x$($gpoEffective.ToString('X')) = $(Get-EncryptionTypeString -Value $gpoEffective))" -ForegroundColor Gray
                             try {
                                 $dcComputer = Get-ADComputer $dc.ComputerObjectDN -Properties 'msDS-SupportedEncryptionTypes' @ServerParams -ErrorAction Stop
                                 $msdsSET = $dcComputer.'msDS-SupportedEncryptionTypes'
                                 if ($null -ne $msdsSET -and $gpoEffective -ne [int]$msdsSET) {
                                     $driftEntry = @{
                                         DCName       = $dcName
-                                        GPORegistry  = $gpoEncVal
+                                        GPORegistry  = $gpoEncRaw
                                         GPOEffective = $gpoEffective
                                         MsDsSET      = [int]$msdsSET
                                         GPOTypes     = Get-EncryptionTypeString -Value $gpoEffective

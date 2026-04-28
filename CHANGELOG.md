@@ -18,6 +18,10 @@ All notable changes to this project will be documented in this file.
 - `Get-KdcRegistryAssessment` falls back to local registry read when
   `Invoke-Command` fails on the DC the tool is running on (loopback WinRM
   cold-start issue)
+- GPO `SupportedEncryptionTypes` value `0x80000018` (2147483672) caused
+  `Int32` overflow — now uses `[long]` before stripping the high bit
+- Local fallback and remote DC failure messages now show the actual error
+  for diagnostics
 
 ## [4.15.0] - 2026-04-28
 
