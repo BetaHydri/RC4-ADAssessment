@@ -1206,7 +1206,7 @@ kinit -kt /etc/krb5.keytab HTTP/linux.domain.com@DOMAIN.COM
 klist
 ```
 
-> **Tip:** Ensure `msDS-SupportedEncryptionTypes` includes `0x10` (AES256) on the service account *before* resetting the password, otherwise no AES256 key will be generated. Use `-IncludeGuidance` for the full step-by-step procedure.
+> **Tip:** Ensure `msDS-SupportedEncryptionTypes` includes `0x10` (AES256) on the service account so the KDC will negotiate AES256 tickets. AES keys are generated automatically during password reset on DFL >= 2008 regardless of this attribute, but the KDC will only use them if the attribute allows AES negotiation. Use `-IncludeGuidance` for the full step-by-step procedure.
 
 References:
 - [Active Directory Hardening Series Part 4 — Enforcing AES for Kerberos](https://techcommunity.microsoft.com/blog/yourwindowsserverpodcast/active-directory-hardening-series---part-4---enforcing-aes-for-kerberos/4260477)
