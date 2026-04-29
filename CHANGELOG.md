@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-04-29
+
+### Added
+
+- New guidance section 10: Windows Server 2025 & Kerb3961 Library — covers
+  Server 2025 DC behavioral changes (no RC4 TGTs, no implicit fallback, legacy
+  registry ignored, DES removed)
+- "Three Criteria for Impact" emergency triage framework in guidance section 7
+  and README — identifies the three conditions that must ALL be met for
+  enforcement to break a service ticket request
+- KDCSVC events 201-209 TGS-only clarification in event reference table,
+  guidance, and FAQ
+- Phase 3 (July 2026) escape hatches documented: per-account
+  msDS-SupportedEncryptionTypes and per-DC DefaultDomainSupportedEncTypes
+- Four new FAQ entries (EN + DE): Three Criteria, Server 2025 Kerb3961, KDCSVC
+  TGS-only, July 2026 recovery options
+- .gitignore: exclude internal reference PDF from version control
+
+### Changed
+
+- Guidance sections renumbered from 11 to 12 (new section 10 inserted)
+- Get-KdcRegistryAssessment: "not set" detail text now mentions July 2026
+  escape hatches
+- Get-KdcSvcEventAssessment: event reference table now notes TGS-only scope
+
 ## [5.0.0] - 2026-04-29
 
 ### Changed — BREAKING: Corrected msDS-SupportedEncryptionTypes Understanding
