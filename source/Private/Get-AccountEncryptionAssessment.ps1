@@ -693,7 +693,7 @@
 
                 if ($missingAESAccounts.Count -gt 0) {
                     Write-Finding -Status "WARNING" -Message "$($missingAESAccounts.Count) account(s) may be missing AES keys in the database" `
-                        -Detail "Password predates DFL 2008 upgrade or was migrated (ADMT). Reset password to generate AES keys."
+                        -Detail "Password predates DFL 2008 upgrade or was migrated (ADMT). Reset password to generate AES keys (automatic on DFL >= 2008)."
 
                     $displayCount = [Math]::Min($missingAESAccounts.Count, 10)
                     foreach ($acct in $missingAESAccounts | Select-Object -First $displayCount) {

@@ -240,7 +240,7 @@ ktpass command reference:
    Update service accounts to AES:
    PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
    # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
-   # Then reset the password to generate new AES keys
+   # Then reset the password (AES keys generated automatically on DFL >= 2008)
    # After changing encryption types, purge cached tickets:
    # CMD> klist purge
    # For Linux services using keytabs, regenerate keytab files
@@ -400,7 +400,7 @@ ktpass command reference:
    * Accounts that never logged on or >90 days: consider disabling first
 
    Remediation for Path A (non-AES negotiation + old password):
-   First fix ticket negotiation, then reset password to generate AES keys:
+   First fix ticket negotiation, then reset password (AES keys generated automatically on DFL >= 2008):
    PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
    PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
    # Verify AES keys exist: Get-ADReplAccount -SamAccountName '<Name>' -Server '<DC>'

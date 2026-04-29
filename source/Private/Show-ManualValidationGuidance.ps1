@@ -222,7 +222,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Update service accounts to AES:
    PS> Set-ADUser "ServiceAccount" -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
    # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
-   # Then reset the password to generate new AES keys
+   # Then reset the password (AES keys generated automatically on DFL >= 2008)
    # IMPORTANT: After changing encryption types, purge cached tickets:
    # CMD> klist purge
    # Then test access to the application
