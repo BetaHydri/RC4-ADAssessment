@@ -14,5 +14,8 @@ Thumbs.db
 # Exports from assessment runs
 Exports/
 
+# Internal reference documents (not for public distribution)
+source/Kerberos RC4 Deprecation - Overview.pdf
+
 # AI memory / context files
 .memory-bank/

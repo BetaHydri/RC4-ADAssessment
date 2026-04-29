@@ -357,6 +357,20 @@ flowchart TD
 | **Apr 2026** | Enforcement phase — `DefaultDomainSupportedEncTypes` defaults to AES-only (0x18) | Manual rollback still possible; `RC4DefaultDisablementPhase` can be set back to `1` for Audit |
 | **Jul 2026** | Full enforcement — `RC4DefaultDisablementPhase` registry key removed | Only accounts with _explicit_ RC4 in `msDS-SupportedEncryptionTypes` will work |
 
+> **Windows Server 2025 Note:** Server 2025 DCs (Kerb3961 library) will **not** issue RC4-encrypted TGTs in any mode — this is by-design since RTM, separate from the enforcement timeline above. A client that only supports RC4 will not receive a TGT from a Server 2025 DC, even before April 2026. Ensure all service accounts support AES before promoting a Server 2025 DC. See [FAQ](docs/FAQ_EN.md#what-changes-with-windows-server-2025-domain-controllers-kerb3961) for details.
+
+### The Three Criteria for Impact (Emergency Triage)
+
+A service ticket request will **only** break if **all three** criteria are met simultaneously:
+
+1. **Enforcement mode is active** — April 2026+ update installed, DC not set to Audit mode
+2. **Target account has no explicit `msDS-SupportedEncryptionTypes`** — attribute is `0` or undefined
+3. **`DefaultDomainSupportedEncTypes` not defined on the KDC** — no admin override in place
+
+If **any one** is not met, the request is unaffected. **To restore service in an emergency: break one of the three.**
+
+> **Note:** KDCSVC events 201–209 are generated **only for service ticket (TGS) requests**, not for TGT requests. TGT-level failures (e.g., Server 2025 DC refusing RC4 TGTs) produce no KDCSVC events — check Security event 4768 instead.
+
 ### `RC4DefaultDisablementPhase` Registry Reference
 
 **Registry path (on each DC):**
@@ -464,6 +478,8 @@ This GPO **writes** `msDS-SupportedEncryptionTypes` to each computer object in A
 - Accounts with AES in `msDS-SupportedEncryptionTypes` → use AES (secure)
 - Accounts with **explicit RC4** (`0x4` bit) in `msDS-SupportedEncryptionTypes` → still allowed (exception)
 - Accounts relying on default/legacy RC4 fallback → **blocked**
+
+> **Recovery after July 2026:** The `RC4DefaultDisablementPhase` registry key is removed, so Audit mode rollback is no longer possible. However, two escape hatches remain: (a) set `msDS-SupportedEncryptionTypes` explicitly on the affected account (e.g., `0x1C`), or (b) set `DefaultDomainSupportedEncTypes` on the DC to include RC4 (INSECURE — emergency only).
 
 ### `msDS-SupportedEncryptionTypes` Reference
 

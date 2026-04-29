@@ -242,6 +242,27 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x2022) July 2026: Full enforcement - RC4DefaultDisablementPhase
      registry key removed. RC4 blocked for all accounts without explicit
      RC4 in msDS-SupportedEncryptionTypes.
+     IMPORTANT: Even after July 2026, two escape hatches remain:
+     (a) Set msDS-SupportedEncryptionTypes explicitly on the affected
+         account (e.g. 0x1C for RC4+AES exception).
+     (b) Set DefaultDomainSupportedEncTypes on the DC to include RC4
+         (e.g. 0x1C) -- INSECURE, use only as emergency measure.
+
+   $([char]0x26A0) THE THREE CRITERIA FOR IMPACT (Emergency Triage):
+   A service ticket request will ONLY break if ALL THREE are met:
+   1) Enforcement mode is active (April 2026+ update installed, DC not
+      set to Audit mode via RC4DefaultDisablementPhase = 1).
+   2) The target service account does NOT have an explicit
+      msDS-SupportedEncryptionTypes defined (attribute is 0 or NULL).
+   3) The DefaultDomainSupportedEncTypes registry key is NOT defined
+      on the KDC (no admin override in place).
+   If ANY ONE of these criteria is not met, the request is unaffected.
+   To restore service in an emergency: break one of the three criteria.
+
+   $([char]0x26A0) KDCSVC events 201-209 are generated ONLY for service ticket
+   (TGS) requests, NOT for Ticket Granting Ticket (TGT) requests. This
+   means TGT-level failures (e.g. a Server 2025 DC refusing RC4 TGTs)
+   produce NO KDCSVC events. Check Security event 4768 for TGT failures.
 
    Registry Keys to Configure:
    $([char]0x2022) HKLM\SYSTEM\CurrentControlSet\Services\Kdc
@@ -428,7 +449,39 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    $([char]0x26A0) For Linux services using keytabs, regenerate keytab files
    after password reset (see Linux/Kerberos Keytab Impact above).
 
-10. Microsoft Kerberos-Crypto Tools
+10. Windows Server 2025 & Kerb3961 Library
+   $([string]([char]0x2500) * 60)
+
+   Windows Server 2025 (and Windows 11 24H2) introduced the Kerb3961
+   library (named after RFC 3961), which fundamentally changes how the
+   Kerberos client and KDC select encryption types.
+
+   $([char]0x26A0) CRITICAL BEHAVIORAL CHANGES:
+   $([char]0x2022) Server 2025 DCs will NOT issue RC4-encrypted TGTs in ANY mode --
+     this is by-design since RTM, separate from the enforcement timeline.
+     A client that only supports RC4 will NOT receive a TGT from a
+     Server 2025 DC, even before April 2026.
+   $([char]0x2022) Implicit RC4 fallback is completely eliminated. If an account lacks
+     AES keys, Server 2025 will NOT silently issue an RC4 ticket (unlike
+     Server 2022 and earlier). Authentication fails with
+     KDC_ERR_ETYPE_NOSUPP.
+   $([char]0x2022) The legacy SupportedEncryptionTypes registry key at
+     HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters
+     is IGNORED by Server 2025. Configuration is now driven by GPO.
+   $([char]0x2022) DES is completely removed from the Kerberos stack.
+
+   $([char]0x26A0) IMPORTANT FOR MIGRATION:
+   Before promoting a Server 2025 DC, ensure ALL service accounts have
+   msDS-SupportedEncryptionTypes updated to support AES (0x18 or 0x1C)
+   to avoid authentication outages. This is separate from and in addition
+   to the April/July 2026 enforcement timeline.
+
+   The Kerb3961 library exposes long-standing misconfigurations that were
+   previously hidden by older KDC behavior (silent RC4 fallbacks). If
+   RC4 usage "reappeared" in your environment despite attempts to phase
+   it out, Kerb3961 eliminates those hard-coded fallback paths.
+
+11. Microsoft Kerberos-Crypto Tools
    $([string]([char]0x2500) * 60)
 
    Microsoft provides complementary scripts for RC4 detection:
@@ -439,7 +492,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
    More info: https://learn.microsoft.com/en-us/windows-server/security/kerberos/detect-rc4
 
-11. Recommended Monitoring Schedule
+12. Recommended Monitoring Schedule
    $([string]([char]0x2500) * 60)
 
    $([char]0x2022) Weekly: Check for RC4/DES events (automated alert)

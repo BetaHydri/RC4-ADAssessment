@@ -407,9 +407,83 @@ step-by-step keytab regeneration commands.
 5. **Final Remediate** — Password resets for remaining accounts
 6. **Final Validate** — Confirm everything is clean — ready for July 2026
 
-## Installation
+**Q: What are the "Three Criteria for Impact" — how do I know if enforcement will break something?**
 
-**Q: How do I install it?**
+A service ticket request will ONLY break if **all three** criteria are met
+simultaneously:
+
+1. **Enforcement mode is active** — the April 2026 (or later) update is installed
+   and the DC is not manually set to Audit mode (`RC4DefaultDisablementPhase = 1`).
+2. **The target service account does not have an explicit
+   `msDS-SupportedEncryptionTypes`** — the attribute is `0` or undefined, meaning
+   it relies on the domain default.
+3. **The `DefaultDomainSupportedEncTypes` registry key is not defined on the KDC**
+   — no admin override is in place on that domain controller.
+
+If **any one** of these criteria is not met, the request is **not affected**. To
+restore service in an emergency, break one of the three — for example, set
+`RC4DefaultDisablementPhase = 1` to revert to Audit mode (available until
+July 2026), or set `msDS-SupportedEncryptionTypes = 0x1C` on the affected account.
+
+**Q: What changes with Windows Server 2025 Domain Controllers (Kerb3961)?**
+
+Windows Server 2025 introduced the **Kerb3961 library** (named after RFC 3961),
+which fundamentally changes Kerberos encryption type selection:
+
+- **No RC4 TGTs**: Server 2025 DCs will **not** issue RC4-encrypted Ticket
+  Granting Tickets (TGTs) in any mode — this is by-design since RTM, separate
+  from the enforcement timeline. A client that only supports RC4 will not receive
+  a TGT from such a DC.
+- **No implicit RC4 fallback**: If an account lacks AES keys, Server 2025 will
+  not silently issue an RC4 ticket (unlike Server 2022 and earlier).
+  Authentication simply fails with `KDC_ERR_ETYPE_NOSUPP`.
+- **Legacy registry ignored**: The `SupportedEncryptionTypes` registry key at
+  `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters` is ignored by
+  Server 2025. Configuration is now driven by Group Policy.
+- **DES completely removed**: DES is removed from the entire Kerberos stack.
+
+**Before promoting a Server 2025 DC**, ensure all service accounts have
+`msDS-SupportedEncryptionTypes` updated to support AES (`0x18` or `0x1C`) to
+avoid authentication outages. This is separate from and in addition to the
+April/July 2026 enforcement timeline.
+
+The Kerb3961 library exposes long-standing misconfigurations that were previously
+hidden by older KDC behavior (silent RC4 fallbacks). If RC4 usage "reappeared"
+in your environment despite attempts to phase it out, Kerb3961 eliminates those
+hard-coded fallback paths.
+
+**Q: Are KDCSVC events 201–209 generated for TGT requests?**
+
+**No.** KDCSVC events 201–209 are generated **only for service ticket (TGS)
+requests**, not for Ticket Granting Ticket (TGT) requests. This means:
+
+- If a failure occurs at the **TGT stage** (e.g., a Windows Server 2025 DC
+  refusing to issue an RC4 TGT to a legacy client), you will **not** see a
+  201–209 event in the System log.
+- If a target service account has an **explicitly defined**
+  `msDS-SupportedEncryptionTypes`, the KDC will not generate audit events for
+  that account because the explicit configuration means it is unaffected by the
+  default changes.
+
+To detect TGT-level failures, check Security event **4768** (TGT Request) for
+failure codes and the `TicketEncryptionType` field.
+
+**Q: What happens after July 2026 — is there any recovery option?**
+
+After July 2026 (Full Enforcement), the `RC4DefaultDisablementPhase` registry
+key is removed — you can no longer roll back to Audit mode. However, two escape
+hatches remain:
+
+1. **Per-account**: Set `msDS-SupportedEncryptionTypes` explicitly on the affected
+   account (e.g., `0x1C` for RC4+AES exception).
+2. **Per-DC**: Set `DefaultDomainSupportedEncTypes` on the DC to include RC4
+   (e.g., `0x1C`) — **INSECURE**, use only as emergency measure.
+
+The RC4 code path remains in the KDC after July 2026. Setting
+`msDS-SupportedEncryptionTypes = 0x1C` on a specific account is sufficient — the
+KDC issues RC4 tickets for that account only, while all others remain AES-only.
+
+## Installation
 
 ```
 Install-Module -Name RC4-ADAssessment

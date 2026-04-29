@@ -75,6 +75,8 @@ function Get-KdcSvcEventAssessment {
         Write-Host "  $([char]0x2502) 209    $([char]0x2502) Direct       $([char]0x2502) Ticket cannot be issued because RC4 is no longer allowed by policy     $([char]0x2502)" -ForegroundColor DarkGray
         Write-Host "  $([char]0x2514)$([string]::new([char]0x2500, 8))$([char]0x2534)$([string]::new([char]0x2500, 14))$([char]0x2534)$([string]::new([char]0x2500, 72))$([char]0x2518)" -ForegroundColor DarkGray
         Write-Host "  Ref: https://support.microsoft.com/help/5073381 (CVE-2026-20833)" -ForegroundColor DarkGray
+        Write-Host "  Note: KDCSVC events are generated ONLY for service ticket (TGS) requests," -ForegroundColor DarkGray
+        Write-Host "  NOT for TGT requests. TGT-level failures produce no KDCSVC events." -ForegroundColor DarkGray
         Write-Host ""
 
         foreach ($dc in $dcs) {

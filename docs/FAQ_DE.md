@@ -427,6 +427,90 @@ enthält Schritt-für-Schritt-Anleitungen zur Keytab-Neugenerierung.
 5. **Abschlussbereiniung** — Kennwortzurücksetzungen für verbleibende Konten
 6. **Abschlussvalidierung** — Bestätigung, dass alles bereinigt ist — bereit für Juli 2026
 
+**F: Was sind die „Drei Kriterien für Auswirkungen" — woran erkenne ich, ob die Durchsetzung etwas stört?**
+
+Eine Dienstticketanforderung wird NUR dann fehlschlagen, wenn **alle drei**
+Kriterien gleichzeitig erfüllt sind:
+
+1. **Durchsetzungsmodus ist aktiv** — das April-2026-Update (oder später) ist
+   installiert und der DC ist nicht manuell auf Audit-Modus gesetzt
+   (`RC4DefaultDisablementPhase = 1`).
+2. **Das Ziel-Dienstkonto hat kein explizites `msDS-SupportedEncryptionTypes`** —
+   das Attribut ist `0` oder nicht definiert, sodass es den Domänenstandard
+   verwendet.
+3. **Der `DefaultDomainSupportedEncTypes`-Registrierungsschlüssel ist auf dem KDC
+   nicht definiert** — keine Admin-Überschreibung auf diesem Domain Controller.
+
+Wenn **eines** dieser Kriterien nicht erfüllt ist, ist die Anforderung **nicht
+betroffen**. Um den Dienst im Notfall wiederherzustellen, brechen Sie eines der
+drei Kriterien — z. B. `RC4DefaultDisablementPhase = 1` setzen, um zum
+Audit-Modus zurückzukehren (bis Juli 2026 verfügbar), oder
+`msDS-SupportedEncryptionTypes = 0x1C` auf dem betroffenen Konto setzen.
+
+**F: Was ändert sich mit Windows Server 2025 Domain Controllern (Kerb3961)?**
+
+Windows Server 2025 hat die **Kerb3961-Bibliothek** (benannt nach RFC 3961)
+eingeführt, die die Auswahl der Kerberos-Verschlüsselungstypen grundlegend
+ändert:
+
+- **Keine RC4-TGTs**: Server-2025-DCs stellen in keinem Modus RC4-verschlüsselte
+  Ticket Granting Tickets (TGTs) aus — das ist seit RTM beabsichtigt und
+  unabhängig vom Durchsetzungszeitplan. Ein Client, der nur RC4 unterstützt,
+  erhält kein TGT von einem solchen DC.
+- **Kein impliziter RC4-Fallback**: Wenn ein Konto keine AES-Schlüssel hat, wird
+  Server 2025 nicht stillschweigend ein RC4-Ticket ausstellen (anders als
+  Server 2022 und früher). Die Authentifizierung schlägt mit
+  `KDC_ERR_ETYPE_NOSUPP` fehl.
+- **Legacy-Registrierung ignoriert**: Der `SupportedEncryptionTypes`-
+  Registrierungsschlüssel unter
+  `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters` wird von
+  Server 2025 ignoriert. Die Konfiguration erfolgt jetzt über Gruppenrichtlinien.
+- **DES vollständig entfernt**: DES ist aus dem gesamten Kerberos-Stack entfernt.
+
+**Vor der Heraufstufung eines Server-2025-DCs** stellen Sie sicher, dass alle
+Dienstkonten `msDS-SupportedEncryptionTypes` auf AES aktualisiert haben
+(`0x18` oder `0x1C`), um Authentifizierungsausfälle zu vermeiden. Dies ist
+unabhängig vom April/Juli-2026-Durchsetzungszeitplan.
+
+Die Kerb3961-Bibliothek legt langjährige Fehlkonfigurationen offen, die zuvor
+durch älteres KDC-Verhalten (stille RC4-Fallbacks) verborgen waren. Wenn RC4-
+Nutzung in Ihrer Umgebung trotz Versuchen, sie zu beseitigen, „wieder auftauchte",
+beseitigt Kerb3961 diese fest codierten Fallback-Pfade.
+
+**F: Werden KDCSVC-Events 201–209 für TGT-Anforderungen erzeugt?**
+
+**Nein.** KDCSVC-Events 201–209 werden **nur für Dienstticket-Anforderungen
+(TGS)** erzeugt, nicht für Ticket Granting Ticket (TGT)-Anforderungen. Das
+bedeutet:
+
+- Wenn ein Fehler auf der **TGT-Ebene** auftritt (z. B. ein Windows Server 2025
+  DC, der ein RC4-TGT für einen Legacy-Client verweigert), werden Sie **kein**
+  Event 201–209 im Systemprotokoll sehen.
+- Wenn ein Ziel-Dienstkonto ein **explizit definiertes**
+  `msDS-SupportedEncryptionTypes` hat, erzeugt der KDC keine Audit-Events für
+  dieses Konto, da die explizite Konfiguration bedeutet, dass es von den
+  Standardänderungen nicht betroffen ist.
+
+Um TGT-Ebenen-Fehler zu erkennen, prüfen Sie Security-Event **4768**
+(TGT-Anforderung) auf Fehlercodes und das Feld `TicketEncryptionType`.
+
+**F: Was passiert nach Juli 2026 — gibt es eine Wiederherstellungsoption?**
+
+Nach Juli 2026 (vollständige Durchsetzung) wird der Registrierungsschlüssel
+`RC4DefaultDisablementPhase` entfernt — ein Rollback auf Audit-Modus ist nicht
+mehr möglich. Zwei Notfall-Optionen bleiben jedoch bestehen:
+
+1. **Pro Konto**: `msDS-SupportedEncryptionTypes` explizit auf dem betroffenen
+   Konto setzen (z. B. `0x1C` für RC4+AES-Ausnahme).
+2. **Pro DC**: `DefaultDomainSupportedEncTypes` auf dem DC setzen, um RC4
+   einzuschließen (z. B. `0x1C`) — **UNSICHER**, nur als Notfallmaßnahme
+   verwenden.
+
+Der RC4-Codepfad bleibt im KDC auch nach Juli 2026 bestehen.
+`msDS-SupportedEncryptionTypes = 0x1C` auf einem bestimmten Konto reicht aus —
+der KDC stellt RC4-Tickets nur für dieses Konto aus, während alle anderen
+AES-only bleiben.
+
 ## Installation
 
 **F: Wie installiere ich das Tool?**

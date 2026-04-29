@@ -327,7 +327,7 @@
         else {
             $assessment.RC4DefaultDisablementPhase.Status = "NOT SET"
             Write-Finding -Status "INFO" -Message "RC4DefaultDisablementPhase registry key is not set (implicit enforcement after April 2026 CU)" `
-                -Detail "After KB5078763 (April 2026), 'not set' equals enforcement -- RC4 blocked for accounts without explicit msDS-SupportedEncryptionTypes. Set to 1 to roll back to audit mode. Restart-Service Kdc required after change."
+                -Detail "After KB5078763 (April 2026), 'not set' equals enforcement -- RC4 blocked for accounts without explicit msDS-SupportedEncryptionTypes. Set to 1 to roll back to audit mode (available until July 2026 only). After July 2026, the registry key is removed but two escape hatches remain: (a) set msDS-SupportedEncryptionTypes explicitly on the account, or (b) set DefaultDomainSupportedEncTypes on the DC. Restart-Service Kdc required after change."
         }
 
         if ($assessment.FailedDCs.Count -gt 0) {
