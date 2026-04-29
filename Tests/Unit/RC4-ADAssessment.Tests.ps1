@@ -1682,7 +1682,7 @@ Describe 'Get-GuidancePlainText' {
         $result | Should -Match '2026-03-25 12:00:00'
     }
 
-    It 'Contains all 11 guidance sections' {
+    It 'Contains all 12 guidance sections' {
         $result = Get-GuidancePlainText -Domain 'contoso.com' -AssessmentDate '2026-03-25 12:00:00' -Version '2.9.0'
         $result | Should -Match '1\. Event Log Monitoring Setup'
         $result | Should -Match '2\. Splunk/SIEM Query Examples'
@@ -1693,8 +1693,9 @@ Describe 'Get-GuidancePlainText' {
         $result | Should -Match '7\. RC4 Disablement Timeline'
         $result | Should -Match '8\. Explicit RC4 Exception Workflow'
         $result | Should -Match '9\. Accounts Missing AES Keys in Database'
-        $result | Should -Match '10\. Microsoft Kerberos-Crypto Tools'
-        $result | Should -Match '11\. Recommended Monitoring Schedule'
+        $result | Should -Match '10\. Windows Server 2025'
+        $result | Should -Match '11\. Microsoft Kerberos-Crypto Tools'
+        $result | Should -Match '12\. Recommended Monitoring Schedule'
     }
 
     It 'Does not contain Unicode decorators' {
