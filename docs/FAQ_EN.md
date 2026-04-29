@@ -172,8 +172,9 @@ fire only when the KDC **cannot issue AES** for either tickets or session keys
 based on the account's configuration (KB5073381: *"only generated when Active
 Directory is unable to issue AES-SHA1 service tickets or session keys"*).
 However, when AES **is** configured but RC4 is still **actually negotiated** —
-for example because the client requests RC4, or because the account password was
-never reset to generate AES keys — **no KDCSVC event is produced**. These
+for example because the client requests RC4, or because the account was
+migrated (ADMT) without a subsequent password change — **no KDCSVC event is
+produced**. These
 silent RC4 usages are only visible in the `TicketEncryptionType` and
 `SessionEncryptionType` fields of Security events 4768/4769, which is why
 RC4-ADAssessment includes event log correlation as a critical detection layer.
@@ -350,15 +351,31 @@ accounts without the attribute).
 Accounts are flagged when `msDS-SupportedEncryptionTypes` is not set **and**
 `PasswordLastSet` predates the domain's AES threshold (the date when DFL was
 raised to 2008, detected via the "Read-only Domain Controllers" group creation
-date). These accounts may never have had AES keys generated (because AES keys
-are only created when a password is set while the Domain Functional Level is
-2008 or higher). Fix: reset the password.
+date). These accounts may lack AES keys **in the database** because their
+password was set before the DFL supported AES key generation. This also covers
+migrated accounts (e.g. ADMT) where only the NT hash was injected.
+
+**Important:** `msDS-SupportedEncryptionTypes` controls Kerberos **ticket
+negotiation** only — it does NOT control which keys are stored in the database.
+On any DC with DFL >= 2008, AES keys are always generated during password
+set/change regardless of this attribute. This has been confirmed via
+[DSInternals](https://github.com/MichaelGrafnetter/DSInternals)
+`Get-ADReplAccount` and the Event 4768 v2 `AccountAvailableKeys` field.
+Fix: reset the password.
 
 **Q: What does the AES/RC4 correlation detect?**
 
 Accounts that have AES *configured* in AD but are still obtaining RC4 tickets
-(visible in event logs). This means the password was never reset after AES was
-configured, so no AES keys exist. Fix: reset the password and purge tickets.
+(visible in event logs). Possible causes:
+
+1. **Migrated accounts** (e.g. ADMT) — only the NT hash was injected, no AES
+   keys exist in the database despite the attribute or domain defaults
+2. **Old passwords** — password predates the DFL 2008 upgrade
+3. **Client-side RC4 preference** — the client (not the account) requests RC4
+
+Verify with [DSInternals](https://github.com/MichaelGrafnetter/DSInternals)
+`Get-ADReplAccount` or the Event 4768 v2 `AccountAvailableKeys` field to
+determine if AES keys actually exist in the database. Fix: reset the password.
 
 **Q: Does it provide remediation commands?**
 

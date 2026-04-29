@@ -299,7 +299,7 @@ Tables are grouped by domain, showing all DCs, event logs, and trusts across the
 
 Detected via two paths in the standard scan (no `-DeepScan` needed):
 
-- **Path A** — `msDS-SupportedEncryptionTypes` explicitly set to a non-zero value **without AES bits** (e.g., `0x4` = RC4-only). These accounts definitively lack AES support regardless of password age
+- **Path A** — `msDS-SupportedEncryptionTypes` explicitly set to a non-zero value **without AES bits** (e.g., `0x4` = RC4-only). These accounts are configured for RC4-only/DES-only **ticket negotiation**. Path A also considers password age — accounts whose password was set after DFL 2008 have AES keys regardless of this attribute (it controls negotiation, not key storage)
 - **Path B** — `msDS-SupportedEncryptionTypes` not set (null/0) AND password predates the domain's AES threshold (DFL 2008 upgrade date, detected via "Read-only Domain Controllers" group creation). These accounts may never have had AES keys generated
 
 > Since v4.4.0, RC4-only and DES-only accounts are caught by the standard scan. `-DeepScan` is no longer needed for these — it now focuses on RC4-exception/DES-enabled users without SPNs and computer account scanning.
@@ -348,7 +348,7 @@ Focus on the highest-risk items first: DCs, trusts, KRBTGT, service accounts, KD
 Follow the inline fix commands shown with every finding:
 - `Set-ADComputer` / `Set-ADUser` for DC and service account encryption types
 - `Set-ItemProperty` for KDC registry keys (`RC4DefaultDisablementPhase`)
-- `Set-ADAccountPassword` + `klist purge` for service accounts needing AES key generation
+- `Set-ADAccountPassword` + `klist purge` for accounts that may lack AES keys (migrated or pre-DFL-2008 password — a single reset generates AES keys on DFL ≥ 2008)
 
 ### Phase 3: Validate
 ```powershell

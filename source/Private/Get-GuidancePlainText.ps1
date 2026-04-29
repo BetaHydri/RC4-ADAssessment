@@ -341,23 +341,34 @@ ktpass command reference:
 
    Reference: https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc
 
-9. Accounts Missing AES Keys
+9. Accounts Missing AES Keys in Database
    ------------------------------------------------------------
 
-   Two detection paths identify accounts without AES Kerberos keys:
+   IMPORTANT: msDS-SupportedEncryptionTypes controls Kerberos TICKET NEGOTIATION
+   only. It does NOT control which credential keys (hashes) are stored in the AD
+   database. On any DC with DFL >= 2008, AES keys are always generated during
+   password set/change regardless of this attribute. This has been confirmed via
+   DSInternals (Get-ADReplAccount) and the Event 4768 v2 AccountAvailableKeys
+   field. Accounts that only have RC4 keys in the DB are typically:
+   - Migrated accounts (e.g., ADMT) where only the NT hash was injected
+   - Accounts whose password was never changed after the DFL was raised to 2008
 
-   Path A - Explicit Non-AES Encryption:
-   Accounts where msDS-SupportedEncryptionTypes is explicitly set to a
-   non-zero value WITHOUT AES bits (0x18). These accounts are configured
-   for RC4-only or DES-only encryption regardless of password age.
+   Two detection paths identify accounts that may lack AES keys in the DB:
+
+   Path A - Non-AES Ticket Negotiation + Old Password:
+   Accounts where msDS-SupportedEncryptionTypes is explicitly set WITHOUT
+   AES bits (0x18) AND the password predates the DFL 2008 upgrade. The
+   attribute setting is a ticket negotiation issue; the account only truly
+   lacks AES keys in the DB if the password also predates DFL 2008.
    Examples: 0x4 (RC4-only), 0x3 (DES-only), 0x7 (DES+RC4, no AES).
 
    Path B - Attribute Not Set + Password Predating AES Threshold:
    Accounts where msDS-SupportedEncryptionTypes is not set (null/0) AND
-   the password predates the DFL 2008 upgrade. The tool dynamically
-   determines this date by querying the 'Read-only Domain Controllers'
-   group creation date (exists in every domain at DFL 2008+, even
-   without RODCs deployed).
+   the password predates the DFL 2008 upgrade. This also covers migrated
+   accounts (ADMT) where only the NT hash was injected. The tool
+   dynamically determines this date by querying the 'Read-only Domain
+   Controllers' group creation date (exists in every domain at DFL 2008+,
+   even without RODCs deployed).
 
    Find Path A accounts (explicit non-AES):
    PS> Get-ADUser -LDAPFilter '(&(!(userAccountControl:1.2.840.113556.1.4.803:=2))(msDS-SupportedEncryptionTypes=*))' ``
@@ -388,17 +399,18 @@ ktpass command reference:
    * Accounts with recent lastLogonTimestamp: actively in use, prioritize
    * Accounts that never logged on or >90 days: consider disabling first
 
-   Remediation for Path A (explicit non-AES):
-   First set the account to AES-only, then reset the password:
+   Remediation for Path A (non-AES negotiation + old password):
+   First fix ticket negotiation, then reset password to generate AES keys:
    PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
    PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
+   # Verify AES keys exist: Get-ADReplAccount -SamAccountName '<Name>' -Server '<DC>'
 
-   Remediation for Path B (attribute not set + old password):
+   Remediation for Path B (attribute not set + old password / migrated):
 
    a) Option 1: Reset Password (Simple)
-      * Reset password to generate AES keys
+      * Reset password (AES keys generated automatically on DFL >= 2008)
       * Update services running under these accounts with new password
-      * After reset, AES keys are automatically generated
+      * Verify with DSInternals or Event 4768 v2 AccountAvailableKeys
 
    b) Option 2: Fine-Grained Password Policy (Zero-Disruption)
       Use a temporary FGPP to bypass domain password history requirements,

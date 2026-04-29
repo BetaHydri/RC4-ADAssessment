@@ -21,7 +21,7 @@ Describe 'Get-AccountEncryptionAssessment' {
     BeforeEach {
         Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
         Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
-            [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com' }
+            [PSCustomObject]@{ DNSRoot = 'contoso.com'; DistinguishedName = 'DC=contoso,DC=com'; DomainSID = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-1234567890-1234567890' } }
         }
         Mock -ModuleName 'RC4-ADAssessment' Get-ADServiceAccount { $null }
         Mock -ModuleName 'RC4-ADAssessment' Get-ADGroup {
@@ -283,13 +283,14 @@ Describe 'Get-AccountEncryptionAssessment' {
         }
     }
 
-    Context 'When accounts have explicit non-AES encryption (Missing AES Path A)' {
+    Context 'When accounts have explicit non-AES negotiation and old password (Missing AES Path A)' {
         BeforeEach {
             Mock -ModuleName 'RC4-ADAssessment' Get-ADDomain {
                 [PSCustomObject]@{
                     DNSRoot             = 'contoso.com'
                     DistinguishedName   = 'DC=contoso,DC=com'
                     DomainMode          = 'Windows2016Domain'
+                    DomainSID           = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-1234567890-1234567890' }
                 }
             }
             Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {
@@ -303,17 +304,17 @@ Describe 'Get-AccountEncryptionAssessment' {
                     }
                 }
                 # When neither -Identity nor -Filter is set, this is a -LDAPFilter call (Path A)
-                # ($LDAPFilter is not accessible in mock bodies with stub functions)
+                # Password must predate AES threshold (2012-06-15) to be flagged
                 if (-not $Identity -and -not $Filter) {
                     return @(
                         [PSCustomObject]@{
                             SamAccountName                  = 'rc4onlysvc'
                             DistinguishedName               = 'CN=rc4onlysvc,DC=contoso,DC=com'
                             Enabled                         = $true
-                            PasswordLastSet                 = (Get-Date).AddDays(-60)
+                            PasswordLastSet                 = [DateTime]::new(2011, 3, 15)
                             'msDS-SupportedEncryptionTypes' = 4
                             ServicePrincipalName            = @('HTTP/app.contoso.com')
-                            WhenCreated                     = (Get-Date).AddDays(-365)
+                            WhenCreated                     = [DateTime]::new(2009, 1, 10)
                             lastLogonTimestamp               = (Get-Date).AddDays(-1).ToFileTime()
                         }
                     )
@@ -322,7 +323,7 @@ Describe 'Get-AccountEncryptionAssessment' {
             }
         }
 
-        It 'Detects accounts with explicit non-AES encryption as Missing AES Keys' {
+        It 'Detects accounts with explicit non-AES negotiation and old password as Missing AES Keys' {
             $result = Get-AccountEncryptionAssessment -ServerParams @{}
             $result.TotalMissingAES | Should -Be 1
             $result.MissingAESKeyAccounts[0].Name | Should -Be 'rc4onlysvc'
@@ -341,6 +342,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                     DNSRoot             = 'contoso.com'
                     DistinguishedName   = 'DC=contoso,DC=com'
                     DomainMode          = 'Windows2016Domain'
+                    DomainSID           = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-1234567890-1234567890' }
                 }
             }
             # RODC group created in 2012 — password from 2010 predates this threshold
@@ -397,6 +399,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                     DNSRoot             = 'contoso.com'
                     DistinguishedName   = 'DC=contoso,DC=com'
                     DomainMode          = 'Windows2016Domain'
+                    DomainSID           = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-1234567890-1234567890' }
                 }
             }
             # Simulate RODC group not found — fallback to Server 2008 GA date
@@ -447,6 +450,7 @@ Describe 'Get-AccountEncryptionAssessment' {
                     DNSRoot             = 'contoso.com'
                     DistinguishedName   = 'DC=contoso,DC=com'
                     DomainMode          = 'Windows2016Domain'
+                    DomainSID           = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-1234567890-1234567890' }
                 }
             }
             Mock -ModuleName 'RC4-ADAssessment' Get-ADUser {

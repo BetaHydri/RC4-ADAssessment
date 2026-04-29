@@ -222,7 +222,7 @@ function Show-ForestSummary {
             }
         }
         if ($totalPRN -gt 0) {
-            Write-Host "    Password Reset Needed: $totalPRN account(s) have AES configured but use RC4" -ForegroundColor Yellow
+            Write-Host "    RC4 Tickets Despite AES Config: $totalPRN account(s) - password may predate DFL 2008 or account migrated" -ForegroundColor Yellow
         }
     }
 

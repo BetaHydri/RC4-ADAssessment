@@ -4,6 +4,83 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-04-29
+
+### Changed — BREAKING: Corrected msDS-SupportedEncryptionTypes Understanding
+
+**Major finding:** `msDS-SupportedEncryptionTypes` controls Kerberos **ticket
+negotiation** only — it does **NOT** control which credential keys (hashes) are
+stored in the Active Directory database. On any Domain Controller with
+DFL >= 2008 (since Windows Server 2008), AES keys are **always** generated
+during password set/change, regardless of this attribute's value.
+
+This was confirmed through:
+
+1. **Independent testing** by Friedrich (colleague) on Windows Server 2025 —
+   setting `msDS-SupportedEncryptionTypes` to `0x07` (DES+RC4 only) or `0x27`
+   (DES+RC4+AES-SK) still resulted in all AES keys being generated in the DB
+2. **[DSInternals](https://github.com/MichaelGrafnetter/DSInternals) source
+   code** (`KerberosCredentialNew.cs`) — AES SHA1 key derivation is
+   unconditional (labeled "Windows Server 2008+"), with no
+   `msDS-SupportedEncryptionTypes` input
+3. **[Event 4768 v2](https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4768)**
+   (post January 2025 CU) — new `AccountAvailableKeys` field shows actual keys
+   stored in the DB, separate from `AccountSupportedEncryptionTypes`
+4. **[MS-KILE](https://learn.microsoft.com/openspecs/windows_protocols/ms-kile/2a32282e-dd48-4ad9-a542-609804b02cc9)**
+   protocol specification — key generation is tied to DFL, not per-account
+   attribute
+
+**Root cause for RC4-only keys in the DB:**
+- **Migrated accounts** (e.g. ADMT) — only the NT hash is injected during
+  cross-forest migration, without AES key generation
+- **Passwords set before DFL was raised to 2008** — AES key derivation was
+  not available at that time
+
+This is **NOT** a Windows Server 2025-specific behavior. It has been true since
+Server 2008 (DFL 2008). The new Event 4768 v2 fields simply make it visible.
+
+### Changed
+
+- All "RC4-only encryption configured" messages now say "RC4-only **ticket
+  negotiation** configured" to clarify the attribute's actual scope
+- "Missing AES Keys" detection (Section 9) now explains that
+  `msDS-SupportedEncryptionTypes` is irrelevant to key storage; accounts are
+  flagged based on password age (predating DFL 2008) or migration status
+- Path A (explicit non-AES attribute) now also requires the password to predate
+  the AES threshold — accounts with recent passwords have AES keys in the DB
+  regardless of this attribute
+- AES/RC4 event log correlation now explains 3 possible causes: migrated
+  accounts, pre-DFL-2008 passwords, or client-side RC4 preference
+- Guidance text (Sections 8a, 9) recommends verifying actual keys with
+  [DSInternals](https://github.com/MichaelGrafnetter/DSInternals)
+  `Get-ADReplAccount` or Event 4768 v2 `AccountAvailableKeys` before remediation
+- Recommendation fix commands clarify that password reset on DFL >= 2008 always
+  generates AES keys automatically
+- FAQ (EN + DE) updated with correct explanation of key storage vs. ticket
+  negotiation, including DSInternals and Event 4768 v2 references
+- README.md and QUICK_START.md updated throughout
+
+### Fixed
+
+- DFL detection regex now uses negative match (`-notmatch 'Windows2000|Windows2003'`)
+  instead of fragile positive match — future-proof for any DFL >= 2008
+- Eliminated redundant `Get-ADDomain` call in Missing AES Keys section — now
+  reuses `$domainInfo` already fetched at function start
+- Test mocks now include `DomainSID` property to match the optimized code path
+
+### References
+
+- [DSInternals PowerShell Module](https://github.com/MichaelGrafnetter/DSInternals)
+  — `Get-ADReplAccount` reveals actual `SupplementalCredentials` (Kerberos keys)
+  stored in the AD database
+- [DSInternals KerberosCredentialNew.cs](https://github.com/MichaelGrafnetter/DSInternals/blob/master/Src/DSInternals.Common/Data/Principals/KerberosCredentialNew.cs)
+  — Source code showing AES key derivation is unconditional on DFL >= 2008
+- [Event 4768 documentation](https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4768)
+  — Updated post January 2025 CU with `AccountAvailableKeys` and
+  `AccountSupportedEncryptionTypes` as separate fields
+- [MS-KILE Section 2.2.7](https://learn.microsoft.com/openspecs/windows_protocols/ms-kile/6cfc7b50-11ed-4b4d-846d-6f08f0812919)
+  — Supported Encryption Types Bit Flags specification
+
 ## [4.17.0] - 2026-04-28
 
 ### Added

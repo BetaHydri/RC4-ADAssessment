@@ -217,7 +217,7 @@ Event Log Analysis - Actual DES/RC4 Usage
 
 ⚠ 1 account(s) have AES configured but are still using RC4 tickets (password reset needed)
     • SQL2008-SRV$ (AES128-HMAC, AES256-HMAC, RC4-HMAC, pwd: 1200d)
-    → Reset passwords to generate AES keys: Set-ADAccountPassword '<Account>' -Reset
+    → Reset passwords to ensure AES keys exist (migrated/pre-DFL-2008 accounts): Set-ADAccountPassword '<Account>' -Reset
 
   Recommendations & Remediation:
     • CRITICAL: [contoso.com] RC4 tickets detected (8 tickets,
@@ -811,13 +811,13 @@ The "Missing AES Keys" check identifies accounts that lack AES Kerberos keys. It
 
 ### Path A — Explicit Non-AES Encryption
 
-Accounts where `msDS-SupportedEncryptionTypes` is **explicitly set to a non-zero value without AES bits** (bit `0x18`). These accounts are definitively configured for RC4-only or DES-only encryption — regardless of password age.
+Accounts where `msDS-SupportedEncryptionTypes` is **explicitly set to a non-zero value without AES bits** (bit `0x18`). These accounts are configured for RC4-only or DES-only **ticket negotiation**. Note: `msDS-SupportedEncryptionTypes` controls which encryption types are negotiated for Kerberos tickets, not which keys exist in the database. AES keys are generated automatically during any password set/change when DFL ≥ 2008. However, Path A also considers password age — accounts whose password predates the DFL 2008 upgrade genuinely lack AES keys.
 
-**Examples:** `0x4` (RC4-only), `0x3` (DES-only), `0x7` (DES + RC4, no AES).
+**Examples:** `0x4` (RC4-only), `0x3` (DES-only), `0x7` (DES + RC4, no AES). Verify actual stored keys with `DSInternals Get-ADReplAccount` or Event 4768 v2 `AccountAvailableKeys`.
 
 ### Path B — Attribute Not Set + Password Predating AES Threshold
 
-Accounts where `msDS-SupportedEncryptionTypes` is **not set (null) or equals 0** AND `PasswordLastSet` **predates the domain's AES threshold**. The tool dynamically determines this date by querying the `Created` date of the built-in "Read-only Domain Controllers" group — a reliable proxy for when the DFL was raised to 2008 and AES key generation became available. This group exists in every domain at DFL 2008+, even without RODCs deployed. If the group is not found, the tool falls back to the Windows Server 2008 GA date (2008-02-27).
+Accounts where `msDS-SupportedEncryptionTypes` is **not set (null) or equals 0** AND `PasswordLastSet` **predates the domain's AES threshold**. The tool dynamically determines this date by querying the `Created` date of the built-in "Read-only Domain Controllers" group — a reliable proxy for when the DFL was raised to 2008 and AES key generation became available (AES keys are generated automatically on any password set/change when DFL ≥ 2008). This group exists in every domain at DFL 2008+, even without RODCs deployed. If the group is not found, the tool falls back to the Windows Server 2008 GA date (2008-02-27). Accounts with old passwords may be migrated (e.g., ADMT) or simply never had their password changed after the DFL upgrade.
 
 ### When an Account is NOT Flagged
 
@@ -873,7 +873,7 @@ Overall Security Assessment
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 
     • WARNING: [contoso.com] 1 account(s) may be missing AES keys: tim (last logon: 2026-03-30)
-      # Option 1: Reset password to generate AES keys:
+      # Option 1: Reset password (ensures AES keys exist for migrated/pre-DFL-2008 accounts):
       PS> Set-ADAccountPassword '<AccountName>' -Reset; klist purge
       # If AES is still not used after password reset, explicitly set AES:
       PS> Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
@@ -906,14 +906,14 @@ This account has AES keys available (confirmed by the event log). It is not flag
 
 ### When to Investigate
 
-Accounts that **are** flagged (attribute not set + password predating AES threshold) should have their passwords reset to generate AES keys:
+Accounts that **are** flagged (attribute not set + password predating AES threshold) likely lack AES keys because their password was never changed after the DFL was raised to 2008. These are often migrated accounts (e.g., ADMT) or dormant accounts. Reset the password once to generate AES keys:
 
 ```powershell
-# Reset password twice to ensure AES key generation:
+# A single password reset generates AES keys on DFL ≥ 2008:
 Set-ADAccountPassword '<AccountName>' -Reset; klist purge
 ```
 
-After the password reset, AES keys will be generated automatically (assuming DFL ≥ 2008).
+AES keys are generated automatically during any password set/change when DFL ≥ 2008. You can verify with `DSInternals Get-ADReplAccount` or Event 4768 v2 `AccountAvailableKeys`.
 
 ## Event Log Encryption Type Reference
 
@@ -937,7 +937,7 @@ Security events 4768 (TGT request) and 4769 (service ticket request) contain `Ti
 
 ## AES-Configured but RC4-Used Correlation
 
-When event log analysis is enabled (`-AnalyzeEventLogs`), the tool cross-references accounts found using RC4 tickets (Event IDs 4768/4769) with their `msDS-SupportedEncryptionTypes` in AD. This detects a common gap: accounts that have AES **configured** but are still obtaining RC4 tickets because their password was never reset to generate AES keys.
+When event log analysis is enabled (`-AnalyzeEventLogs`), the tool cross-references accounts found using RC4 tickets (Event IDs 4768/4769) with their `msDS-SupportedEncryptionTypes` in AD. This detects a common gap: accounts that have AES **configured** for ticket negotiation but are still obtaining RC4 tickets. Possible causes include: migrated accounts (ADMT) that never had their password set on the current domain, accounts whose password predates the DFL 2008 upgrade (only RC4 keys exist in the DB), or client-side/application RC4 preference overriding AES negotiation.
 
 ### How It Works
 
@@ -953,7 +953,7 @@ When event log analysis is enabled (`-AnalyzeEventLogs`), the tool cross-referen
 | Account | `sccmservice` |
 | `msDS-SupportedEncryptionTypes` | `0x27` (DES, RC4, AES-Sk) |
 | Event 4768 TicketEncryptionType | `0x17` (RC4) |
-| **Diagnosis** | AES is configured but password was never reset — only RC4 keys exist |
+| **Diagnosis** | AES is configured for ticket negotiation but account still receives RC4 tickets — likely a migrated account or password predating DFL 2008 (only RC4 keys in DB). Verify with `DSInternals Get-ADReplAccount` or Event 4768 v2 `AccountAvailableKeys` |
 | **Fix** | `Set-ADAccountPassword 'sccmservice' -Reset; klist purge` |
 
 ### Why Not Parse "Available Keys" from Event 4768?
@@ -1166,6 +1166,26 @@ Tests/ (4 files, 204 tests)             RC4-ADAssessment.psd1
 - [RC4 deprecation in Windows Server — Deprecated Features](https://learn.microsoft.com/en-us/windows-server/get-started/removed-deprecated-features-windows-server)
 - [Microsoft Kerberos-Crypto Scripts](https://github.com/microsoft/Kerberos-Crypto) (Get-KerbEncryptionUsage.ps1, List-AccountKeys.ps1)
 
+### Key Storage vs. Ticket Negotiation (v5.0.0 Finding)
+
+The `msDS-SupportedEncryptionTypes` attribute controls Kerberos **ticket negotiation**
+only — it does **not** control which credential keys (hashes) are stored in the AD
+database. On any DC with DFL >= 2008, AES keys are always generated during password
+set/change regardless of this attribute. Accounts that only have RC4 keys in the DB
+are typically migrated accounts (ADMT) or accounts whose password was never changed
+after the DFL was raised to 2008.
+
+- [DSInternals PowerShell Module](https://github.com/MichaelGrafnetter/DSInternals)
+  — `Get-ADReplAccount` reveals actual `SupplementalCredentials` (Kerberos keys)
+  stored in the AD database
+- [DSInternals KerberosCredentialNew.cs](https://github.com/MichaelGrafnetter/DSInternals/blob/master/Src/DSInternals.Common/Data/Principals/KerberosCredentialNew.cs)
+  — Source code showing AES key derivation is unconditional on DFL >= 2008
+- [Event 4768 documentation (updated Jan 2025+)](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-4768)
+  — `AccountAvailableKeys` shows actual DB keys, separate from
+  `AccountSupportedEncryptionTypes` (ticket negotiation config)
+- [MS-KILE Section 2.2.7 — Supported Encryption Types Bit Flags](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-kile/6cfc7b50-11ed-4b4d-846d-6f08f0812919)
+  — Protocol specification for the `msDS-SupportedEncryptionTypes` bitmask
+
 ### Linux / Kerberos Keytab Impact
 
 When rotating the KRBTGT password or resetting service account passwords, **any Kerberos keytab files generated from the previous password become invalid**. Linux services using AD-based Kerberos AES256 authentication (Apache, Nginx, SSSD, Samba, PostgreSQL, IBM WebSphere, etc.) will fail to authenticate until their keytabs are regenerated.
@@ -1206,7 +1226,12 @@ MIT — See [LICENSE](LICENSE) file.
 ## Credits
 
 - Author: Jan Tiedemann
+- Critical finding: `msDS-SupportedEncryptionTypes` controls ticket negotiation only, not
+  key storage in the AD database — independent testing, reproduction, and intensive research
+  (Thanks to Friedrich Weinmann and Tobias Barnstorf-Brandes)
 - Customer feedback and real-world testing (Thanks to Simon Arnreiter)
 - Bug fixes and feedback to improve the tool (Thanks to Aleix Porta Torns and Yari Campagna)
 - AzureADKerberos key rotation guidance and link fixes (Thanks to Alan La Pietra)
+- [DSInternals](https://github.com/MichaelGrafnetter/DSInternals) by Michael Grafnetter —
+  key verification tooling that confirmed the AES key derivation behavior
 - Microsoft Kerberos security documentation team

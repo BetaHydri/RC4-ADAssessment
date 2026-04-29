@@ -1692,7 +1692,7 @@ Describe 'Get-GuidancePlainText' {
         $result | Should -Match '6\. KRBTGT Account'
         $result | Should -Match '7\. RC4 Disablement Timeline'
         $result | Should -Match '8\. Explicit RC4 Exception Workflow'
-        $result | Should -Match '9\. Accounts Missing AES Keys'
+        $result | Should -Match '9\. Accounts Missing AES Keys in Database'
         $result | Should -Match '10\. Microsoft Kerberos-Crypto Tools'
         $result | Should -Match '11\. Recommended Monitoring Schedule'
     }
@@ -2414,6 +2414,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
                 DNSRoot           = 'contoso.com'
                 DistinguishedName = 'DC=contoso,DC=com'
                 DomainMode        = 'Windows2016Domain'
+                DomainSID         = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-1234567890-1234567890' }
             }
         }
         Mock -ModuleName 'RC4-ADAssessment' Write-Host {}
@@ -2475,7 +2476,7 @@ Describe 'Get-AccountEncryptionAssessment - Missing AES Keys' {
             $result = Get-AccountEncryptionAssessment -ServerParams @{}
             $result.MissingAESKeyAccounts | Should -HaveCount 2
             $result.MissingAESKeyAccounts[0].Name | Should -Be 'old_user1'
-            $result.MissingAESKeyAccounts[0].Type | Should -Be 'Missing AES Keys (attribute not set, old password)'
+            $result.MissingAESKeyAccounts[0].Type | Should -Be 'Missing AES Keys (old password or migrated account)'
         }
 
         It 'Tracks SPN status for missing AES accounts' {

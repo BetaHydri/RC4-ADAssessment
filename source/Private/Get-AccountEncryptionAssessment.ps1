@@ -5,10 +5,19 @@
 
     .DESCRIPTION
         Queries Active Directory for the KRBTGT account password age and encryption type,
-        as well as service accounts that are configured with DES-only or RC4-only encryption,
-        accounts with the DES flag set, accounts missing AES keys (password not changed since
-        AES was introduced), and accounts using RC4 exception flags. Returns a detailed
-        hashtable with status and findings for each category.
+        as well as service accounts that are configured with DES-only or RC4-only ticket
+        negotiation, accounts with the DES flag set, accounts missing AES keys in the
+        database (migrated accounts or passwords predating DFL 2008), and accounts using
+        RC4 exception flags. Returns a detailed hashtable with status and findings for
+        each category.
+
+        IMPORTANT: The msDS-SupportedEncryptionTypes attribute controls Kerberos TICKET
+        NEGOTIATION only. It does NOT control which credential keys (hashes) are stored
+        in the AD database. On any DC with DFL >= 2008, AES keys are always generated
+        during password set/change regardless of this attribute (confirmed via DSInternals
+        and the Event 4768 v2 AccountAvailableKeys field). Accounts that only have RC4
+        keys in the DB are typically migrated accounts (e.g. ADMT) or accounts whose
+        password was never changed after the DFL was raised to 2008.
 
     .PARAMETER ServerParams
         A hashtable of parameters passed through to Active Directory cmdlets. Supports a
@@ -137,8 +146,8 @@
                     -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X')))"
             }
             elseif ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
-                Write-Finding -Status "CRITICAL" -Message "KRBTGT has RC4-only encryption configured" `
-                    -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X')))"
+                Write-Finding -Status "CRITICAL" -Message "KRBTGT has RC4-only ticket negotiation configured (msDS-SupportedEncryptionTypes)" `
+                    -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X'))). Note: AES keys may still exist in the DB if password was set after DFL 2008."
             }
             elseif (-not $encValue -or $encValue -eq 0) {
                 Write-Finding -Status "INFO" -Message "KRBTGT msDS-SupportedEncryptionTypes: Not Set (uses domain defaults)" `
@@ -213,8 +222,8 @@
 
                     # Check encryption types
                     if ($encValue -and ($encValue -band 0x4) -and -not ($encValue -band 0x18)) {
-                        Write-Finding -Status "CRITICAL" -Message "$($rodcKrbtgt.SamAccountName) has RC4-only encryption configured" `
-                            -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X')))"
+                        Write-Finding -Status "CRITICAL" -Message "$($rodcKrbtgt.SamAccountName) has RC4-only ticket negotiation configured" `
+                            -Detail "Encryption types: $encTypes (Value: 0x$($encValue.ToString('X'))). Note: AES keys may still exist in the DB if password was set after DFL 2008."
                     }
                 }
             }
@@ -398,7 +407,7 @@
                 $assessment.TotalStaleSvc = $assessment.StaleServiceAccounts.Count
 
                 if ($assessment.RC4OnlyServiceAccounts.Count -gt 0) {
-                    Write-Finding -Status "CRITICAL" -Message "$($assessment.RC4OnlyServiceAccounts.Count) service account(s) have RC4/DES-only encryption configured"
+                    Write-Finding -Status "CRITICAL" -Message "$($assessment.RC4OnlyServiceAccounts.Count) service account(s) have RC4/DES-only ticket negotiation configured (msDS-SupportedEncryptionTypes)"
                     foreach ($svc in $assessment.RC4OnlyServiceAccounts) {
                         $enabledStr = if ($svc.Enabled) { "Enabled" } else { "Disabled" }
                         $logonStr = if ($svc.LastLogon) { ", Last logon: $($svc.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
@@ -407,7 +416,7 @@
                     }
                 }
                 else {
-                    Write-Finding -Status "OK" -Message "No service accounts have RC4/DES-only encryption configured"
+                    Write-Finding -Status "OK" -Message "No service accounts have RC4/DES-only ticket negotiation configured"
                 }
 
                 if ($assessment.StaleServiceAccounts.Count -gt 0) {
@@ -500,7 +509,7 @@
                 $assessment.TotalRC4OnlyMSA = $assessment.RC4OnlyMSAs.Count
 
                 if ($assessment.RC4OnlyMSAs.Count -gt 0) {
-                    Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only encryption"
+                    Write-Finding -Status "WARNING" -Message "$($assessment.RC4OnlyMSAs.Count) Managed Service Account(s) have RC4-only ticket negotiation configured"
                     foreach ($msa in $assessment.RC4OnlyMSAs) {
                         $logonStr = if ($msa.LastLogon) { ", Last logon: $($msa.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
                         Write-Host "    $([char]0x2022) $($msa.Name) ($($msa.Type)) - $($msa.EncryptionTypes)$logonStr" -ForegroundColor Yellow
@@ -545,15 +554,22 @@
         }
 
         # ────────────────────────────────────────────────
-        # 5. Accounts missing AES keys (password set before DFL 2008)
+        # 5. Accounts missing AES keys in DB (password predates DFL 2008 or migrated)
         # ────────────────────────────────────────────────
-        Write-Host "`n  Checking for accounts missing AES keys..." -ForegroundColor Cyan
+        # NOTE: msDS-SupportedEncryptionTypes does NOT control which keys are stored
+        # in the AD database. AES keys are always generated on password change when
+        # DFL >= 2008, regardless of this attribute. Only accounts whose password was
+        # set BEFORE the DFL was raised (or migrated via ADMT without password change)
+        # will genuinely lack AES keys in the database.
+        Write-Host "`n  Checking for accounts missing AES keys in database..." -ForegroundColor Cyan
 
         try {
             # Determine when DFL was raised to 2008 (DFL >= Windows2008Domain means AES keys are generated on password set)
             # Accounts whose password was last set BEFORE the DFL was raised to 2008 won't have AES keys
             $dfl = $domainInfo.DomainMode
-            $dflSupportsAES = $dfl -match '2008|2012|2016|Windows2008|Windows2012|Windows2016|2025'
+            # Flip logic: check for known non-AES DFLs (2000, 2003) rather than enumerating all AES DFLs.
+            # This is future-proof — any DFL >= 2008 supports AES key generation.
+            $dflSupportsAES = $dfl -and $dfl -notmatch 'Windows2000|Windows2003'
 
             if ($dflSupportsAES) {
                 # Determine AES threshold date dynamically:
@@ -565,7 +581,7 @@
                 try {
                     # Use well-known RID 521 (Read-only Domain Controllers) — locale-invariant,
                     # works on non-English DCs where the display name is localised.
-                    $domainSID = (Get-ADDomain @ServerParams).DomainSID.Value
+                    $domainSID = $domainInfo.DomainSID.Value
                     $rodcGroup = Get-ADGroup -Identity "$domainSID-521" -Properties Created @ServerParams -ErrorAction SilentlyContinue
                     if ($rodcGroup -and $rodcGroup.Created) {
                         $aesThresholdDate = $rodcGroup.Created
@@ -584,31 +600,41 @@
 
                 $aesThresholdAgeDays = ((Get-Date) - $aesThresholdDate).Days
 
-                # Two detection paths for accounts missing AES keys:
+                # Two detection paths for accounts missing AES keys in the database:
                 #
-                # Path A: msDS-SupportedEncryptionTypes is explicitly set to a non-zero value WITHOUT AES bits
-                #         (e.g., 0x4 = RC4-only, 0x3 = DES-only). These accounts genuinely lack AES support
-                #         regardless of password age. Already flagged by RC4-only/DES-only checks but also
-                #         belong in the Missing AES Keys category for completeness.
+                # IMPORTANT: msDS-SupportedEncryptionTypes does NOT control which keys are stored
+                # in the AD database. It only controls Kerberos ticket negotiation. AES keys are
+                # always generated on password change when DFL >= 2008, regardless of this attribute.
+                # (Confirmed by Friedrich's testing on Server 2025 and DSInternals source code.)
+                #
+                # Path A: msDS-SupportedEncryptionTypes is explicitly set WITHOUT AES bits (e.g., 0x4)
+                #         AND password predates the AES threshold. The attribute setting is a ticket
+                #         negotiation issue (already flagged by RC4-only/DES-only checks). The account
+                #         only truly lacks AES keys in the DB if the password also predates DFL 2008.
                 #
                 # Path B: msDS-SupportedEncryptionTypes is not set (null/0) AND password predates the AES
-                #         threshold (DFL 2008 upgrade). When not set, the account uses domain defaults —
-                #         AES keys are generated at password change time if DFL >= 2008. Only flag if the
-                #         password was last set before the DFL was raised.
+                #         threshold (DFL 2008 upgrade). These accounts genuinely lack AES keys in the DB
+                #         because the password was set before AES key generation was available.
+                #         This also covers migrated accounts (ADMT) where only the NT hash was injected.
 
                 $missingAESAccounts = @()
 
                 # Path A: Explicit non-AES values — query for accounts with msDS-SupportedEncryptionTypes
-                # set but without AES bits (bit 0x18). These definitively lack AES support.
+                # set but without AES bits (bit 0x18). The attribute itself doesn't prevent AES key
+                # generation, but if the password ALSO predates the DFL 2008 upgrade, the account
+                # genuinely lacks AES keys in the DB. Accounts with recent passwords have AES keys
+                # regardless of this attribute.
                 $explicitNonAES = Get-ADUser -LDAPFilter '(&(!(userAccountControl:1.2.840.113556.1.4.803:=2))(msDS-SupportedEncryptionTypes=*))' `
                     -Properties 'msDS-SupportedEncryptionTypes', PasswordLastSet, ServicePrincipalName, WhenCreated, lastLogonTimestamp @ServerParams -ErrorAction Stop
 
                 if ($explicitNonAES) {
                     foreach ($acct in @($explicitNonAES)) {
                         $encValue = $acct.'msDS-SupportedEncryptionTypes'
-                        # Skip accounts that have AES bits set — they DO have AES support
-                        if ($encValue -and $encValue -ne 0 -and -not ($encValue -band 0x18)) {
-                            $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
+                        $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
+                        # Skip accounts that have AES bits set — they DO have AES support in negotiation
+                        # Only flag if: non-AES attribute AND password predates AES threshold
+                        # (If password was changed after DFL 2008, AES keys exist in DB regardless of attribute)
+                        if ($encValue -and $encValue -ne 0 -and -not ($encValue -band 0x18) -and $pwdAge -gt $aesThresholdAgeDays) {
                             $logon = ConvertFrom-LastLogonTimestamp -RawValue $acct.lastLogonTimestamp
                             $missingAESAccounts += @{
                                 Name             = $acct.SamAccountName
@@ -621,7 +647,7 @@
                                 EncryptionTypes  = Get-EncryptionTypeString -Value $encValue
                                 LastLogon        = $logon.LastLogon
                                 LastLogonDaysAgo = $logon.LastLogonDaysAgo
-                                Type             = "Missing AES Keys (explicit non-AES)"
+                                Type             = "Missing AES Keys (non-AES negotiation + old password)"
                             }
                         }
                     }
@@ -637,7 +663,9 @@
                         $pwdAge = if ($acct.PasswordLastSet) { ((Get-Date) - $acct.PasswordLastSet).Days } else { -1 }
 
                         # Only flag if msDS-SupportedEncryptionTypes is not set (null/0)
-                        # AND password predates AES threshold — set before DFL 2008 upgrade
+                        # AND password predates AES threshold — set before DFL 2008 upgrade.
+                        # This covers: accounts with old passwords, and migrated accounts (ADMT)
+                        # where only the NT hash was injected without AES key generation.
                         if ((-not $encValue -or $encValue -eq 0) -and $pwdAge -gt $aesThresholdAgeDays) {
                             # Skip if already added by Path A
                             if ($acct.SamAccountName -notin $missingAESAccounts.Name) {
@@ -653,7 +681,7 @@
                                     EncryptionTypes  = 'Not Set (domain defaults)'
                                     LastLogon        = $logon.LastLogon
                                     LastLogonDaysAgo = $logon.LastLogonDaysAgo
-                                    Type             = "Missing AES Keys (attribute not set, old password)"
+                                    Type             = "Missing AES Keys (old password or migrated account)"
                                 }
                             }
                         }
@@ -664,8 +692,8 @@
                 $assessment.TotalMissingAES = $missingAESAccounts.Count
 
                 if ($missingAESAccounts.Count -gt 0) {
-                    Write-Finding -Status "WARNING" -Message "$($missingAESAccounts.Count) account(s) may be missing AES keys" `
-                        -Detail "Reset password for these accounts to generate AES keys"
+                    Write-Finding -Status "WARNING" -Message "$($missingAESAccounts.Count) account(s) may be missing AES keys in the database" `
+                        -Detail "Password predates DFL 2008 upgrade or was migrated (ADMT). Reset password to generate AES keys."
 
                     $displayCount = [Math]::Min($missingAESAccounts.Count, 10)
                     foreach ($acct in $missingAESAccounts | Select-Object -First $displayCount) {
@@ -751,7 +779,7 @@
 
                     # Display findings
                     if ($assessment.DeepScanRC4OnlyUsers.Count -gt 0) {
-                        Write-Finding -Status "CRITICAL" -Message "[DeepScan] $($assessment.DeepScanRC4OnlyUsers.Count) user account(s) have RC4-only encryption configured"
+                        Write-Finding -Status "CRITICAL" -Message "[DeepScan] $($assessment.DeepScanRC4OnlyUsers.Count) user account(s) have RC4-only ticket negotiation configured"
                         foreach ($u in $assessment.DeepScanRC4OnlyUsers) {
                             $logonStr = if ($u.LastLogon) { ", Last logon: $($u.LastLogon.ToString('yyyy-MM-dd'))" } else { ", Last logon: Never" }
                             Write-Host "    $([char]0x2022) $($u.Name) - $($u.EncryptionTypes)$logonStr" -ForegroundColor Red

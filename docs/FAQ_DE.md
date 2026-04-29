@@ -184,8 +184,8 @@ der KDC für ein Konto **kein AES ausstellen kann** — weder für Tickets noch 
 Sitzungsschlüssel (KB5073381: *„werden nur erzeugt, wenn Active Directory keine
 AES-SHA1-Diensttickets oder Sitzungsschlüssel ausstellen kann"*). Wenn AES
 jedoch **konfiguriert ist**, RC4 aber trotzdem **tatsächlich ausgehandelt wird**
-— z. B. weil der Client RC4 anfordert oder weil das Kontokennwort nie
-zurückgesetzt wurde, um AES-Schlüssel zu generieren — wird **kein KDCSVC-Event
+— z. B. weil der Client RC4 anfordert oder weil das Konto migriert wurde
+(ADMT) ohne anschließende Kennwortänderung — wird **kein KDCSVC-Event
 erzeugt**. Diese stillen RC4-Nutzungen sind nur in den Feldern
 `TicketEncryptionType` und `SessionEncryptionType` der Security-Ereignisse
 4768/4769 sichtbar — genau deshalb enthält RC4-ADAssessment die
@@ -366,17 +366,34 @@ akzeptiert. Aktivieren Sie AES128 + AES256 + Zukünftige Verschlüsselungstypen
 Konten werden markiert, wenn `msDS-SupportedEncryptionTypes` nicht gesetzt ist
 **und** `PasswordLastSet` vor dem AES-Schwellendatum der Domäne liegt (dem Datum
 der DFL-Erhöhung auf 2008, ermittelt über das Erstellungsdatum der Gruppe
-„Read-only Domain Controllers“). Diese Konten haben möglicherweise
-nie AES-Schlüssel generiert (da AES-Schlüssel nur erstellt werden, wenn ein
-Kennwort gesetzt wird, während die Domänenfunktionsebene 2008 oder höher ist).
+„Read-only Domain Controllers"). Diese Konten haben möglicherweise keine
+AES-Schlüssel **in der Datenbank**, da ihr Kennwort vor der DFL-Erhöhung gesetzt
+wurde. Dies betrifft auch migrierte Konten (z. B. ADMT), bei denen nur der
+NT-Hash injiziert wurde.
+
+**Wichtig:** `msDS-SupportedEncryptionTypes` steuert nur die Kerberos-**Ticket-
+Aushandlung** — es bestimmt NICHT, welche Schlüssel in der Datenbank gespeichert
+werden. Auf jedem DC mit DFL >= 2008 werden AES-Schlüssel bei jeder
+Kennwortänderung immer generiert, unabhängig von diesem Attribut. Dies wurde über
+[DSInternals](https://github.com/MichaelGrafnetter/DSInternals)
+`Get-ADReplAccount` und das Event-4768-v2-Feld `AccountAvailableKeys` bestätigt.
 Lösung: Kennwort zurücksetzen.
 
 **F: Was erkennt die AES/RC4-Korrelation?**
 
 Konten, die AES in AD *konfiguriert* haben, aber immer noch RC4-Tickets erhalten
-(sichtbar in den Ereignisprotokollen). Das bedeutet, dass das Kennwort nach der
-AES-Konfiguration nie zurückgesetzt wurde, sodass keine AES-Schlüssel existieren.
-Lösung: Kennwort zurücksetzen und Tickets löschen.
+(sichtbar in den Ereignisprotokollen). Mögliche Ursachen:
+
+1. **Migrierte Konten** (z. B. ADMT) — nur der NT-Hash wurde injiziert, es
+   existieren keine AES-Schlüssel in der Datenbank trotz Attribut oder
+   Domänen-Standardwerten
+2. **Alte Kennwörter** — Kennwort wurde vor der DFL-2008-Erhöhung gesetzt
+3. **Client-seitige RC4-Präferenz** — der Client (nicht das Konto) fordert RC4 an
+
+Überprüfen Sie mit [DSInternals](https://github.com/MichaelGrafnetter/DSInternals)
+`Get-ADReplAccount` oder dem Event-4768-v2-Feld `AccountAvailableKeys`, ob
+tatsächlich AES-Schlüssel in der Datenbank existieren. Lösung: Kennwort
+zurücksetzen.
 
 **F: Bietet das Tool Korrekturmaßnahmen?**
 

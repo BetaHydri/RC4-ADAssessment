@@ -242,7 +242,7 @@ function Show-AssessmentSummary {
                 Write-Host "    Failed DC Queries: $($Results.EventLogs.FailedDCs.Count)" -ForegroundColor Yellow
             }
             if ($Results.EventLogs.PasswordResetNeeded -and $Results.EventLogs.PasswordResetNeeded.Count -gt 0) {
-                Write-Host "    Password Reset Needed: $($Results.EventLogs.PasswordResetNeeded.Count) account(s) have AES configured but use RC4" -ForegroundColor Yellow
+                Write-Host "    RC4 Tickets Despite AES Config: $($Results.EventLogs.PasswordResetNeeded.Count) account(s) - password may predate DFL 2008 or account migrated" -ForegroundColor Yellow
                 foreach ($prn in $Results.EventLogs.PasswordResetNeeded) {
                     $pwdAge = if ($prn.PasswordAgeDays -ge 0) { "$($prn.PasswordAgeDays)d" } else { "?" }
                     Write-Host "      $([char]0x2022) $($prn.Name) ($($prn.EncryptionTypes), pwd age: $pwdAge)" -ForegroundColor DarkYellow

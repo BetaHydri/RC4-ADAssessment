@@ -287,7 +287,7 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
       PS> # Set account to AES-only
       PS> Set-ADUser "svc_LegacyApp" -Replace @{'msDS-SupportedEncryptionTypes'=0x18}
       # For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser
-      PS> # Reset password to generate AES keys
+      PS> # Reset password (AES keys generated automatically on DFL >= 2008)
       PS> Set-ADAccountPassword "svc_LegacyApp" -Reset
       CMD> klist purge
       $([char]0x2022) Test application access
@@ -324,12 +324,22 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
 
    Reference: https://support.microsoft.com/topic/1ebcda33-720a-4da8-93c1-b0496e1910dc
 
-9. Accounts Missing AES Keys
+9. Accounts Missing AES Keys in Database
    $([string]([char]0x2500) * 60)
 
-   Accounts whose password was last set BEFORE the Domain Functional Level
-   was raised to Windows Server 2008 will NOT have AES keys generated.
-   The lastLogonTimestamp field helps determine if the account is still in use.
+   IMPORTANT: msDS-SupportedEncryptionTypes controls Kerberos TICKET NEGOTIATION
+   only. It does NOT control which credential keys are stored in the AD database.
+   On any DC with DFL >= 2008, AES keys are always generated during password
+   set/change regardless of this attribute. This has been confirmed via DSInternals
+   (Get-ADReplAccount) and Event 4768 v2 AccountAvailableKeys field.
+
+   Accounts that only have RC4 keys in the DB are typically:
+   $([char]0x2022) Migrated accounts (e.g., ADMT) where only the NT hash was injected
+   $([char]0x2022) Accounts whose password was never changed after the DFL was raised to 2008
+
+   Verify actual keys with DSInternals:
+   PS> Install-Module DSInternals -Force
+   PS> Get-ADReplAccount -SamAccountName '<AccountName>' -Server '<DC>' | Select-Object -ExpandProperty SupplementalCredentials
 
    The tool dynamically determines the AES threshold date by querying the
    'Read-only Domain Controllers' group creation date (proxy for DFL 2008
@@ -356,9 +366,9 @@ $([System.Char]::ConvertFromUtf32(0x1F4CB)) RECOMMENDED MANUAL VALIDATION STEPS:
    Remediation Options:
 
    a) Option 1: Reset Password (Simple)
-      $([char]0x2022) Reset password to generate AES keys
+      $([char]0x2022) Reset password (AES keys generated automatically on DFL >= 2008)
       $([char]0x2022) Update services running under these accounts with new password
-      $([char]0x2022) After reset, AES keys are automatically generated
+      $([char]0x2022) Verify with DSInternals or Event 4768 v2 AccountAvailableKeys
 
    b) Option 2: Fine-Grained Password Policy (Zero-Disruption)
       Use a temporary FGPP to bypass domain password history requirements,

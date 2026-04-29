@@ -235,7 +235,7 @@ try {
                                         PasswordLastSet = $adAccount.PasswordLastSet
                                         PasswordAgeDays = if ($adAccount.PasswordLastSet) { [int]((Get-Date) - $adAccount.PasswordLastSet).TotalDays } else { -1 }
                                         Enabled         = $adAccount.Enabled
-                                        Reason          = if ($inheritsDefault) { "Inherits AES default but using RC4 - password predates AES key generation" } else { "AES configured (0x$($encValue.ToString('X'))) but using RC4 - password reset needed to generate AES keys" }
+                                        Reason          = if ($inheritsDefault) { "Inherits AES default but using RC4 tickets - password may predate DFL 2008 upgrade or account was migrated" } else { "AES negotiation configured (0x$($encValue.ToString('X'))) but using RC4 tickets - password may predate DFL 2008 or client requests RC4" }
                                     }
                                 }
                             }
@@ -247,12 +247,13 @@ try {
                 }
 
                 if ($results.EventLogs.PasswordResetNeeded.Count -gt 0) {
-                    Write-Finding -Status "WARNING" -Message "$($results.EventLogs.PasswordResetNeeded.Count) account(s) have AES configured but are still using RC4 tickets (password reset needed)"
+                    Write-Finding -Status "WARNING" -Message "$($results.EventLogs.PasswordResetNeeded.Count) account(s) are using RC4 tickets despite AES configuration (password may predate DFL 2008 or account was migrated)"
                     foreach ($acct in $results.EventLogs.PasswordResetNeeded) {
                         $pwdAge = if ($acct.PasswordAgeDays -ge 0) { "pwd: $($acct.PasswordAgeDays)d" } else { "pwd: unknown" }
                         Write-Host "    $([char]0x2022) $($acct.Name) ($($acct.EncryptionTypes), $pwdAge)" -ForegroundColor Yellow
                     }
-                    Write-Host "    $([char]0x2192) Reset passwords to generate AES keys: Set-ADAccountPassword '<Account>' -Reset" -ForegroundColor Cyan
+                    Write-Host "    $([char]0x2192) Verify with DSInternals Get-ADReplAccount or Event 4768 v2 AccountAvailableKeys field" -ForegroundColor Cyan
+                    Write-Host "    $([char]0x2192) If only RC4 keys exist: Set-ADAccountPassword '<Account>' -Reset" -ForegroundColor Cyan
                 }
             }
             catch {
@@ -369,13 +370,14 @@ try {
         $prnList = ($results.EventLogs.PasswordResetNeeded | Select-Object -First 5).Name -join ', '
         $results.Recommendations += @{
             Level   = "WARNING"
-            Message = "[$($results.Domain)] $($results.EventLogs.PasswordResetNeeded.Count) account(s) have AES configured but are using RC4 tickets - password reset needed: $prnList"
+            Message = "[$($results.Domain)] $($results.EventLogs.PasswordResetNeeded.Count) account(s) are using RC4 tickets despite AES configuration - password may predate DFL 2008 or account was migrated: $prnList"
             Fix     = @(
-                "# These accounts have AES in msDS-SupportedEncryptionTypes but lack AES keys"
-                "# (password was never reset after AES was configured)"
+                "# These accounts use RC4 tickets. Verify actual keys with DSInternals or Event 4768 v2 AccountAvailableKeys."
+                "# msDS-SupportedEncryptionTypes controls ticket negotiation only, NOT which keys are stored in the DB."
+                "# If password was set after DFL 2008 upgrade, AES keys exist in DB regardless of this attribute."
+                "# Possible causes: password predates DFL 2008, account migrated via ADMT, or client requests RC4."
                 "Set-ADAccountPassword '<AccountName>' -Reset -NewPassword (ConvertTo-SecureString '<NewPassword>' -AsPlainText -Force)"
                 "klist purge"
-                "# For service accounts, use FGPP workaround to reset with same password (see -IncludeGuidance, Section 9b)"
             )
         }
     }
@@ -423,7 +425,7 @@ try {
                 Message = "[$($results.Domain)] $($results.Accounts.TotalDESFlag) account(s) have USE_DES_KEY_ONLY flag: $desNames"
                 Fix     = @(
                     "Get-ADUser -Filter 'UserAccountControl -band 2097152' | ForEach-Object { Set-ADAccountControl `$_ -UseDESKeyOnly `$false }"
-                    "# Then reset password for each account to generate AES keys"
+                    "# Then reset password to ensure AES keys are generated (required on DFL >= 2008)"
                 )
             }
         }
@@ -433,9 +435,10 @@ try {
             $svcNames = ($results.Accounts.RC4OnlyServiceAccounts | Select-Object -First 5).Name -join ', '
             $results.Recommendations += @{
                 Level   = "CRITICAL"
-                Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only encryption: $svcNames"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlySvc) service account(s) have RC4/DES-only ticket negotiation: $svcNames"
                 Fix     = @(
-                    "# Update each service account to AES and reset password:"
+                    "# Update each service account to allow AES ticket negotiation and reset password:"
+                    "# Note: msDS-SupportedEncryptionTypes controls ticket negotiation only, not key storage."
                     "Set-ADUser '<ServiceAccount>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
                     "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
@@ -450,7 +453,7 @@ try {
             $msaNames = ($results.Accounts.RC4OnlyMSAs | Select-Object -First 5).Name -join ', '
             $results.Recommendations += @{
                 Level   = "WARNING"
-                Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only encryption: $msaNames"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalRC4OnlyMSA) Managed Service Account(s) have RC4-only ticket negotiation: $msaNames"
                 Fix     = @(
                     "Set-ADServiceAccount '<MSAName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "# MSA passwords are managed by AD - no manual reset needed"
@@ -503,7 +506,7 @@ try {
                 Level   = "WARNING"
                 Message = "[$($results.Domain)] $($results.Accounts.TotalStaleSvc) service account(s) have stale passwords (>365 days) with RC4: $staleNames"
                 Fix     = @(
-                    "# Reset password to generate fresh AES keys:"
+                    "# Reset password to refresh credential keys (AES keys generated automatically on DFL >= 2008):"
                     "Set-ADAccountPassword '<ServiceAccount>' -Reset; klist purge"
                     "# Update services running under this account with the new password"
                 )
@@ -518,15 +521,19 @@ try {
                 }) -join ', '
             $results.Recommendations += @{
                 Level   = "CRITICAL"
-                Message = "[$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys (will break after enforcement): $missingNames"
+                Message = "[$($results.Domain)] $($results.Accounts.TotalMissingAES) account(s) may be missing AES keys in database (password predates DFL 2008 or migrated): $missingNames"
                 Fix     = @(
-                    "# Option 1: Reset password to generate AES keys:"
+                    "# AES keys are generated automatically during password change on DFL >= 2008."
+                    "# These accounts likely have old passwords (pre-DFL 2008) or were migrated (ADMT)."
+                    "# Verify with DSInternals: Get-ADReplAccount -SamAccountName '<Name>' -Server '<DC>'"
+                    "# Option 1: Reset password (AES keys generated automatically on DFL >= 2008):"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
                     "# Option 2: Use Fine-Grained Password Policy (FGPP) to re-use same password:"
                     "# Create a temporary FGPP that disables password history, apply to account,"
                     "# reset password with the same value, then remove the FGPP."
                     "# This avoids service disruption while generating AES keys."
-                    "# If AES is still not used after password reset, explicitly set AES:"
+                    "# After password reset on DFL >= 2008, AES keys are always generated."
+                    "# To also fix ticket negotiation, set AES in the attribute:"
                     "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "# For gMSA/sMSA/dMSA use Set-ADServiceAccount instead of Set-ADUser"
                     "#   MSA passwords are managed by AD - no manual reset needed (AES keys generated at next auto-rotation)"
@@ -541,7 +548,7 @@ try {
             $dsNames = ($results.Accounts.DeepScanRC4OnlyUsers | Select-Object -First 5).Name -join ', '
             $results.Recommendations += @{
                 Level   = "CRITICAL"
-                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanRC4OnlyUsers) user account(s) have RC4-only encryption: $dsNames"
+                Message = "[$($results.Domain)] [DeepScan] $($results.Accounts.TotalDeepScanRC4OnlyUsers) user account(s) have RC4-only ticket negotiation: $dsNames"
                 Fix     = @(
                     "Set-ADUser '<AccountName>' -Replace @{'msDS-SupportedEncryptionTypes'=0x18}"
                     "Set-ADAccountPassword '<AccountName>' -Reset; klist purge"
